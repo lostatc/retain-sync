@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+configName="$1"
+
+# check if config was specified
+if [[ -z "$configName" ]]; then
+	>&2 printf "Please specify a configuration (e.g. \'systemctl --user start retain-sync@documents.service\').\n"
+	exit 1
+fi
+configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
+
+# check if specified config exists
+if [[ ! -d "$configDir" ]]; then
+ 	>&2 printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n"
+	exit 1
+fi
+
+# source variables from config
+source "$configDir/config"
+localDir="${localDir%/}"
+remoteDir="${remoteDir%/}"
+remoteUser="${remoteUser:+$remoteUser@}"
+
+# mount sshfs share if not already mounted
+sshDefaultOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=4,IdentityFile=$sshKey"
+mountpoint -q "$configDir/mnt" || sshfs -o "$sshDefaultOptions${sshOptions:+,$sshOptions}" \
+	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
+
+while true; do
+	# wait for a file to be opened
+	fileName="$(inotifywait -qre open --format '%w%f' $configDir/mnt)"
+
+	# test if file is hidden or a directory
+	if [[ ! "$(basename "$fileName")" =~ ^\. ]] && [[ -f "$fileName" ]]; then
+
+		# test if file exists in priority.csv
+		fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
+
+		if [ $? -eq 0 ]; then
+
+			# file exists, increase file priority by one
+			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | cut -d ',' -f 1 | rev)+1" | bc)
+			sed -i "s|$fileName,[0-9\.]*$|$fileName,$newPriority|" "$configDir/priority.csv"
+		else
+			# new file, priority will be set on next sync operation
+			continue
+		fi
+	else
+		# file is hidden or a directory
+		continue
+	fi
+
+	# sleep to prevent file access from being registered multiple times
+	sleep 1
+done

@@ -1,0 +1,9 @@
+[Unit]
+Description=Adjusts file priority for time
+PartOf=retain-sync@%i.service
+
+[Timer]
+OnActiveSec=1h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Pulls commonly accessed files from a server
+
+[Service]
+Type=oneshot
+ExecStart="$prefix/bin/retain-sync" sync %i

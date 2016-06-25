@@ -1,0 +1,11 @@
+[Unit]
+Description=Watches for file access in a specific directory
+Requires=retain-sync-age@%i.timer
+Wants=retain-sync-resync@%i.timer
+
+[Service]
+Type=simple
+ExecStart="$prefix/bin/retain-syncd" %i
+
+[Install]
+WantedBy=network-online.service
