@@ -302,17 +302,6 @@ syncDir() {
 			sed -i -e "s|$configDir/mnt/$i,[0-9\.]*$||" -e '/^$/d' \
 				"$configDir/priority.csv"
 
-			# find newest file in user's trash that matches the file path of the
-			# current file
-			# while read -r -n 1 i; do
-			# trashFile="$(grep -rlx "Path=$localDir/$i" \
-			# 	"${XDG_DATA_HOME:-$HOME/.local/share}/Trash/info" | \
-			# 	xargs -d '\n' stat --format=%Y,%n | sort -rn | head -n 1 | \
-			# 	cut -d ',' -f 2- | sed 's/\.trashinfo//' | xargs -d '\n' basename)"
-
-			# test if there is an actual file or just a symlink in the user's trash
-			# if [[ -L "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files/$trashFile" ]]; then
-			
 			# compute checksums of all files in the user's trash if it hasn't already
 			# been done
 			IFS=$'\n'
@@ -324,7 +313,7 @@ syncDir() {
 			# compute checksum of current file
 			fileSum="$(md5sum "$configDir/mnt/$i")"
 
-			# test if file exists in the user's local trash directory
+			# test if file exists in the user's local trash directory by comparing checksums
 			if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 				# file is in trash, delete corresponding file on the server
 				ssh "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
