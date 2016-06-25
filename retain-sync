@@ -3,15 +3,20 @@
 readConfig() {
 	# can accept either the name of a configuration or the absolute
 	# path of a local sync directory
-	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then
-		# parameter is a valid config
-		configName="$1"
+	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then	
+			# parameter is a valid config
+			configName="$1"
 	elif [[ "$1" =~ ^~?/ ]]; then
 		# parameter is an absolute path
 		if [[ -f "$1/.retain-sync_init" ]]; then
 			# parameter is an initialized directory
 			localDir="${1%/}"
 			configName=$(cat "$localDir/.retain-sync_init")
+		elif [[ -f "$1/.retain-sync_part" ]]; then
+			# directory initialization was interrupted
+			echo "Initialization of this directory was interrupted."
+			printf "Please run \'retain-sync initialize\' to finish the initialization.\n"
+			exit 1
 		else
 			printf "Error: \'$1\' is not an initialized directory\n"
 			exit 1
@@ -27,6 +32,13 @@ readConfig() {
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
+
+	if [[ -f "$localDir/.retain-sync_part" ]]; then
+		# directory initialization was interrupted
+		echo "Initialization of this directory was interrupted."
+		printf "Please run \'retain-sync initialize\' to finish the initialization.\n"
+		exit 1
+	fi
 }
 
 genConfig() {
@@ -165,49 +177,60 @@ initializeDir() {
 		configDir=
 	fi
 
-	# check if directory has already been initialized
-	[[ -f "$localDir/.retain-sync_init" ]] && \
-		printf "Error: the specified directory directory has already been initialized by \'$(cat \
-		"$localDir/.retain-sync_init")\'.\n" && exit 1
+	# don't run if finishing an interrupted initialization
+	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
+		# check if directory has already been initialized
+		[[ -f "$localDir/.retain-sync_init" ]] && \
+			printf "Error: the specified directory directory has already been initialized by \'$(cat \
+			"$localDir/.retain-sync_init")\'.\n" && exit 1
 
-	# check if directory includes the retain-sync config
-	if find "$localDir" -type d | grep -q "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
-		echo "Error: the specified directory contains retain-sync config files"
-		exit 1
-	fi
-
-	# check if directory overlaps with another retain-sync configuration
-	IFS=$'\n'
-	for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
-		localDirTest="$(grep "localDir=" "$i/config" | cut -d '"' -f 2)"
-		localTreeTest=($(find "$localDirTest" -type d))
-		localTree=($(find "$localDir" -type d))
-		if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
-			printf "Error: the specified directory overlaps with the retain-sync configuration \'$(basename "$i")\'\n"
+		# check if directory includes the retain-sync config
+		if find "$localDir" -type d | grep -q "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
+			echo "Error: the specified directory contains retain-sync config files"
 			exit 1
 		fi
-	done
-	unset IFS
 
-	cleanup() {
-		
-	}
+		# check if directory overlaps with another retain-sync configuration
+		IFS=$'\n'
+		for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
+			localDirTest="$(grep "localDir=" "$i/config" | cut -d '"' -f 2)"
+			localTreeTest=($(find "$localDirTest" -type d))
+			localTree=($(find "$localDir" -type d))
+			if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
+				printf "Error: the specified directory overlaps with the configuration \'$(basename "$i")\'\n"
+				exit 1
+			fi
+		done
+		unset IFS
 
-	# run cleanup function on script exit
-	trap cleanup EXIT
+		# generate config and source variables from it
+		genConfig
+		source "$configDir/config"
+		localDir="${localDir%/}"
+		remoteDir="${remoteDir%/}"
+		remoteUser="${remoteUser:+$remoteUser@}"
 
-	# generate config and source variables from it
-	genConfig
-	source "$configDir/config"
-	localDir="${localDir%/}"
-	remoteDir="${remoteDir%/}"
-	remoteUser="${remoteUser:+$remoteUser@}"
+		# generate file indicating that the initialization process is in progress
+		echo "$configName" > "$localDir/.retain-sync_part"
 
-	# create remote directory if it doesn't already exist
-	ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"'
+		# create remote directory if it doesn't already exist
+		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+
+		# check if remote directory is empty
+		if [[ -n "$(ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
+			printf "\nError: remote directory is not empty\n"
+			exit 1
+		fi
+	else
+		echo "Resuming initialization..."
+
+		# create remote directory if it doesn't already exist
+		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+	fi
+
 
 	# check if there is enough space on the server
-	printf "Checking space requirement... "
+	printf "\nChecking space requirement... "
 	remoteSpace=$(ssh "$remoteUser$remoteHost" 'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ $localSize -gt $remoteSpace ]]; then
@@ -217,24 +240,16 @@ initializeDir() {
 		echo "done"
 	fi
 
-	# if remote directory is empty, copy local files to the server
-	printf "\nCopying local files to server... "
-	if [[ -z "$(ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
-		rsync -asHAXS --exclude=".*" "$localDir/" "$remoteUser$remoteHost:$remoteDir" && \
-			echo "done" || exit 1
-	else
-		printf "\nError: remote directory isn't empty\n"
-		exit 1
-	fi
-
-	# create "init" file used to determine whether or not the directory has been
-	# initialized and what the name of its config is
-	echo "$configName" > "$localDir/.retain-sync_init"
+	# copy local files to the server
+	printf "Copying local files to server... "
+	rsync -asHAXS --exclude=".*" "$localDir/" "$remoteUser$remoteHost:$remoteDir" && \
+		echo "done" || exit 1
 
 	# mount sshfs
-	mkdir "$configDir/mnt"
+	mkdir -p "$configDir/mnt"
 	sshDefaultOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=4,IdentityFile=$sshKey"
-	sshfs -o "$sshDefaultOptions${sshOptions:+,$sshOptions}" \
+	mountpoint -q "$configDir/mnt" || sshfs -o \
+		"$sshDefaultOptions${sshOptions:+,$sshOptions}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
@@ -248,6 +263,10 @@ initializeDir() {
 	echo "# editing this file by hand is not recommended" > "$configDir/priority.csv"
 	find "$configDir/mnt" -type f -exec echo '{},0' >> "$configDir/priority.csv" \;
 
+	# create "init" file used to indicate that the directory has been initialized and 
+	# what the name of its config is
+	mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
+
 	# advise user to start/enable the daemon
 	printf "\nRun \'systemctl --user start retain-sync@$configName.service\' to start the daemon.\n"
 	printf "Run \'systemctl --user enable retain-sync@$configName.service\' to start the daemon automatically on login.\n"
@@ -255,6 +274,7 @@ initializeDir() {
 
 syncDir() {	
 	cleanup() {
+		# delete temp files
 		rm -f "$dirPriorityFile"
 		rm -f "$dirTreeFile"
 	}
