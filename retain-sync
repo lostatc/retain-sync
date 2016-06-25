@@ -189,12 +189,22 @@ initializeDir() {
 	done
 	unset IFS
 
+	cleanup() {
+		
+	}
+
+	# run cleanup function on script exit
+	trap cleanup EXIT
+
 	# generate config and source variables from it
 	genConfig
 	source "$configDir/config"
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
+
+	# create remote directory if it doesn't already exist
+	ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"'
 
 	# check if there is enough space on the server
 	printf "Checking space requirement... "
@@ -207,11 +217,8 @@ initializeDir() {
 		echo "done"
 	fi
 
-	# create remote directory if it doesn't already exist
-	printf "\nCopying local files to server... "
-	ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"'
-
 	# if remote directory is empty, copy local files to the server
+	printf "\nCopying local files to server... "
 	if [[ -z "$(ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
 		rsync -asHAXS --exclude=".*" "$localDir/" "$remoteUser$remoteHost:$remoteDir" && \
 			echo "done" || exit 1
@@ -247,6 +254,14 @@ initializeDir() {
 }
 
 syncDir() {	
+	cleanup() {
+		rm -f "$dirPriorityFile"
+		rm -f "$dirTreeFile"
+	}
+
+	# run cleanup function on script exit
+	trap cleanup EXIT
+
 	# get list of files that have been created or removed since last sync operation 
 	printf "Checking for new files... "
 	IFS=$'\n'
@@ -398,7 +413,6 @@ syncDir() {
 		mv $dirPriorityFile.swp $dirPriorityFile
 		getSyncFiles
 	done
-	rm $dirTreeFile
 	echo "done"
 
 	# get list of individual files that aren't included in the directory priority file
@@ -482,10 +496,6 @@ syncDir() {
 		fi
 	done
 	echo "done"
-
-	# delete directory priority file--directory priorities are re-calculated
-	# each time this function is run
-	rm $dirPriorityFile
 }
 
 retrieveDir() {
