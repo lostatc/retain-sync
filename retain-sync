@@ -167,7 +167,7 @@ initializeDir() {
 
 	# check if directory has already been initialized
 	[[ -f "$localDir/.retain-sync_init" ]] && \
-		printf "Error: this directory has already been initialized by \'$(cat \
+		printf "Error: the specified directory directory has already been initialized by \'$(cat \
 		"$localDir/.retain-sync_init")\'.\n" && exit 1
 
 	# check if directory includes the retain-sync config
@@ -177,6 +177,17 @@ initializeDir() {
 	fi
 
 	# check if directory overlaps with another retain-sync configuration
+	IFS=$'\n'
+	for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
+		localDirTest="$(grep "localDir=" "$i/config" | cut -d '"' -f 2)"
+		localTreeTest=($(find "$localDirTest" -type d))
+		localTree=($(find "$localDir" -type d))
+		if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
+			printf "Error: the specified directory overlaps with the retain-sync configuration \'$(basename "$i")\'\n"
+			exit 1
+		fi
+	done
+	unset IFS
 
 	# generate config and source variables from it
 	genConfig
@@ -235,9 +246,9 @@ initializeDir() {
 	printf "Run \'systemctl --user enable retain-sync@$configName.service\' to start the daemon automatically on login.\n"
 }
 
-syncDir() {
+syncDir() {	
 	# get list of files that have been created or removed since last sync operation 
-	printf "Checking for file changes... "
+	printf "Checking for new files... "
 	IFS=$'\n'
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -type f -o -type l | \
 		sed "s|$localDir/||g")\n$(cat "$configDir/priority.csv" | grep -v '^#' | rev | \
@@ -296,6 +307,12 @@ syncDir() {
 		fi  
 	done
 	echo "done"
+
+	# exit if priority.csv is empty
+	if ! grep -vq '#' "$configDir/priority.csv"; then
+		echo "Local directory is empty. There is nothing else to do."
+		exit 0	
+	fi
 
 	# create directory priority file containing a list of all directories in the
 	# tree
