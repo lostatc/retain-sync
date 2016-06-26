@@ -251,7 +251,7 @@ initializeDir() {
 
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
-	sshDefaultOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=4,IdentityFile=$sshKey"
+	sshDefaultOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
 	mountpoint -q "$configDir/mnt" || sshfs -o \
 		"$sshDefaultOptions${sshOptions:+,$sshOptions}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1

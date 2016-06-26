@@ -22,7 +22,7 @@ remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
 
 # mount sshfs share if not already mounted
-sshDefaultOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=4,IdentityFile=$sshKey"
+sshDefaultOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
 mountpoint -q "$configDir/mnt" || sshfs -o "$sshDefaultOptions${sshOptions:+,$sshOptions}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
