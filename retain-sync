@@ -158,6 +158,12 @@ genConfig() {
 initializeDir() {
 	# function accepts the absolute path of a local directory as a parameter
 
+	cleanup() {
+		# inform user if initialization is interrupted
+		printf "\nInitialization was interrupted.\n"
+		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+	}
+
 	# test if parameter is an absolute path
 	if [[ ! "$1" =~ ^~?/ ]]; then
 		# not an absolute path
@@ -205,6 +211,9 @@ initializeDir() {
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
 
+		# inform user if initialization is interrupted
+		trap cleanup EXIT
+
 		# create remote directory if it doesn't already exist
 		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
@@ -215,6 +224,9 @@ initializeDir() {
 		fi
 	else
 		echo "Resuming initialization..."
+
+		# inform user if initialization is interrupted
+		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
 		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
