@@ -14,9 +14,8 @@ readConfig() {
 			configName=$(cat "$localDir/.retain-sync_init")
 		elif [[ -f "$1/.retain-sync_part" ]]; then
 			# directory initialization was interrupted
-			echo "Initialization of this directory was interrupted."
-			printf "Please run \'retain-sync initialize\' to finish the initialization.\n"
-			exit 1
+			localDir="${1%/}"
+			configName=$(cat "$localDir/.retain-sync_part")
 		else
 			printf "Error: \'$1\' is not an initialized directory\n"
 			exit 1
@@ -32,13 +31,6 @@ readConfig() {
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
-
-	if [[ -f "$localDir/.retain-sync_part" ]]; then
-		# directory initialization was interrupted
-		echo "Initialization of this directory was interrupted."
-		printf "Please run \'retain-sync initialize\' to finish the initialization.\n"
-		exit 1
-	fi
 }
 
 genConfig() {
@@ -281,6 +273,13 @@ syncDir() {
 
 	# run cleanup function on script exit
 	trap cleanup EXIT
+	
+	# check if initialization was interrupted
+	if [[ -f "$localDir/.retain-sync_part" ]]; then
+		echo "Initialization of this directory was interrupted."
+		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		exit 1
+	fi
 
 	# get list of files that have been created or removed since last sync operation 
 	printf "Checking for new files... "
@@ -522,7 +521,7 @@ retrieveDir() {
 
 	# remove symlinks from local directory
 	printf "Removing symbolic links from local directory... "
-	find "$localDir" -type l -exec rm '{}' \; && echo "done"
+	find "$localDir" -type l -print0 | xargs -0 rm && echo "done"
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
@@ -563,10 +562,26 @@ emptyTrash() {
 	# 'deleted' so that they can be recovered. This function allows the user to
 	# actually delete said files.
 
-	ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' || exit 1
+	# check if initialization was interrupted
+	if [[ -f "$localDir/.retain-sync_part" ]]; then
+		echo "Initialization of this directory was interrupted."
+		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		exit 1
+	fi
+
+	printf "Emptying trash... "
+	ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
+		echo "done" || exit 1
 }
 
 agePriority() {
+	# check if initialization was interrupted
+	if [[ -f "$localDir/.retain-sync_part" ]]; then
+		echo "Initialization of this directory was interrupted."
+		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		exit 1
+	fi
+
 	# divide the priority of every file in the tree by 1.1
 	while read i; do
 		fileName="$(echo "$i" | rev | cut -d ',' -f 2- | rev)"
