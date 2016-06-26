@@ -33,6 +33,19 @@ readConfig() {
 	remoteUser="${remoteUser:+$remoteUser@}"
 }
 
+sshMaster() {
+	sshCleanup() {
+		# kill ssh master process
+		ssh -O exit -S "$configDir/%h.socket" "$remoteUser$remoteHost"
+	}
+	trap sshCleanup EXIT
+
+	# all subsequent ssh commands (excluding sshfs)  will use this connection instead
+	# of reconnecting each time
+	ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -fNMS "$configDir/%h.socket" \
+		"$remoteUser$remoteHost" || exit 1
+}
+
 genConfig() {
 	# prompt user for name of config
 	while true; do
@@ -215,10 +228,10 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
 		# check if remote directory is empty
-		if [[ -n "$(ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
+		if [[ -n "$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
 			printf "\nError: remote directory is not empty\n"
 			exit 1
 		fi
@@ -229,13 +242,14 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 	fi
 
 
 	# check if there is enough space on the server
 	printf "\nChecking space requirement... "
-	remoteSpace=$(ssh "$remoteUser$remoteHost" 'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
+	remoteSpace=$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ $localSize -gt $remoteSpace ]]; then
 		printf "\nError: not enough space on the server\n"
@@ -246,8 +260,8 @@ initializeDir() {
 
 	# copy local files to the server
 	printf "Copying local files to server... "
-	rsync -asHAXS --exclude=".*" "$localDir/" "$remoteUser$remoteHost:$remoteDir" && \
-		echo "done" || exit 1
+	rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS --exclude=".*" "$localDir/" \
+		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
@@ -327,17 +341,20 @@ syncDir() {
 			# test if file exists in the user's local trash directory by comparing checksums
 			if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 				# file is in trash, delete corresponding file on the server
-				ssh "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
+				ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
 			else
 				# file is not in trash, mark corresponding file on the server for deletion
-				ssh "$remoteUser$remoteHost" 'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
+				ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+					'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
 					exit 1
 			fi  
 		else
 			# new file, set priority so that it's at the top and copy to server
 			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
-			ssh "$remoteUser$remoteHost" 'mkdir -p "$(dirname "'$remoteDir/$i'")"'
-			rsync -asHAXS "$localDir/$i" "$remoteUser$remoteHost:$remoteDir/$i" || exit 1
+			ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
+			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS "$localDir/$i" \
+				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 		fi  
 	done
 	echo "done"
@@ -501,7 +518,8 @@ syncDir() {
 	printf "Downloading new files... "
 	while read i; do
 		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
-			rsync -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i/.." || exit 1
+			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
+				"$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i/.." || exit 1
 		fi
 	done <$dirPriorityFile
 
@@ -512,7 +530,8 @@ syncDir() {
 	unset IFS
 	for i in "${extraFiles[@]}"; do
 		if ! find "$localDir" -not -path '*/\.*' -type f | grep -Fq "localDir/$i"; then
-			rsync -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i" || exit 1
+			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
+				"$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i" || exit 1
 		fi
 	done
 	echo "done"
@@ -521,7 +540,8 @@ syncDir() {
 retrieveDir() {
 	# check if there is enough free space on the local machine
 	printf "Checking space requirement... "
-	remoteSize=$(ssh "$remoteUser$remoteHost" 'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
+	remoteSize=$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+		'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ $remoteSize -gt $localSpace ]]; then
 		# not enough space
@@ -537,16 +557,17 @@ retrieveDir() {
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
-	rsync -asHAXS "$remoteUser$remoteHost:$remoteDir/" "$localDir" && echo "done" || exit 1
+	rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
+		"$remoteUser$remoteHost:$remoteDir/" "$localDir" && echo "done" || exit 1
 
 	# remove files from the server only if they've been successfully downloaded to the
 	# local machine first
 	printf "Removing files from server... "
 	find "$localDir" -not -path '*/\.*' -type f -print0 | sed "s|$localDir|$remoteDir|g" | \
-		ssh "$remoteUser$remoteHost" -- xargs -0 rm || exit 1
+		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" -- xargs -0 rm || exit 1
 
 	# remove empty directories
-	ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
+	ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
 	# unmount sshfs, remove init file and remove config directory 
@@ -582,7 +603,8 @@ emptyTrash() {
 	fi
 
 	printf "Emptying trash... "
-	ssh "$remoteUser$remoteHost" 'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
+	ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+		'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
 		echo "done" || exit 1
 }
 
