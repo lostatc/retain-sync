@@ -31,19 +31,26 @@ readConfig() {
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
+
+	# set default options
+	sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
+	sshDefaults="-o ServerAliveInterval=10 -o ServerAliveCountMax=2"
 }
 
 sshMaster() {
 	sshCleanup() {
-		# kill ssh master process
-		ssh -O exit -S "$configDir/%h.socket" "$remoteUser$remoteHost"
+		ssh -O exit -S $configDir/%h.socket "$remoteUser$remoteHost" > /dev/null
 	}
+
+	# kill ssh master process on script exit
 	trap sshCleanup EXIT
 
-	# all subsequent ssh commands (excluding sshfs)  will use this connection instead
-	# of reconnecting each time
-	ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -fNMS "$configDir/%h.socket" \
-		"$remoteUser$remoteHost" || exit 1
+	# add ControlPath to ssh defaults
+	sshDefaults="$sshDefaults -S $configDir/%h.socket"
+
+	# all subsequent ssh commands (excluding sshfs)  will use this master connection
+	# instead of reconnecting each time
+	ssh $sshDefaults -fNM "$remoteUser$remoteHost" || exit 1
 }
 
 genConfig() {
@@ -67,7 +74,7 @@ genConfig() {
 		read -ep "Enter your user name on the remote machine (empty to use local user name): " remoteUser
 		remoteUser="${remoteUser//[\"\']/}"
 		if [[ "$remoteUser" =~ [\ ]+ ]]; then
-			echo "Error: user names may not contain spaces"
+			echo "Error: user name may not contain spaces"
 		else
 			break
 		fi
@@ -104,7 +111,7 @@ genConfig() {
 		read -ep "Enter the location of your ssh private key ($HOME/.ssh/id_rsa): " sshKey
 		sshKey="${sshKey//[\"\']/}"
 		if [[ -z "$sshKey" ]]; then
-			declare sshKey="$HOME/.ssh/id_rsa"
+			sshKey="$HOME/.ssh/id_rsa"
 			break
 		elif [[ ! "$sshKey" =~ ^~?/ ]]; then
 			echo "Error: must be an absolute path"
@@ -115,9 +122,9 @@ genConfig() {
 
 	# prompt user for additional sshfs mount options
 	while true; do
-		read -ep "Enter any additional mount options to pass on to sshfs: " sshOptions
-		sshOptions="${sshOptions//[\"\']/}"
-		if [[ "$sshOptions" =~ [\ ]+ ]]; then
+		read -ep "Enter any additional mount options to pass on to sshfs: " sshfsOptions
+		sshfsOptions="${sshfsOptions//[\"\']/}"
+		if [[ "$sshfsOptions" =~ [\ ]+ ]]; then
 			echo "Error: mount options must be comma-separated and may not contain spaces"
 		else
 			break
@@ -161,7 +168,7 @@ genConfig() {
 		sshKey="$sshKey"
 
 		# additional mount options to pass to sshfs (optional)
-		sshOptions="$sshOptions"
+		sshfsOptions="$sshfsOptions"
 
 		# amount of data to keep on local machine (accepts K, M or G)
 		storageLimit="$storageLimit"
@@ -176,6 +183,9 @@ initializeDir() {
 		printf "\nInitialization was interrupted.\n"
 		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
 	}
+
+	# start ssh master connection
+	sshMaster
 
 	# test if parameter is an absolute path
 	if [[ ! "$1" =~ ^~?/ ]]; then
@@ -228,10 +238,10 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh $sshDefaults "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
 		# check if remote directory is empty
-		if [[ -n "$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
+		if [[ -n "$(ssh $sshDefaults "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
 			printf "\nError: remote directory is not empty\n"
 			exit 1
 		fi
@@ -242,13 +252,13 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh $sshDefaults "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 	fi
 
 
 	# check if there is enough space on the server
 	printf "\nChecking space requirement... "
-	remoteSpace=$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+	remoteSpace=$(ssh $sshDefaults "$remoteUser$remoteHost" \
 		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ $localSize -gt $remoteSpace ]]; then
@@ -260,14 +270,13 @@ initializeDir() {
 
 	# copy local files to the server
 	printf "Copying local files to server... "
-	rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS --exclude=".*" "$localDir/" \
+	rsync -e "ssh $sshDefaults" -asHAXS --exclude=".*" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
-	sshDefaultOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
-	mountpoint -q "$configDir/mnt" || sshfs -o \
-		"$sshDefaultOptions${sshOptions:+,$sshOptions}" \
+	mountpoint -q "$configDir/mnt" || sshfs \
+		"$sshfsDefaults${sshfsOptions:+,$sshfsOptions}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
@@ -300,6 +309,9 @@ syncDir() {
 	# run cleanup function on script exit
 	trap cleanup EXIT
 	
+	# start ssh master connection
+	sshMaster
+
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
@@ -341,19 +353,19 @@ syncDir() {
 			# test if file exists in the user's local trash directory by comparing checksums
 			if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 				# file is in trash, delete corresponding file on the server
-				ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
+				ssh $sshDefaults "$remoteUser$remoteHost" "rm $remoteDir/$i" || exit 1
 			else
 				# file is not in trash, mark corresponding file on the server for deletion
-				ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+				ssh $sshDefaults "$remoteUser$remoteHost" \
 					'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
 					exit 1
 			fi  
 		else
 			# new file, set priority so that it's at the top and copy to server
 			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
-			ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+			ssh $sshDefaults "$remoteUser$remoteHost" \
 				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
-			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS "$localDir/$i" \
+			rsync -e "ssh $sshDefaults" -asHAXS "$localDir/$i" \
 				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 		fi  
 	done
@@ -518,8 +530,8 @@ syncDir() {
 	printf "Downloading new files... "
 	while read i; do
 		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
-			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
-				"$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i/.." || exit 1
+			rsync -e "ssh $sshDefaults" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+				"$localDir/$i/.." || exit 1
 		fi
 	done <$dirPriorityFile
 
@@ -530,17 +542,20 @@ syncDir() {
 	unset IFS
 	for i in "${extraFiles[@]}"; do
 		if ! find "$localDir" -not -path '*/\.*' -type f | grep -Fq "localDir/$i"; then
-			rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
-				"$remoteUser$remoteHost:$remoteDir/$i" "$localDir/$i" || exit 1
+			rsync -e "ssh $sshDefaults" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+				"$localDir/$i" || exit 1
 		fi
 	done
 	echo "done"
 }
 
 retrieveDir() {
+	# start ssh master connection
+	sshMaster
+
 	# check if there is enough free space on the local machine
 	printf "Checking space requirement... "
-	remoteSize=$(ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+	remoteSize=$(ssh $sshDefaults "$remoteUser$remoteHost" \
 		'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ $remoteSize -gt $localSpace ]]; then
@@ -557,24 +572,25 @@ retrieveDir() {
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
-	rsync -e 'ssh  -S "'$configDir'/%h.socket"' -asHAXS \
+	rsync -e "ssh $sshDefaults" -asHAXS \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" && echo "done" || exit 1
 
 	# remove files from the server only if they've been successfully downloaded to the
 	# local machine first
 	printf "Removing files from server... "
 	find "$localDir" -not -path '*/\.*' -type f -print0 | sed "s|$localDir|$remoteDir|g" | \
-		ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" -- xargs -0 rm || exit 1
+		ssh $sshDefaults "$remoteUser$remoteHost" -- xargs -0 rm || exit 1
 
 	# remove empty directories
-	ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
+	ssh $sshDefaults "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
 	# unmount sshfs, remove init file and remove config directory 
 	printf "Cleaning up... "
-	fusermount -u "$configDir/mnt" && \
-		rm "$localDir/.retain-sync_init" && \
-		rm -r "$configDir" && echo "done"
+	fusermount -u "$configDir/mnt" || exit 1
+	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part"
+	rm -r "$configDir"
+	echo "done"
 }
 
 listConfigs() {
@@ -603,7 +619,7 @@ emptyTrash() {
 	fi
 
 	printf "Emptying trash... "
-	ssh -S "$configDir/%h.socket" "$remoteUser$remoteHost" \
+	ssh $sshDefaults "$remoteUser$remoteHost" \
 		'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
 		echo "done" || exit 1
 }
