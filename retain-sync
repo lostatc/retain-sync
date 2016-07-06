@@ -306,9 +306,9 @@ syncDir() {
 		rm -f "$dirTreeFile"
 	}
 
-	# run cleanup function on script exit
-	trap cleanup EXIT
-	
+	# read config file
+	readConfig "$1"
+
 	# start ssh master connection
 	sshMaster
 
@@ -376,6 +376,9 @@ syncDir() {
 		echo "Local directory is empty. There is nothing else to do."
 		exit 0	
 	fi
+
+	# run cleanup function on script exit
+	trap cleanup EXIT
 
 	# create directory priority file containing a list of all directories in the
 	# tree
@@ -550,6 +553,9 @@ syncDir() {
 }
 
 retrieveDir() {
+	# read config file
+	readConfig "$1"
+
 	# start ssh master connection
 	sshMaster
 
@@ -611,6 +617,9 @@ emptyTrash() {
 	# 'deleted' so that they can be recovered. This function allows the user to
 	# actually delete said files.
 
+	# read config file
+	readConfig "$1"
+
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
@@ -625,6 +634,9 @@ emptyTrash() {
 }
 
 agePriority() {
+	# read config file
+	readConfig "$1"
+
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
@@ -632,7 +644,7 @@ agePriority() {
 		exit 1
 	fi
 
-	# divide the priority of every file in the tree by 1.1
+	# divide the priority of every file by 1.1
 	while read i; do
 		fileName="$(echo "$i" | rev | cut -d ',' -f 2- | rev)"
 		newPriority=$(echo "scale=6; $(echo "$i" | rev | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
@@ -649,23 +661,19 @@ case "$1" in
 		initializeDir "$2"
 		shift 2 ;;
 	sync)
-		readConfig "$2"
-		syncDir
+		syncDir "$2"
 		shift 2 ;;
 	retrieve)
-		readConfig "$2"
-		retrieveDir
+		retrieveDir "$2"
 		shift 2 ;;
 	list-configs)
 		listConfigs
 		shift ;;
 	empty-trash)
-		readConfig "$2"
-		emptyTrash
+		emptyTrash "$2"
 		shift 2 ;;
 	age)
-		readConfig "$2"
-		agePriority
+		agePriority "$2"
 		shift 2 ;;
 	help|--help)
 		echo "help"
