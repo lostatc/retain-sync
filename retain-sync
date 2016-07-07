@@ -33,19 +33,19 @@ readConfig() {
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
 	sshfsOptions="-o $sshfsOptions"
-	sshDefaults=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 }
 
 sshMaster() {
 	# add ControlPath to ssh defaults
-	sshDefaults+=(-S "$XDG_RUNTIME_DIR/retain-sync/%C.socket")
+	sshOptions+=(-S "$XDG_RUNTIME_DIR/retain-sync/%C.socket")
 
 	# create runtime dir if it doesn't already exist
 	mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
 
 	# all subsequent ssh commands (excluding sshfs)  will use this master connection
 	# instead of reconnecting each time
-	ssh "${sshDefaults[@]}" -fNM "$remoteUser$remoteHost" &> /dev/null || exit 1
+	ssh "${sshOptions[@]}" -fNM "$remoteUser$remoteHost" &> /dev/null || exit 1
 }
 
 genConfig() {
@@ -204,7 +204,7 @@ initializeDir() {
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
 		sshfsOptions="-o $sshfsOptions"
-		sshDefaults=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
@@ -216,10 +216,10 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
 		# check if remote directory is empty
-		if [[ -n "$(ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
+		if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
 			printf "\nError: remote directory is not empty\n"
 			exit 1
 		fi
@@ -236,13 +236,13 @@ initializeDir() {
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 	fi
 
 
 	# check if there is enough space on the server
 	printf "\nChecking space requirement... "
-	remoteSpace=$(ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
+	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ $localSize -gt $remoteSpace ]]; then
@@ -254,7 +254,7 @@ initializeDir() {
 
 	# copy local files to the server
 	printf "Copying local files to server... "
-	rsync -e "ssh ${sshDefaults[*]}" -asHAXS --exclude=".*" "$localDir/" \
+	rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
 	# mount sshfs
@@ -342,19 +342,19 @@ syncDir() {
 			# test if file exists in the user's local trash directory by comparing checksums
 			if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 				# file is in trash, delete corresponding file on the server
-				ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" "rm $remoteDir/$i" || exit 1
+				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "rm $remoteDir/$i" || exit 1
 			else
 				# file is not in trash, mark corresponding file on the server for deletion
-				ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
+				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 					'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
 					exit 1
 			fi  
 		else
 			# new file, set priority so that it's at the top and copy to server
 			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
-			ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
+			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
-			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$localDir/$i" \
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
 				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 		fi  
 	done
@@ -522,7 +522,7 @@ syncDir() {
 	printf "Downloading new files... "
 	while read i; do
 		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
-			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i/.." || exit 1
 		fi
 	done <$dirPriorityFile
@@ -534,7 +534,7 @@ syncDir() {
 	unset IFS
 	for i in "${extraFiles[@]}"; do
 		if ! find "$localDir" -not -path '*/\.*' -type f | grep -Fq "$localDir/$i"; then
-			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i" || exit 1
 		fi
 	done
@@ -558,7 +558,7 @@ retrieveDir() {
 
 	# check if there is enough free space on the local machine
 	printf "Checking space requirement... "
-	remoteSize=$(ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
+	remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ $remoteSize -gt $localSpace ]]; then
@@ -575,17 +575,17 @@ retrieveDir() {
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
-	rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/" \
+	rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/" \
 		"$localDir" && echo "done" || exit 1
 
 	# remove files from the server only if they've been successfully downloaded to the
 	# local machine first
 	printf "Removing files from server... "
 	find "$localDir" -not -path '*/\.*' -type f -print0 | sed "s|$localDir|$remoteDir|g" | \
-		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'xargs -0 rm -f' || exit 1
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'xargs -0 rm -f' || exit 1
 
 	# remove empty directories
-	ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
+	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
 	# unmount sshfs, remove init file and remove config directory 
@@ -625,7 +625,7 @@ emptyTrash() {
 	fi
 
 	printf "Emptying trash... "
-	ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
+	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
 		echo "done" || exit 1
 }
