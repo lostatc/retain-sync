@@ -4,8 +4,9 @@ Requires=retain-sync-age@%i.timer
 Wants=retain-sync-resync@%i.timer
 
 [Service]
-Type=simple
-ExecStart="$prefix/bin/retain-syncd" %i
+Type=forking
+ExecStart=/usr/local/bin/retain-syncd %i
+PIDFile=%t/retain-sync/retain-syncd.pid
 
 [Install]
 WantedBy=network-online.service

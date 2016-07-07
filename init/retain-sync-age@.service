@@ -3,4 +3,4 @@ Description=Adjusts file priority for time
 
 [Service]
 Type=oneshot
-ExecStart="$prefix/bin/retain-sync" age %i
+ExecStart=/usr/local/bin/retain-sync age %i
