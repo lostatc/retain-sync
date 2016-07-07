@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 
 configName="$1"
-
-# check if config was specified
-if [[ -z "$configName" ]]; then
-	>&2 printf "Please specify a configuration (e.g. \'systemctl --user start retain-sync@documents.service\').\n"
-	exit 1
-fi
 configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
 # check if specified config exists
 if ! [[ -d "$configDir" ]]; then
- 	>&2 printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n"
+ 	printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n" | \
+		systemd-cat -p err -t 'retain-syncd'
 	exit 1
 fi
 
@@ -28,12 +23,18 @@ sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,Identit
 mountpoint -q "$configDir/mnt" || sshfs "$sshfsDefaults${sshfsOptions:+,$sshfsOptions}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
-priorityMod() {
-		fileName="$1"
+fileWatch() {
+	# create PIDfile
+	mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
+	echo "$$" > "$XDG_RUNTIME_DIR/retain-sync/retain-syncd.pid"
 
-		# make sure file is a normal, non-hidden file
-		if [[ ! "$(basename "$fileName")" =~ ^\. ]] && [[ -f "$fileName" ]]; then
-
+	while true; do
+		# wait for a file to be opened
+		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" "$configDir/mnt" | \
+			sed "s|$localDir|$configDir/mnt|")"
+	
+		# make sure file is a normal file and not hidden or under a hidden directory
+		if [[ -f "$fileName" ]] && [[ ! "$(echo $fileName | sed "s|$configDir/mnt||")" =~ /\. ]]; then
 			# test if file exists in priority.csv
 			fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
 
@@ -54,31 +55,7 @@ priorityMod() {
 
 		# sleep to prevent file access from being registered multiple times
 		sleep 1
-}
-
-remoteWatch() {
-	while true; do
-		# wait for a file to be opened
-		fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt")"
-	
-		# adjust file priority accordingly
-		priorityMod "$fileName"
 	done
 }
 
-localWatch() {
-	while true; do
-		# wait for a file to be opened
-		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
-			sed "s|$localDir|$configDir/mnt|")"
-
-		# adjust file priority accordingly
-		priorityMod "$fileName"
-	done
-}
-
-# watch remote files for file access
-remoteWatch &
-
-# watch local files for file access
-localWatch &
+fileWatch &
