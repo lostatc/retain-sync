@@ -12,15 +12,14 @@ fi
 
 # source variables from config
 source "$configDir/config"
+
 localDir="${localDir%/}"
 remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
-
-# set defaults
-sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
+sshfsOptions="-o $sshfsOptions"
 
 # mount sshfs share if not already mounted
-mountpoint -q "$configDir/mnt" || sshfs $sshfsDefaults${sshfsOptions:+,$sshfsOptions} \
+mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 fileWatch() {

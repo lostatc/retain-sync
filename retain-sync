@@ -28,12 +28,11 @@ readConfig() {
 	
 	# source variables from config
 	source "$configDir/config"
+
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
-
-	# set default options
-	sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
+	sshfsOptions="-o $sshfsOptions"
 	sshDefaults=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 }
 
@@ -102,17 +101,6 @@ genConfig() {
 		fi
 	done
 
-	# prompt user for additional sshfs mount options
-	while true; do
-		read -ep "Enter any additional mount options to pass on to sshfs: " sshfsOptions
-		sshfsOptions="${sshfsOptions//[\"\']/}"
-		if [[ "$sshfsOptions" =~ [\ ]+ ]]; then
-			echo "Error: mount options must be comma-separated and may not contain spaces"
-		else
-			break
-		fi
-	done
-
 	# prompt user for storage limit
 	while true; do
 		read -ep "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
@@ -123,6 +111,9 @@ genConfig() {
 			break
 		fi
 	done
+
+	# set default sshfs options
+	sshfsOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
 
 	# create config directory
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
@@ -146,11 +137,11 @@ genConfig() {
 		# directory to sync to on remote machine
 		remoteDir="$remoteDir"
 
-		# additional mount options to pass to sshfs (optional)
-		sshfsOptions="$sshfsOptions"
-
 		# amount of data to keep on local machine (accepts K, M or G)
 		storageLimit="$storageLimit"
+
+		# mount options to pass to sshfs
+		sshfsOptions="$sshfsOptions"
 	EOF
 }
 
@@ -208,9 +199,12 @@ initializeDir() {
 		# generate config and source variables from it
 		genConfig
 		source "$configDir/config"
+
 		localDir="${localDir%/}"
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
+		sshfsOptions="-o $sshfsOptions"
+		sshDefaults=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
@@ -265,8 +259,7 @@ initializeDir() {
 
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
-	mountpoint -q "$configDir/mnt" || sshfs \
-		$sshfsDefaults${sshfsOptions:+,$sshfsOptions} \
+	mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
