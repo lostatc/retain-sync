@@ -39,13 +39,14 @@ readConfig() {
 
 sshMaster() {
 	# add ControlPath to ssh defaults
-	sshDefaults+=(-S "$configDir/%h.socket")
+	sshDefaults+=(-S "$XDG_RUNTIME_DIR/retain-sync/%C.socket")
+
+	# create runtime dir if it doesn't already exist
+	mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
 
 	# all subsequent ssh commands (excluding sshfs)  will use this master connection
 	# instead of reconnecting each time
-	if ! [[ -S "$configDir/$remoteHost.socket" ]]; then
-		ssh "${sshDefaults[@]}" -fNM "$remoteUser$remoteHost" || exit 1
-	fi
+	ssh "${sshDefaults[@]}" -fNM "$remoteUser$remoteHost" &> /dev/null || exit 1
 }
 
 genConfig() {
@@ -175,7 +176,7 @@ initializeDir() {
 
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$configDir"/%h.socket "$remoteUser$remoteHost" &> /dev/null
+		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
 		# inform user if initialization is interrupted
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -299,7 +300,7 @@ initializeDir() {
 syncDir() {	
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$configDir"/%h.socket "$remoteUser$remoteHost" &> /dev/null
+		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
 		# delete temp files
 		rm -f "$dirPriorityFile"
@@ -557,7 +558,7 @@ syncDir() {
 retrieveDir() {
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$configDir"/%h.socket "$remoteUser$remoteHost" &> /dev/null
+		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 	}
 
 	# read config file
