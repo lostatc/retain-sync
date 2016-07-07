@@ -188,7 +188,7 @@ initializeDir() {
 	# start ssh master connection
 	sshMaster
 
-	# inform user if initialization is interrupted
+	# run cleanup function on script exit 
 	trap cleanup EXIT
 
 	# test if parameter is an absolute path
@@ -384,7 +384,7 @@ syncDir() {
 	# create directory priority file containing a list of all directories in the
 	# tree
 	printf "Sorting directories by priority... "
-	dirPriorityFile="$(mktemp)"
+	dirPriorityFile=$(mktemp)
 	find "$configDir/mnt" -mindepth 1 -type d > $dirPriorityFile
 	# read directory priority file line-by-line
 	while read i; do
@@ -420,7 +420,7 @@ syncDir() {
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
-	dirTreeFile="$(mktemp)"
+	dirTreeFile=$(mktemp)
 	getSyncFiles() {
 		syncSize=0
 		while read i; do
