@@ -185,12 +185,6 @@ initializeDir() {
 		fi
 	}
 
-	# start ssh master connection
-	sshMaster
-
-	# run cleanup function on script exit 
-	trap cleanup EXIT
-
 	# test if parameter is an absolute path
 	if [[ ! "$1" =~ ^~?/ ]]; then
 		# not an absolute path
@@ -238,6 +232,12 @@ initializeDir() {
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
 
+		# start ssh master connection
+		sshMaster
+
+		# run cleanup function on script exit 
+		trap cleanup EXIT
+
 		# create remote directory if it doesn't already exist
 		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
@@ -248,6 +248,12 @@ initializeDir() {
 		fi
 	else
 		echo "Resuming initialization..."
+
+		# start ssh master connection
+		sshMaster
+
+		# run cleanup function on script exit 
+		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
 		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
