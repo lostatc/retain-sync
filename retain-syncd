@@ -10,7 +10,7 @@ fi
 configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
 # check if specified config exists
-if [[ ! -d "$configDir" ]]; then
+if ! [[ -d "$configDir" ]]; then
  	>&2 printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n"
 	exit 1
 fi
@@ -21,35 +21,64 @@ localDir="${localDir%/}"
 remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
 
+# set defaults
+sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
+
 # mount sshfs share if not already mounted
-sshDefaultOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
-mountpoint -q "$configDir/mnt" || sshfs -o "$sshDefaultOptions${sshOptions:+,$sshOptions}" \
+mountpoint -q "$configDir/mnt" || sshfs "$sshfsDefaults${sshfsOptions:+,$sshfsOptions}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
-while true; do
-	# wait for a file to be opened
-	fileName="$(inotifywait -qre open --format '%w%f' $configDir/mnt)"
+priorityMod() {
+		fileName="$1"
 
-	# test if file is hidden or a directory
-	if [[ ! "$(basename "$fileName")" =~ ^\. ]] && [[ -f "$fileName" ]]; then
+		# make sure file is a normal, non-hidden file
+		if [[ ! "$(basename "$fileName")" =~ ^\. ]] && [[ -f "$fileName" ]]; then
 
-		# test if file exists in priority.csv
-		fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
+			# test if file exists in priority.csv
+			fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
 
-		if [ $? -eq 0 ]; then
-
-			# file exists, increase file priority by one
-			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | cut -d ',' -f 1 | rev)+1" | bc)
-			sed -i "s|$fileName,[0-9\.]*$|$fileName,$newPriority|" "$configDir/priority.csv"
+			if [ $? -eq 0 ]; then
+				# file exists, increase file priority by one
+				newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
+					cut -d ',' -f 1 | rev)+1" | bc)
+				sed -i "s|$fileName,[0-9\.]*$|$fileName,$newPriority|" \
+					"$configDir/priority.csv"
+			else
+				# new file, priority will be set on next sync operation
+				continue
+			fi
 		else
-			# new file, priority will be set on next sync operation
+			# file is hidden or not a normal file
 			continue
 		fi
-	else
-		# file is hidden or a directory
-		continue
-	fi
 
-	# sleep to prevent file access from being registered multiple times
-	sleep 1
-done
+		# sleep to prevent file access from being registered multiple times
+		sleep 1
+}
+
+remoteWatch() {
+	while true; do
+		# wait for a file to be opened
+		fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt")"
+	
+		# adjust file priority accordingly
+		priorityMod "$fileName"
+	done
+}
+
+localWatch() {
+	while true; do
+		# wait for a file to be opened
+		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
+			sed "s|$localDir|$configDir/mnt|")"
+
+		# adjust file priority accordingly
+		priorityMod "$fileName"
+	done
+}
+
+# watch remote files for file access
+remoteWatch &
+
+# watch local files for file access
+localWatch &
