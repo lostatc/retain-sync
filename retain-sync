@@ -33,7 +33,7 @@ readConfig() {
 	remoteUser="${remoteUser:+$remoteUser@}"
 
 	# set default options
-	sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
+	sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
 	sshDefaults=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 }
 
@@ -102,20 +102,6 @@ genConfig() {
 		fi
 	done
 
-	# prompt user for ssh private key location
-	while true; do
-		read -ep "Enter the location of your ssh private key ($HOME/.ssh/id_rsa): " sshKey
-		sshKey="${sshKey//[\"\']/}"
-		if [[ -z "$sshKey" ]]; then
-			sshKey="$HOME/.ssh/id_rsa"
-			break
-		elif [[ ! "$sshKey" =~ ^~?/ ]]; then
-			echo "Error: must be an absolute path"
-		else
-			break
-		fi
-	done
-
 	# prompt user for additional sshfs mount options
 	while true; do
 		read -ep "Enter any additional mount options to pass on to sshfs: " sshfsOptions
@@ -159,9 +145,6 @@ genConfig() {
 
 		# directory to sync to on remote machine
 		remoteDir="$remoteDir"
-
-		# ssh private key location
-		sshKey="$sshKey"
 
 		# additional mount options to pass to sshfs (optional)
 		sshfsOptions="$sshfsOptions"

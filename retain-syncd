@@ -17,7 +17,7 @@ remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
 
 # set defaults
-sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2,IdentityFile=$sshKey"
+sshfsDefaults="-o reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
 
 # mount sshfs share if not already mounted
 mountpoint -q "$configDir/mnt" || sshfs $sshfsDefaults${sshfsOptions:+,$sshfsOptions} \
