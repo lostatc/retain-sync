@@ -268,7 +268,7 @@ initializeDir() {
 
 	# copy local files to the server
 	printf "Copying local files to server... "
-	rsync -e "ssh ${sshDefaults[@]}" -asHAXS --exclude=".*" "$localDir/" \
+	rsync -e "ssh ${sshDefaults[*]}" -asHAXS --exclude=".*" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
 	# mount sshfs
@@ -369,7 +369,7 @@ syncDir() {
 			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
 			ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" \
 				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
-			rsync -e "ssh ${sshDefaults[@]}" -asHAXS "$localDir/$i" \
+			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$localDir/$i" \
 				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 		fi  
 	done
@@ -479,6 +479,7 @@ syncDir() {
 	# from that list, get list of individual files that can fill the remaining space
 	# until the storage limit is reached
 	for i in "${noSyncFiles[@]}"; do
+		# search for line containing complete file name in priority file
 		noSyncSorted+=($(grep -xE "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/'),[0-9\.]*$" \
 			"$configDir/priority.csv"))
 	done
@@ -536,7 +537,7 @@ syncDir() {
 	printf "Downloading new files... "
 	while read i; do
 		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
-			rsync -e "ssh ${sshDefaults[@]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i/.." || exit 1
 		fi
 	done <$dirPriorityFile
@@ -548,7 +549,7 @@ syncDir() {
 	unset IFS
 	for i in "${extraFiles[@]}"; do
 		if ! find "$localDir" -not -path '*/\.*' -type f | grep -Fq "$localDir/$i"; then
-			rsync -e "ssh ${sshDefaults[@]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+			rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i" || exit 1
 		fi
 	done
@@ -589,8 +590,8 @@ retrieveDir() {
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
-	rsync -e "ssh ${sshDefaults[@]}" -asHAXS \
-		"$remoteUser$remoteHost:$remoteDir/" "$localDir" && echo "done" || exit 1
+	rsync -e "ssh ${sshDefaults[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/" \
+		"$localDir" && echo "done" || exit 1
 
 	# remove files from the server only if they've been successfully downloaded to the
 	# local machine first
