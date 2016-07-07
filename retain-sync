@@ -249,6 +249,9 @@ initializeDir() {
 	else
 		echo "Resuming initialization..."
 
+		# read config file
+		readConfig "$1"
+
 		# start ssh master connection
 		sshMaster
 
@@ -280,7 +283,7 @@ initializeDir() {
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
 	mountpoint -q "$configDir/mnt" || sshfs \
-		"$sshfsDefaults${sshfsOptions:+,$sshfsOptions}" \
+		$sshfsDefaults${sshfsOptions:+,$sshfsOptions} \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
