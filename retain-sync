@@ -479,7 +479,8 @@ syncDir() {
 	# from that list, get list of individual files that can fill the remaining space
 	# until the storage limit is reached
 	for i in "${noSyncFiles[@]}"; do
-		noSyncSorted+=($(grep -F "$i" "$configDir/priority.csv"))
+		noSyncSorted+=($(grep -xE "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/'),[0-9\.]*$" \
+			"$configDir/priority.csv"))
 	done
 	for i in "${!noSyncSorted[@]}"; do
 		# adjust priority for file size
@@ -530,7 +531,6 @@ syncDir() {
 	# make all paths in directory priority file relative
 	sed -i "s|$configDir/mnt/||" $dirPriorityFile
 
-	cp $dirPriorityFile /home/garrett/dirPriorityFile
 	# download directories that are in the directory priority file but not stored
 	# locally
 	printf "Downloading new files... "
