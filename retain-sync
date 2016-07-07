@@ -592,7 +592,7 @@ retrieveDir() {
 
 	# remove symlinks from local directory
 	printf "Removing symbolic links from local directory... "
-	find "$localDir" -type l -print0 | xargs -0 rm && echo "done"
+	find "$localDir" -type l -print0 | xargs -0 rm -f && echo "done"
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
@@ -603,7 +603,7 @@ retrieveDir() {
 	# local machine first
 	printf "Removing files from server... "
 	find "$localDir" -not -path '*/\.*' -type f -print0 | sed "s|$localDir|$remoteDir|g" | \
-		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" -- xargs -0 rm || exit 1
+		ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'xargs -0 rm -f' || exit 1
 
 	# remove empty directories
 	ssh "${sshDefaults[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
