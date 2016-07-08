@@ -671,10 +671,11 @@ retrieveDir() {
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
-	# unmount sshfs, remove init file and remove config directory
+	# unmount sshfs, remove init file, lock file and config directory
 	printf "Cleaning up... "
 	fusermount -u "$configDir/mnt" || exit 1
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part"
+	rm -f "$localDir/.retain-sync_lock"
 	rm -r "$configDir"
 	echo "done"
 }
