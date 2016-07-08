@@ -58,6 +58,15 @@ remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
 sshfsOptions="-o $sshfsOptions"
 
+# check if initialization was interrupted
+if [[ -f "$localDir/.retain-sync_part" ]]; then	
+	echo "Initialization of this directory was interrupted." | \
+		systemd-cat -p err -t 'retain-syncd'
+	printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n" | \
+		systemd-cat -p err -t 'retain-syncd'
+	exit 1
+fi
+
 # mount sshfs share if not already mounted
 mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
