@@ -11,8 +11,48 @@ if ! [[ -d "$configDir" ]]; then
 fi
 
 # source variables from config
-source "$configDir/config"
+configError=0
+while read i; do
+    ((lineNumber++))
 
+    # line is blank, skip
+    [[ "$i" =~ ^$ ]] && continue
+
+    # line is a comment, skip
+    [[ "$i" =~ ^# ]] && continue
+    
+    # run if line is missing an equals sign
+    if ! [[ "$i" =~ = ]]; then
+        echo "Error: line $lineNumber of config file: unrecognized syntax"
+        ((configError++))
+    fi  
+
+    # parse varable
+    varName="$(echo "$i" | cut -d '=' -f 1)"
+    varValue="$(echo "$i" | cut -d '=' -f 2-)"
+
+    # run if option is unrecognized
+    if ! echo "$varName" | grep -qFf <(cat <<-EOF
+        localDir
+        remoteUser
+        remoteHost
+        remoteDir
+        storageLimit
+        sshfsOptions
+    EOF
+    ); then
+        printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
+        ((configError++))
+    fi  
+
+    # declare variable
+    declare -g "$varName"="$varValue"
+done <"$configDir/config"
+
+# exit if there were errors in config file
+[[ ! $configError -ne 0 ]] || exit 1
+
+# format variables
 localDir="${localDir%/}"
 remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"

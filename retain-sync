@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 readConfig() {
-	# can accept either the name of a configuration or the absolute
-	# path of a local sync directory
+	# accepts either the name of a configuration or the absolute path of a local
+	# sync directory
 	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then	
 			# parameter is a valid config
 			configName="$1"
@@ -27,12 +27,54 @@ readConfig() {
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
 	
 	# source variables from config
-	source "$configDir/config"
+	configError=0
+	while read i; do
+		((lineNumber++))
 
+		# line is blank, skip
+		[[ "$i" =~ ^$ ]] && continue
+
+		# line is a comment, skip
+		[[ "$i" =~ ^# ]] && continue
+
+		# run if line is missing an equals sign
+		if ! [[ "$i" =~ = ]]; then
+			echo "Error: line $lineNumber of config file: unrecognized syntax"
+			((configError++))
+		fi
+
+		# parse option
+		varName="$(echo "$i" | cut -d '=' -f 1)"
+		varValue="$(echo "$i" | cut -d '=' -f 2-)"
+
+		# run if option is unrecognized
+		if ! echo "$varName" | grep -qFf <(cat <<-EOF
+			localDir
+			remoteUser
+			remoteHost
+			remoteDir
+			storageLimit
+			sshfsOptions
+		EOF
+		); then
+			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"    
+			((configError++))
+		fi
+
+		# declare variable
+		declare -g "$varName"="$varValue"
+	done <"$configDir/config"
+
+	# exit if there were errors in config file
+	[[ ! $configError -ne 0 ]] || exit 1
+
+	# format variables
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
 	sshfsOptions="-o $sshfsOptions"
+
+	# set defaults
 	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 }
 
@@ -126,22 +168,22 @@ genConfig() {
 		#
 
 		# directory to sync on local machine
-		localDir="$localDir"
+		localDir=$localDir
 
 		# user name on remote machine (optional)
-		remoteUser="$remoteUser"
+		remoteUser=$remoteUser
 
 		# hostname, ip address or domain name of remote machine
-		remoteHost="$remoteHost"
+		remoteHost=$remoteHost
 
 		# directory to sync to on remote machine
-		remoteDir="$remoteDir"
+		remoteDir=$remoteDir
 
 		# amount of data to keep on local machine (accepts K, M or G)
-		storageLimit="$storageLimit"
+		storageLimit=$storageLimit
 
 		# mount options to pass to sshfs
-		sshfsOptions="$sshfsOptions"
+		sshfsOptions=$sshfsOptions
 	EOF
 }
 
@@ -186,7 +228,7 @@ initializeDir() {
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
 		for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
-			localDirTest="$(grep "localDir=" "$i/config" | cut -d '"' -f 2)"
+			localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
 			localTreeTest=($(find "$localDirTest" -type d))
 			localTree=($(find "$localDir" -type d))
 			if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
@@ -198,12 +240,14 @@ initializeDir() {
 
 		# generate config and source variables from it
 		genConfig
-		source "$configDir/config"
 
+		# format variables
 		localDir="${localDir%/}"
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
 		sshfsOptions="-o $sshfsOptions"
+
+		# set defaults
 		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 
 		# generate file indicating that the initialization process is in progress
@@ -228,6 +272,15 @@ initializeDir() {
 
 		# read config file
 		readConfig "$1"
+
+		# format variables
+		localDir="${localDir%/}"
+		remoteDir="${remoteDir%/}"
+		remoteUser="${remoteUser:+$remoteUser@}"
+		sshfsOptions="-o $sshfsOptions"
+
+		# set defaults
+		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 
 		# start ssh master connection
 		sshMaster
@@ -602,7 +655,8 @@ listConfigs() {
 	printf "$(tput bold)Configuration:\t\tLocal directory:$(tput sgr0)\n"
 	IFS=$'\n'
 	for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
-		source "$i/config"
+		# source "$i/config"
+		localDir="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
 		printf "$(basename "$i")\t\t$localDir\n"
 	done
 	unset IFS
