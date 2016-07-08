@@ -531,6 +531,7 @@ syncDir() {
 	echo "done"
 
 	# get list of individual files that aren't included in the directory priority file
+	printf "Sorting remaining files by priority... "
 	IFS=$'\n'
 	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -type f))
 	while read i; do
@@ -580,16 +581,18 @@ syncDir() {
 	rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
 		sed "s|$configDir/mnt|$localDir|"))
 	unset IFS
+	echo "done"
 
 	# remove files that aren't in the directory priority file or the extra files list
 	printf "Removing unused files... "
-	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f && echo "done"
+	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
 
 	# replace missing files with symlinks
 	cp -asn "$configDir/mnt/"* "$localDir" &> /dev/null
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
+	echo "done"
 
 	# make all paths in directory priority file relative
 	sed -i "s|$configDir/mnt/||" $dirPriorityFile
@@ -605,7 +608,7 @@ syncDir() {
 	done <$dirPriorityFile
 
 	# fill the remaining space with the highest-priority individual files that haven't
-	# already been synced
+	# already been downloaded
 	IFS=$'\n'
 	extraFiles=($(printf "%s\n" "${extraFiles[@]}" | sed "s|$configDir/mnt/||"))
 	unset IFS
