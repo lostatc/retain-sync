@@ -32,4 +32,4 @@ cp "$scriptDir/retain-syncd" "$prefix/bin/"
 
 # install systemd unit files
 [[ -d "$prefix/lib/systemd/user" ]] || mkdir -p "$prefix/lib/systemd/user"
-cp "$scriptDir/init"/* "$prefix/lib/systemd/user/"
+cp "$scriptDir/unit"/* "$prefix/lib/systemd/user/"
