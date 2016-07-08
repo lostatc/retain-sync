@@ -87,7 +87,18 @@ sshMaster() {
 
 	# all subsequent ssh commands (excluding sshfs)  will use this master connection
 	# instead of reconnecting each time
-	ssh "${sshOptions[@]}" -fNM "$remoteUser$remoteHost" &> /dev/null || exit 1
+	coproc sshMaster { ssh "${sshOptions[@]}" -NM "$remoteUser$remoteHost" 2>&1; }
+	exec 3<&${sshMaster[0]}
+
+	# suppress certain output from ssh master connection
+	while read -u 3 i; do
+		if ! echo "$i" | grep -qEf <(cat <<-EOF
+			ControlSocket .* already exists, disabling multiplexing
+		EOF 
+		); then
+			echo "$i"
+		fi  
+	done &
 }
 
 genConfig() {
