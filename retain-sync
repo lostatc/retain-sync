@@ -361,6 +361,9 @@ syncDir() {
 		# stop ssh master connection
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
+		# drop the lock on this configuration (necessary becuase of sshfs)
+		flock -u $lockFD
+
 		# delete temp files
 		rm -f "$dirPriorityFile"
 		rm -f "$dirTreeFile"
@@ -384,6 +387,10 @@ syncDir() {
 		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
 		exit 1
 	fi
+
+	# mount sshfs
+	mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
+		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
