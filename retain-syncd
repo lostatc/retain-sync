@@ -78,7 +78,7 @@ fileWatch() {
 			sed "s|$localDir|$configDir/mnt|")"
 
 		# make sure file is a normal file and not hidden or under a hidden directory
-		if [[ -f "$fileName" ]] && [[ ! "$(echo $fileName | sed "s|$configDir/mnt||")" =~ /\. ]]; then
+		if [[ -f "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
 			# test if file exists in priority.csv
 			fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
 
