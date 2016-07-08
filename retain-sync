@@ -159,7 +159,7 @@ genConfig() {
 		read -ep "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
 		storageLimit="${storageLimit//[\"\']/}"
 		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
-			echo "Error: must be a number followed by a unit (e.g. 10G)"
+			echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
 			break
 		fi
@@ -689,6 +689,7 @@ emptyTrash() {
 		exit 1
 	fi
 
+	# empty trash
 	printf "Emptying trash... "
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
