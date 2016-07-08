@@ -5,7 +5,7 @@ configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
 # check if specified config exists
 if ! [[ -d "$configDir" ]]; then
- 	printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n" | \
+	printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n" | \
 		systemd-cat -p err -t 'retain-syncd'
 	exit 1
 fi
@@ -13,40 +13,40 @@ fi
 # source variables from config
 configError=0
 while read i; do
-    ((lineNumber++))
+	((lineNumber++))
 
-    # line is blank, skip
-    [[ "$i" =~ ^$ ]] && continue
+	# line is blank, skip
+	[[ "$i" =~ ^$ ]] && continue
 
-    # line is a comment, skip
-    [[ "$i" =~ ^# ]] && continue
+	# line is a comment, skip
+	[[ "$i" =~ ^# ]] && continue
 
-    # run if line is missing an equals sign
-    if ! [[ "$i" =~ = ]]; then
-        echo "Error: line $lineNumber of config file: unrecognized syntax"
-        ((configError++))
-    fi
+	# run if line is missing an equals sign
+	if ! [[ "$i" =~ = ]]; then
+		echo "Error: line $lineNumber of config file: unrecognized syntax"
+		((configError++))
+	fi
 
-    # parse varable
-    varName="$(echo "$i" | cut -d '=' -f 1)"
-    varValue="$(echo "$i" | cut -d '=' -f 2-)"
+	# parse varable
+	varName="$(echo "$i" | cut -d '=' -f 1)"
+	varValue="$(echo "$i" | cut -d '=' -f 2-)"
 
-    # run if option is unrecognized
-    if ! echo "$varName" | grep -qFf <(cat <<-EOF
-        localDir
-        remoteUser
-        remoteHost
-        remoteDir
-        storageLimit
-        sshfsOptions
-    EOF
-    ); then
-        printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
-        ((configError++))
-    fi
+	# run if option is unrecognized
+	if ! echo "$varName" | grep -qFf <(cat <<-EOF
+		localDir
+		remoteUser
+		remoteHost
+		remoteDir
+		storageLimit
+		sshfsOptions
+	EOF
+	); then
+		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
+		((configError++))
+	fi
 
-    # declare variable
-    declare -g "$varName"="$varValue"
+	# declare variable
+	declare -g "$varName"="$varValue"
 done <"$configDir/config"
 
 # exit if there were errors in config file
@@ -72,10 +72,6 @@ mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 fileWatch() {
-	# create PIDfile
-	mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
-	echo "$$" > "$XDG_RUNTIME_DIR/retain-sync/retain-syncd.pid"
-
 	while true; do
 		# wait for a file to be opened
 		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" "$configDir/mnt" | \
@@ -107,3 +103,7 @@ fileWatch() {
 }
 
 fileWatch &
+
+# create PIDfile
+mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
+echo "$!" > "$XDG_RUNTIME_DIR/retain-sync/retain-syncd.pid"

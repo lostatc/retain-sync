@@ -83,6 +83,18 @@ readConfig() {
 	formatVars
 }
 
+fileLock() {
+	# open lock file
+	exec {lockFD}>"$localDir/.retain-sync_lock"
+	flock -n $lockFD
+
+	# run if lock file was already open
+	if [[ $? -ne 0 ]]; then
+		echo "Error: another operation on this configuration is already running"
+		exit 1
+	fi
+}
+
 sshMaster() {
 	# add ControlPath to ssh defaults
 	sshOptions+=(-S "$XDG_RUNTIME_DIR/retain-sync/%C.socket")
@@ -212,6 +224,9 @@ initializeDir() {
 		# stop ssh master connection
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
+		# drop the lock on this configuration (necessary becuase of sshfs)
+		flock -u $lockFD
+
 		# inform user if initialization is interrupted
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
 			printf "\nInitialization was interrupted.\n"
@@ -229,6 +244,9 @@ initializeDir() {
 		localDir="${1%/}" # remove trailing slash
 		configDir=
 	fi
+
+	# lock this configuration
+	fileLock
 
 	# don't run if finishing an interrupted initialization
 	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
@@ -284,9 +302,6 @@ initializeDir() {
 
 		# read config file
 		readConfig "$1"
-
-		# format variables and set defaults
-		formatVars
 
 		# start ssh master connection
 		sshMaster
@@ -353,6 +368,9 @@ syncDir() {
 
 	# read config file
 	readConfig "$1"
+
+	# lock this configuration
+	fileLock
 
 	# start ssh master connection
 	sshMaster
@@ -608,6 +626,9 @@ retrieveDir() {
 
 	# read config file
 	readConfig "$1"
+
+	# lock this configuration
+	fileLock
 
 	# start ssh master connection
 	sshMaster
