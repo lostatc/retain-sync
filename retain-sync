@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 
+formatVars() {
+	# format variables
+	localDir="${localDir%/}"
+	remoteDir="${remoteDir%/}"
+	remoteUser="${remoteUser:+$remoteUser@}"
+	sshfsOptions="-o $sshfsOptions"
+
+	# set defaults
+	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+}
+
 readConfig() {
 	# accepts either the name of a configuration or the absolute path of a local
 	# sync directory
@@ -68,14 +79,8 @@ readConfig() {
 	# exit if there were errors in config file
 	[[ ! $configError -ne 0 ]] || exit 1
 
-	# format variables
-	localDir="${localDir%/}"
-	remoteDir="${remoteDir%/}"
-	remoteUser="${remoteUser:+$remoteUser@}"
-	sshfsOptions="-o $sshfsOptions"
-
-	# set defaults
-	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+	# format variables and set defaults
+	formatVars
 }
 
 sshMaster() {
@@ -254,14 +259,8 @@ initializeDir() {
 		# generate config and source variables from it
 		genConfig
 
-		# format variables
-		localDir="${localDir%/}"
-		remoteDir="${remoteDir%/}"
-		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions="-o $sshfsOptions"
-
-		# set defaults
-		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+		# format variables and set defaults
+		formatVars
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
@@ -286,14 +285,8 @@ initializeDir() {
 		# read config file
 		readConfig "$1"
 
-		# format variables
-		localDir="${localDir%/}"
-		remoteDir="${remoteDir%/}"
-		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions="-o $sshfsOptions"
-
-		# set defaults
-		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+		# format variables and set defaults
+		formatVars
 
 		# start ssh master connection
 		sshMaster
