@@ -661,16 +661,40 @@ retrieveDir() {
 }
 
 listConfigs() {
-	# print a list of directory paths that have been initialized and the names of their
+	# get a list of directory paths that have been initialized and the names of their
 	# configurations
-	printf "$(tput bold)Configuration:\t\tLocal directory:$(tput sgr0)\n"
 	IFS=$'\n'
 	for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
-		# source "$i/config"
-		localDir="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
-		printf "$(basename "$i")\t\t$localDir\n"
+		configName+=($(basename "$i"))
+		localDir+=($(grep "localDir=" "$i/config" | cut -d '=' -f 2-))
 	done
 	unset IFS
+
+	if [[ "${#configName[@]}" -eq 0 ]]; then
+		printf "\n-- No configs --\n\n"
+		return 0
+	fi
+	
+	# find length of longest configuration name or "Configuration"
+	configLength=$(printf "%s\n" "${configName[@]}" | awk \
+		'{if (length > x) {x = length}}END{print x}')
+	configLength=$(($configLength>13 ? $configLength:13))
+
+	# find length of longest local directory path or "Local directory"
+	dirLength=$(printf "%s\n" "${localDir[@]}" | awk \
+		'{if (length > x) {x = length}}END{print x}')
+	dirLength=$(($dirLength>15 ? $dirLength:15))
+
+	# print header
+	printf "%-${configLength}s | %-s\n" "Configuration" "Local directory"
+
+	# print horizontal separator
+	printf '%.0s-' $(seq 1 $(($configLength+1)))
+	printf '+'
+	printf '%.0s-' $(seq 1 $(($dirLength+1)))
+
+	# print rest of table
+	paste -d ' ' <(printf "\n%-${configLength}s |" "${configName[@]}") <(printf "\n%-s" "${localDir[@]}")
 }
 
 emptyTrash() {
