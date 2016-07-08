@@ -1,5 +1,6 @@
 [Unit]
-Description=Adjusts file priority for time
+Description=Adjust file priority for time
+Documentation=man:retain-sync(1)
 PartOf=retain-sync@%i.service
 
 [Timer]

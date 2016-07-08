@@ -1,6 +1,8 @@
 [Unit]
-Description=Pulls commonly accessed files from a server
+Description=Pull commonly accessed files from a server
+Documentation=man:retain-sync(1)
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/retain-sync sync %i
+StandardOutput=journal

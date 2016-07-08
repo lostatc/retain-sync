@@ -1,6 +1,8 @@
 [Unit]
-Description=Adjusts file priority for time
+Description=Adjust file priority for time
+Documentation=man:retain-sync(1)
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/retain-sync age %i
+StandardOutput=journal

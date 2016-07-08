@@ -1,5 +1,6 @@
 [Unit]
-Description=Pulls commonly accessed files from a server
+Description=Pull commonly accessed files from a server
+Documentation=man:retain-sync(1)
 PartOf=retain-sync@%i.service
 
 [Timer]
