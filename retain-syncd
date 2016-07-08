@@ -20,12 +20,12 @@ while read i; do
 
     # line is a comment, skip
     [[ "$i" =~ ^# ]] && continue
-    
+
     # run if line is missing an equals sign
     if ! [[ "$i" =~ = ]]; then
         echo "Error: line $lineNumber of config file: unrecognized syntax"
         ((configError++))
-    fi  
+    fi
 
     # parse varable
     varName="$(echo "$i" | cut -d '=' -f 1)"
@@ -43,7 +43,7 @@ while read i; do
     ); then
         printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
         ((configError++))
-    fi  
+    fi
 
     # declare variable
     declare -g "$varName"="$varValue"
@@ -59,7 +59,7 @@ remoteUser="${remoteUser:+$remoteUser@}"
 sshfsOptions="-o $sshfsOptions"
 
 # check if initialization was interrupted
-if [[ -f "$localDir/.retain-sync_part" ]]; then	
+if [[ -f "$localDir/.retain-sync_part" ]]; then
 	echo "Initialization of this directory was interrupted." | \
 		systemd-cat -p err -t 'retain-syncd'
 	printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n" | \
@@ -80,7 +80,7 @@ fileWatch() {
 		# wait for a file to be opened
 		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" "$configDir/mnt" | \
 			sed "s|$localDir|$configDir/mnt|")"
-	
+
 		# make sure file is a normal file and not hidden or under a hidden directory
 		if [[ -f "$fileName" ]] && [[ ! "$(echo $fileName | sed "s|$configDir/mnt||")" =~ /\. ]]; then
 			# test if file exists in priority.csv

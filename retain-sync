@@ -3,7 +3,7 @@
 readConfig() {
 	# accepts either the name of a configuration or the absolute path of a local
 	# sync directory
-	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then	
+	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then
 			# parameter is a valid config
 			configName="$1"
 	elif [[ "$1" =~ ^~?/ ]]; then
@@ -25,7 +25,7 @@ readConfig() {
 		exit 1
 	fi
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
-	
+
 	# source variables from config
 	configError=0
 	while read i; do
@@ -57,7 +57,7 @@ readConfig() {
 			sshfsOptions
 		EOF
 		); then
-			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"    
+			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
 			((configError++))
 		fi
 
@@ -96,10 +96,10 @@ sshMaster() {
 	while read -u 3 i; do
 		if ! echo "$i" | grep -qEf <(cat <<-EOF
 			ControlSocket .* already exists, disabling multiplexing
-		EOF 
+		EOF
 		); then
 			echo "$i"
-		fi  
+		fi
 	done &
 }
 
@@ -269,7 +269,7 @@ initializeDir() {
 		# start ssh master connection
 		sshMaster
 
-		# run cleanup function on script exit 
+		# run cleanup function on script exit
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
@@ -298,7 +298,7 @@ initializeDir() {
 		# start ssh master connection
 		sshMaster
 
-		# run cleanup function on script exit 
+		# run cleanup function on script exit
 		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
@@ -339,7 +339,7 @@ initializeDir() {
 	echo "# editing this file by hand is not recommended" > "$configDir/priority.csv"
 	find "$configDir/mnt" -type f -exec echo '{},0' >> "$configDir/priority.csv" \;
 
-	# create "init" file used to indicate that the directory has been initialized and 
+	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
 	mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
 
@@ -348,7 +348,7 @@ initializeDir() {
 	printf "Run \'systemctl --user enable retain-sync@$configName.service\' to start the daemon automatically on login.\n"
 }
 
-syncDir() {	
+syncDir() {
 	cleanup() {
 		# stop ssh master connection
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
@@ -374,7 +374,7 @@ syncDir() {
 		exit 1
 	fi
 
-	# get list of files that have been created or removed since last sync operation 
+	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
 	IFS=$'\n'
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -type f -o -type l | \
@@ -390,7 +390,7 @@ syncDir() {
 	# go through files that have chaged since last sync one at a time
 	for i in "${diffFiles[@]}"; do
 		if grep -Fq "$configDir/mnt/$i" "$configDir/priority.csv"; then
-			# file no longer present in local directory, remove from priority file 
+			# file no longer present in local directory, remove from priority file
 			sed -i -e "s|$configDir/mnt/$i,[0-9\.]*$||" -e '/^$/d' \
 				"$configDir/priority.csv"
 
@@ -414,7 +414,7 @@ syncDir() {
 				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 					'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
 					exit 1
-			fi  
+			fi
 		else
 			# new file, set priority so that it's at the top and copy to server
 			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
@@ -422,14 +422,14 @@ syncDir() {
 				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
 				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
-		fi  
+		fi
 	done
 	echo "done"
 
 	# exit if priority.csv is empty
 	if ! grep -vq '^#' "$configDir/priority.csv"; then
 		echo "Local directory is empty. There is nothing else to do."
-		exit 0	
+		exit 0
 	fi
 
 	# create directory priority file containing a list of all directories in the
@@ -439,7 +439,7 @@ syncDir() {
 	find "$configDir/mnt" -mindepth 1 -type d > $dirPriorityFile
 	# read directory priority file line-by-line
 	while read i; do
-		# total the priorities of all the files in each directory to get the 
+		# total the priorities of all the files in each directory to get the
 		# directory priority
 		dirPriority=$(cat "$configDir/priority.csv" | grep -v '^#' | grep "$i" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
@@ -450,7 +450,7 @@ syncDir() {
 		if [[ $dirSize -eq 0 ]]; then
 			dirPriority=0
 		else
-			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting 
+			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
 			# numbers easier to work with.
 			dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
 		fi
@@ -505,12 +505,12 @@ syncDir() {
 						# the list is complete, break out of loops
 						break 2
 					fi
-				fi		
+				fi
 			fi
 		done <$dirPriorityFile
 	}
 	getSyncFiles
-	while true; do	
+	while true; do
 		# remove subdirectories of directories in the list from the directory priority
 		# file, then re-calculate the list with those subdirectories gone
 		grep -Fvxf $dirTreeFile $dirPriorityFile > $dirPriorityFile.swp
@@ -569,14 +569,14 @@ syncDir() {
 	rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
 		sed "s|$configDir/mnt|$localDir|"))
 	unset IFS
-	
+
 	# remove files that aren't in the directory priority file or the extra files list
 	printf "Removing unused files... "
 	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f && echo "done"
 
 	# replace missing files with symlinks
 	cp -asn "$configDir/mnt/"* "$localDir" &> /dev/null
-	
+
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
 
@@ -654,7 +654,7 @@ retrieveDir() {
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
-	# unmount sshfs, remove init file and remove config directory 
+	# unmount sshfs, remove init file and remove config directory
 	printf "Cleaning up... "
 	fusermount -u "$configDir/mnt" || exit 1
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part"
@@ -676,7 +676,7 @@ listConfigs() {
 		printf "\n-- No configs --\n\n"
 		return 0
 	fi
-	
+
 	# find length of longest configuration name or "Configuration"
 	configLength=$(printf "%s\n" "${configName[@]}" | awk \
 		'{if (length > x) {x = length}}END{print x}')
