@@ -39,7 +39,7 @@ readConfig() {
 
 	# source variables from config
 	configError=0
-	while read i; do
+	while read -r i; do
 		((lineNumber++))
 
 		# line is blank, skip
@@ -456,7 +456,7 @@ syncDir() {
 	dirPriorityFile=$(mktemp)
 	find "$configDir/mnt" -mindepth 1 -type d > $dirPriorityFile
 	# read directory priority file line-by-line
-	while read i; do
+	while read -r i; do
 		# total the priorities of all the files in each directory to get the
 		# directory priority
 		dirPriority=$(cat "$configDir/priority.csv" | grep -v '^#' | grep "$i" | rev | \
@@ -492,7 +492,7 @@ syncDir() {
 	dirTreeFile=$(mktemp)
 	getSyncFiles() {
 		syncSize=0
-		while read i; do
+		while read -r i; do
 			if [[ $(du -sb "$i" | awk '{print $1}') -gt $storageLimitBytes ]]; then
 				# current directory alone is larger than the storage limit, remove from
 				# directory priority file
@@ -541,7 +541,7 @@ syncDir() {
 	printf "Sorting remaining files by priority... "
 	IFS=$'\n'
 	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -type f))
-	while read i; do
+	while read -r i; do
 		noSyncFiles+=($(find "$i" -not -name '.*.trash' -type f))
 	done <$dirPriorityFile
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
@@ -607,7 +607,7 @@ syncDir() {
 	# download directories that are in the directory priority file but not stored
 	# locally
 	printf "Downloading new files... "
-	while read i; do
+	while read -r i; do
 		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i/.." || exit 1
@@ -765,7 +765,7 @@ agePriority() {
 	fi
 
 	# divide the priority of every file by 1.1
-	while read i; do
+	while read -r i; do
 		fileName="$(echo "$i" | rev | cut -d ',' -f 2- | rev)"
 		newPriority=$(echo "scale=6; $(echo "$i" | rev | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
 		sed -i "s|$fileName,[0-9\.]*$|$fileName,${newPriority:-0}|" "$configDir/priority.csv"
