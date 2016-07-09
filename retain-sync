@@ -640,6 +640,12 @@ retrieveDir() {
 	# lock this configuration
 	fileLock
 
+	# stop systemd service
+	systemctl --user stop retain-sync@$configName.service
+
+	# disable systemd service
+	systemctl --user disable retain-sync@$configName.service
+
 	# start ssh master connection
 	sshMaster
 
