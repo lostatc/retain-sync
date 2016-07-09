@@ -242,6 +242,9 @@ initializeDir() {
 	# lock this configuration
 	fileLock
 
+	# run cleanup function on script exit
+	trap cleanup EXIT
+
 	# don't run if finishing an interrupted initialization
 	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
 		# check if directory has already been initialized
@@ -286,9 +289,6 @@ initializeDir() {
 		# start ssh master connection
 		sshMaster
 
-		# run cleanup function on script exit
-		trap cleanup EXIT
-
 		# create remote directory if it doesn't already exist
 		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
 
@@ -305,9 +305,6 @@ initializeDir() {
 
 		# start ssh master connection
 		sshMaster
-
-		# run cleanup function on script exit
-		trap cleanup EXIT
 
 		# create remote directory if it doesn't already exist
 		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
@@ -375,11 +372,11 @@ syncDir() {
 	# lock this configuration
 	fileLock
 
-	# start ssh master connection
-	sshMaster
-
 	# run cleanup function on script exit
 	trap cleanup EXIT
+
+	# start ssh master connection
+	sshMaster
 
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -640,6 +637,9 @@ retrieveDir() {
 	# lock this configuration
 	fileLock
 
+	# run cleanup function on script exit
+	trap cleanup EXIT
+
 	# stop systemd service
 	systemctl --user stop retain-sync@$configName.service
 
@@ -648,9 +648,6 @@ retrieveDir() {
 
 	# start ssh master connection
 	sshMaster
-
-	# run cleanup function on script exit
-	trap cleanup EXIT
 
 	# check if there is enough free space on the local machine
 	printf "Checking space requirement... "
