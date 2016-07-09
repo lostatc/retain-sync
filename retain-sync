@@ -694,10 +694,11 @@ listConfigs() {
 	# get a list of directory paths that have been initialized and the names of their
 	# configurations
 	IFS=$'\n'
-	for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
+	while read -r i; do
 		configName+=($(basename "$i"))
 		localDir+=($(grep "localDir=" "$i/config" | cut -d '=' -f 2-))
-	done
+	done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" \
+		-mindepth 1 -maxdepth 1 -type d)
 	unset IFS
 
 	if [[ "${#configName[@]}" -eq 0 ]]; then
@@ -708,20 +709,20 @@ listConfigs() {
 	# find length of longest configuration name or "Configuration"
 	configLength=$(printf "%s\n" "${configName[@]}" | awk \
 		'{if (length > x) {x = length}}END{print x}')
-	configLength=$(($configLength>13 ? $configLength:13))
+	configLength=$((configLength>13 ? configLength:13))
 
 	# find length of longest local directory path or "Local directory"
 	dirLength=$(printf "%s\n" "${localDir[@]}" | awk \
 		'{if (length > x) {x = length}}END{print x}')
-	dirLength=$(($dirLength>15 ? $dirLength:15))
+	dirLength=$((dirLength>15 ? dirLength:15))
 
 	# print header
 	printf "%-${configLength}s | %-s\n" "Configuration" "Local directory"
 
 	# print horizontal separator
-	printf '%.0s-' $(seq 1 $(($configLength+1)))
+	printf '%.0s-' $(seq 1 $((configLength+1)))
 	printf '+'
-	printf '%.0s-' $(seq 1 $(($dirLength+1)))
+	printf '%.0s-' $(seq 1 $((dirLength+1)))
 
 	# print rest of table
 	paste -d ' ' <(printf "\n%-${configLength}s |" "${configName[@]}") <(printf "\n%-s" "${localDir[@]}")
