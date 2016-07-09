@@ -23,7 +23,8 @@ while read i; do
 
 	# run if line is missing an equals sign
 	if ! [[ "$i" =~ = ]]; then
-		echo "Error: line $lineNumber of config file: unrecognized syntax"
+		echo "Error: line $lineNumber of config file: unrecognized syntax" | \
+			systemd-cat -p err -t 'retain-syncd'
 		((configError++))
 	fi
 
@@ -41,7 +42,8 @@ while read i; do
 		sshfsOptions
 	EOF
 	); then
-		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
+		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \
+			systemd-cat -p err -t 'retain-syncd'
 		((configError++))
 	fi
 
