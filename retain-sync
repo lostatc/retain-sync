@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-formatVars() {
-	# format variables
-	localDir="${localDir%/}"
-	remoteDir="${remoteDir%/}"
-	remoteUser="${remoteUser:+$remoteUser@}"
-	sshfsOptions="-o $sshfsOptions"
-
-	# set defaults
-	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
-}
-
 readConfig() {
 	# accepts either the name of a configuration or the absolute path of a local
 	# sync directory
@@ -79,8 +68,14 @@ readConfig() {
 	# exit if there were errors in config file
 	[[ ! $configError -ne 0 ]] || exit 1
 
-	# format variables and set defaults
-	formatVars
+	# format variables
+	localDir="${localDir%/}"
+	remoteDir="${remoteDir%/}"
+	remoteUser="${remoteUser:+$remoteUser@}"
+	sshfsOptions="-o $sshfsOptions"
+
+	# set defaults
+	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 }
 
 fileLock() {
@@ -242,7 +237,6 @@ initializeDir() {
 	else
 		# is an absolute path
 		localDir="${1%/}" # remove trailing slash
-		configDir=
 	fi
 
 	# lock this configuration
@@ -277,8 +271,14 @@ initializeDir() {
 		# generate config and source variables from it
 		genConfig
 
-		# format variables and set defaults
-		formatVars
+		# format variables
+		localDir="${localDir%/}"
+		remoteDir="${remoteDir%/}"
+		remoteUser="${remoteUser:+$remoteUser@}"
+		sshfsOptions="-o $sshfsOptions"
+
+		# set defaults
+		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
