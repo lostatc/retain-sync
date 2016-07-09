@@ -123,8 +123,8 @@ sshMaster() {
 genConfig() {
 	# prompt user for name of config
 	while true; do
-		read -ep "Enter a name for this configuration: " configName
-		configName="${configName//[\"\']/}"
+		read -erp "Enter a name for this configuration: " configName
+		configName="$(echo "$configName" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
 		if [[ -z "$configName" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ "$configName" =~ [\ ]+ ]]; then
@@ -138,8 +138,8 @@ genConfig() {
 
 	# prompt user for user name on remote machine
 	while true; do
-		read -ep "Enter your user name on the remote machine (empty to use local user name): " remoteUser
-		remoteUser="${remoteUser//[\"\']/}"
+		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser
+		remoteUser="$(echo "$remoteUser" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
 		if [[ "$remoteUser" =~ [\ ]+ ]]; then
 			echo "Error: user name may not contain spaces"
 		else
@@ -149,8 +149,8 @@ genConfig() {
 
 	# prompt user for hostname of remote machine
 	while true; do
-		read -ep "Enter the hostname, ip address or domain name of the remote machine: " remoteHost
-		remoteHost="${remoteHost//[\"\']/}"
+		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost
+		remoteHost="$(echo "$remoteHost" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
 		if [[ -z "$remoteHost" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ "$remoteHost" =~ [\ ]+ ]]; then
@@ -162,8 +162,8 @@ genConfig() {
 
 	# prompt user for directory to sync to on remote machine
 	while true; do
-		read -ep "Enter the directory to sync to on the remote machine: " remoteDir
-		remoteDir="${remoteDir//[\"\']/}"
+		read -erp "Enter the directory to sync to on the remote machine: " remoteDir
+		remoteDir="$(echo "$remoteDir" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
 		if [[ -z "$remoteDir" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ ! "$remoteDir" =~ ^/ ]]; then
@@ -175,8 +175,8 @@ genConfig() {
 
 	# prompt user for storage limit
 	while true; do
-		read -ep "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
-		storageLimit="${storageLimit//[\"\']/}"
+		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
+		storageLimit="$(echo "$storageLimit" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
 		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
 			echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
