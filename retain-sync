@@ -105,7 +105,7 @@ sshMaster() {
 	exec {sshFD}<&${sshMaster[0]}
 
 	# suppress certain output from ssh master command
-	while read -u $sshFD i; do
+	while read -ru $sshFD i; do
 		if ! echo "$i" | grep -qEf <(cat <<-EOF
 			ControlSocket .* already exists, disabling multiplexing
 		EOF
@@ -260,7 +260,7 @@ initializeDir() {
 
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
-		for i in $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 -maxdepth 1 -type d); do
+		while read -r i; do
 			localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
 			localTreeTest=($(find "$localDirTest" -type d))
 			localTree=($(find "$localDir" -type d))
@@ -268,7 +268,8 @@ initializeDir() {
 				printf "Error: the specified directory overlaps with the configuration \'$(basename "$i")\'\n"
 				exit 1
 			fi
-		done
+		done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 \
+			-maxdepth 1 -type d)
 		unset IFS
 
 		# generate config and source variables from it
@@ -392,13 +393,16 @@ syncDir() {
 	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
 	IFS=$'\n'
+	# 1) print list of files/symlinks in local directory (making paths relative)
+	# 2) concatenate list of files in priority.csv (making paths relative)
+	# 3) remove all repeated entries in the list
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -type f -o -type l | \
-		sed "s|$localDir/||g")\n$(cat "$configDir/priority.csv" | grep -v '^#' | rev | \
+		sed "s|$localDir/||g")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 2- | rev | sed "s|$configDir/mnt/||g")\n" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add one to it
-	newPriority="$(cat "$configDir/priority.csv" | grep -v '^#' | rev | \
+	newPriority="$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 1 | rev | sort -nr | head -n 1 | \
 		awk '{print "scale=6; " $0 "+1"}' | bc)" 2> /dev/null
 
@@ -452,11 +456,12 @@ syncDir() {
 	printf "Sorting directories by priority... "
 	dirPriorityFile=$(mktemp)
 	find "$configDir/mnt" -mindepth 1 -type d > $dirPriorityFile
+
 	# read directory priority file line-by-line
 	while read -r i; do
 		# total the priorities of all the files in each directory to get the
 		# directory priority
-		dirPriority=$(cat "$configDir/priority.csv" | grep -v '^#' | grep "$i" | rev | \
+		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep "$i" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
@@ -512,11 +517,11 @@ syncDir() {
 					fi
 				else
 					# total list size is still within the storage limit
-					echo "$(find "$i" -mindepth 1 -type d)" >> $dirTreeFile
+					find "$i" -mindepth 1 -type d >> $dirTreeFile
 
 					# check if the while loop has reached the last line of the directory
 					# priority file
-					if [[ "$(cat $dirPriorityFile | tail -n 1)" == "$i" ]]; then
+					if [[ "$(tail -n 1 $dirPriorityFile)" == "$i" ]]; then
 						# the list is complete, break out of loops
 						break 2
 					fi
@@ -547,7 +552,7 @@ syncDir() {
 	# until the storage limit is reached
 	for i in "${noSyncFiles[@]}"; do
 		# search for line containing complete file name in priority file
-		noSyncSorted+=($(grep -xE "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/'),[0-9\.]*$" \
+		noSyncSorted+=($(grep -xE "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/g'),[0-9\.]*$" \
 			"$configDir/priority.csv"))
 	done
 	for i in "${!noSyncSorted[@]}"; do
@@ -568,12 +573,12 @@ syncDir() {
 		currentFileSize=$(du -sb "$i" | awk '{print $1}')
 
 		# get size of current file in bytes and add it to the total size
-		((syncSize+=$currentFileSize))
+		((syncSize+=currentFileSize))
 
 		# check if the total size of the list has exceeded the storage limit
 		if [[ $syncSize -gt $storageLimitBytes ]]; then
 			# current file is too big, skip to next one
-			((syncSize-=$currentFileSize))
+			((syncSize-=currentFileSize))
 		else
 			# add current file to the extra files list
 			extraFiles+=("$i")
@@ -641,10 +646,10 @@ retrieveDir() {
 	trap cleanup EXIT
 
 	# stop systemd service
-	systemctl --user stop retain-sync@$configName.service
+	systemctl --user stop "retain-sync@$configName.service"
 
 	# disable systemd service
-	systemctl --user disable retain-sync@$configName.service
+	systemctl --user disable "retain-sync@$configName.service"
 
 	# start ssh master connection
 	sshMaster
