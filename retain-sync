@@ -642,14 +642,16 @@ retrieveDir() {
 	# lock this configuration
 	fileLock
 
+	# check if systemd service is running
+	systemctl --user status "retain-sync@$configName.service" &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo "Error: retain-sync@$configName.service is running"
+		echo "Please stop and disable the service before proceeding."
+		exit 1
+	fi
+
 	# run cleanup function on script exit
 	trap cleanup EXIT
-
-	# stop systemd service
-	systemctl --user stop "retain-sync@$configName.service"
-
-	# disable systemd service
-	systemctl --user disable "retain-sync@$configName.service"
 
 	# start ssh master connection
 	sshMaster
