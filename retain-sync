@@ -455,7 +455,7 @@ syncDir() {
 	# tree
 	printf "Sorting directories by priority... "
 	dirPriorityFile=$(mktemp)
-	find "$configDir/mnt" -mindepth 1 -type d > $dirPriorityFile
+	find "$configDir/mnt" -mindepth 1 -type d > "$dirPriorityFile"
 
 	# read directory priority file line-by-line
 	while read -r i; do
@@ -476,14 +476,14 @@ syncDir() {
 		fi
 
 		# write directory priority to file
-		sed -i "s|^$i$|$i,$dirPriority|" $dirPriorityFile
-	done <$dirPriorityFile
+		sed -i "s|^$i$|$i,$dirPriority|" "$dirPriorityFile"
+	done <"$dirPriorityFile"
 
 	# sort directory priority file and remove priorities, leaving just file paths
-	awk -F ',' '{print $NF,$0}' $dirPriorityFile | sort -rn | \
-		cut -d ' ' -f 2- > $dirPriorityFile.swp
-	mv $dirPriorityFile.swp $dirPriorityFile
-	sed -i 's/,[0-9\.]*$//' $dirPriorityFile
+	awk -F ',' '{print $NF,$0}' "$dirPriorityFile" | sort -rn | \
+		cut -d ' ' -f 2- > "$dirPriorityFile.swp"
+	mv "$dirPriorityFile.swp" "$dirPriorityFile"
+	sed -i 's/,[0-9\.]*$//' "$dirPriorityFile"
 
 	# convert human-readable storage limit to bytes
 	storageLimitBytes=$(echo $storageLimit | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
@@ -498,7 +498,7 @@ syncDir() {
 			if [[ $(du -sb "$i" | awk '{print $1}') -gt $storageLimitBytes ]]; then
 				# current directory alone is larger than the storage limit, remove from
 				# directory priority file
-				sed -i -e "s|$i$||" -e '/^$/d' $dirPriorityFile
+				sed -i -e "s|$i$||" -e '/^$/d' "$dirPriorityFile"
 			else
 				# get size of current directory in bytes and add it to the total
 				# size of the list
@@ -506,35 +506,35 @@ syncDir() {
 
 				if [[ $syncSize -gt $storageLimitBytes ]]; then
 					# total list size has exceeded the storage limit
-					if ! grep -Fqxf $dirTreeFile $dirPriorityFile; then
+					if ! grep -Fqxf "$dirTreeFile" "$dirPriorityFile"; then
 						# none of the directories in the list have subdirectories,
 						# remove current directory from the directory priority file
 						# because it is too large to fit within the storage limit
-						sed -i -e "s|$i$||" -e '/^$/d' $dirPriorityFile
+						sed -i -e "s|$i$||" -e '/^$/d' "$dirPriorityFile"
 						((syncSize-=$(du -sb "$i" | awk '{print $1}')))
 					else
 						break
 					fi
 				else
 					# total list size is still within the storage limit
-					find "$i" -mindepth 1 -type d >> $dirTreeFile
+					find "$i" -mindepth 1 -type d >> "$dirTreeFile"
 
 					# check if the while loop has reached the last line of the directory
 					# priority file
-					if [[ "$(tail -n 1 $dirPriorityFile)" == "$i" ]]; then
+					if [[ "$(tail -n 1 "$dirPriorityFile")" == "$i" ]]; then
 						# the list is complete, break out of loops
 						break 2
 					fi
 				fi
 			fi
-		done <$dirPriorityFile
+		done <"$dirPriorityFile"
 	}
 	getSyncFiles
 	while true; do
 		# remove subdirectories of directories in the list from the directory priority
 		# file, then re-calculate the list with those subdirectories gone
-		grep -Fvxf $dirTreeFile $dirPriorityFile > $dirPriorityFile.swp
-		mv $dirPriorityFile.swp $dirPriorityFile
+		grep -Fvxf "$dirTreeFile" "$dirPriorityFile" > "$dirPriorityFile.swp"
+		mv "$dirPriorityFile.swp" "$dirPriorityFile"
 		getSyncFiles
 	done
 	echo "done"
@@ -545,7 +545,7 @@ syncDir() {
 	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -type f))
 	while read -r i; do
 		noSyncFiles+=($(find "$i" -not -name '.*.trash' -type f))
-	done <$dirPriorityFile
+	done <"$dirPriorityFile"
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
 
 	# from that list, get list of individual files that can fill the remaining space
@@ -604,7 +604,7 @@ syncDir() {
 	echo "done"
 
 	# make all paths in directory priority file relative
-	sed -i "s|$configDir/mnt/||" $dirPriorityFile
+	sed -i "s|$configDir/mnt/||" "$dirPriorityFile"
 
 	# download directories that are in the directory priority file but not stored
 	# locally
@@ -614,7 +614,7 @@ syncDir() {
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 				"$localDir/$i/.." || exit 1
 		fi
-	done <$dirPriorityFile
+	done <"$dirPriorityFile"
 
 	# fill the remaining space with the highest-priority individual files that haven't
 	# already been downloaded
