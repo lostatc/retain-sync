@@ -72,7 +72,7 @@ readConfig() {
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
-	sshfsOptions="-o $sshfsOptions"
+	sshfsOptions=(-o "$sshfsOptions")
 
 	# set defaults
 	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
@@ -207,6 +207,8 @@ genConfig() {
 		# amount of data to keep on local machine (accepts K, M or G)
 		storageLimit=$storageLimit
 
+		#------------------------------------------------------------
+
 		# mount options to pass to sshfs
 		sshfsOptions=$sshfsOptions
 	EOF
@@ -279,7 +281,7 @@ initializeDir() {
 		localDir="${localDir%/}"
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions="-o $sshfsOptions"
+		sshfsOptions=(-o $sshfsOptions)
 
 		# set defaults
 		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
@@ -331,13 +333,13 @@ initializeDir() {
 
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
-	mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
+	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "$(find "$localDir" -mindepth 1 -not -path '*/\.*')" ]]; then
 		printf "Replacing local files with symbolic links... "
-		cp -asf "$configDir/mnt/"* "$localDir" && echo "done"
+		find "$configDir/mnt" -not -name '.*.trash' -type f -exec cp -asn '{}' "$localDir" &> /dev/null \;
 	fi
 
 	# create priority.csv file containing a list of all files in the tree followed
@@ -387,7 +389,7 @@ syncDir() {
 	fi
 
 	# mount sshfs
-	mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
+	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# get list of files that have been created or removed since last sync operation

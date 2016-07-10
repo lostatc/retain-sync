@@ -58,7 +58,7 @@ done <"$configDir/config"
 localDir="${localDir%/}"
 remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
-sshfsOptions="-o $sshfsOptions"
+sshfsOptions=(-o "$sshfsOptions")
 
 # check if initialization was interrupted
 if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -70,7 +70,7 @@ if [[ -f "$localDir/.retain-sync_part" ]]; then
 fi
 
 # mount sshfs share if not already mounted
-mountpoint -q "$configDir/mnt" || sshfs $sshfsOptions \
+mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 fileWatch() {
