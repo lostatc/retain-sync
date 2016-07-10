@@ -29,8 +29,8 @@ while read -r i; do
 	fi
 
 	# parse varable
-	varName="$(echo "$i" | cut -d '=' -f 1)"
-	varValue="$(echo "$i" | cut -d '=' -f 2-)"
+	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
+	varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 
 	# run if option is unrecognized
 	if ! echo "$varName" | grep -qFf <(cat <<-EOF
