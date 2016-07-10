@@ -237,13 +237,19 @@ initializeDir() {
 	}
 
 	# test if parameter is an absolute path
-	if [[ ! "$1" =~ ^~?/ ]]; then
+	if [[ "$1" =~ ^~?/ ]]; then
+		# is an absolute path
+		localDir="${1%/}" # remove trailing slash
+	else
 		# not an absolute path
 		echo "Error: must be an absolute path"
 		exit 1
-	else
-		# is an absolute path
-		localDir="${1%/}" # remove trailing slash
+	fi
+
+	# check if local directory exists
+	if ! [[ -d "$1" ]]; then
+		printf "Error: no such directory \'$localDir\'\n"
+		exit 1
 	fi
 
 	# lock this configuration
