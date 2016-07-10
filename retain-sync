@@ -597,7 +597,7 @@ syncDir() {
 	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
 
 	# replace missing files with symlinks
-	cp -asn "$configDir/mnt/"* "$localDir" &> /dev/null
+	find "$configDir/mnt" -not -name '.*.trash' -type f -exec cp -asn '{}' "$localDir" &> /dev/null \;
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
