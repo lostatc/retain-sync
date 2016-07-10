@@ -40,6 +40,7 @@ while read -r i; do
 		remoteDir
 		storageLimit
 		sshfsOptions
+		deleteAlways
 	EOF
 	); then
 		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \

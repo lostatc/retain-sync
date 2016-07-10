@@ -55,6 +55,7 @@ readConfig() {
 			remoteDir
 			storageLimit
 			sshfsOptions
+			deleteAlways
 		EOF
 		); then
 			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
@@ -179,8 +180,9 @@ genConfig() {
 		fi
 	done
 
-	# set default sshfs options
+	# set default options
 	sshfsOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
+	deleteAlways="no"
 
 	# create config directory
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
@@ -207,10 +209,13 @@ genConfig() {
 		# amount of data to keep on local machine (accepts K, M or G)
 		storageLimit=$storageLimit
 
-		#------------------------------------------------------------
+		#-------------------------------------------------------------------------------
 
 		# mount options to pass to sshfs
 		sshfsOptions=$sshfsOptions
+
+		# always delete files from the server when their local counterparts are deleted
+		deleteAlways=$deleteAlways
 	EOF
 }
 
@@ -339,7 +344,7 @@ initializeDir() {
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "$(find "$localDir" -mindepth 1 -not -path '*/\.*')" ]]; then
 		printf "Replacing local files with symbolic links... "
-		find "$configDir/mnt" -not -name '.*.trash' -type f -exec cp -asn '{}' "$localDir" &> /dev/null \;
+		cp -asf "$configDir"/mnt/* "$localDir" && echo "done"
 	fi
 
 	# create priority.csv file containing a list of all files in the tree followed
@@ -415,26 +420,32 @@ syncDir() {
 			sed -i -e "s|$configDir/mnt/$i,[0-9\.]*$||" -e '/^$/d' \
 				"$configDir/priority.csv"
 
-			# compute checksums of all files in the user's trash if it hasn't already
-			# been done
-			IFS=$'\n'
-			[[ -z "${trashSums+x}" ]] && \
-				trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
-				-type f -print0 | xargs -0 md5sum | sort | uniq -w 32))
-			unset IFS
+			if [[ "${deleteAlways,,}" == "no" ]]; then
+				# compute checksums of all files in the user's trash if it hasn't already
+				# been done
+				IFS=$'\n'
+				[[ -z "${trashSums+x}" ]] && \
+					trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
+					-type f -print0 | xargs -0 md5sum | sort | uniq -w 32))
+				unset IFS
 
-			# compute checksum of current file
-			fileSum="$(md5sum "$configDir/mnt/$i")"
+				# compute checksum of current file
+				fileSum="$(md5sum "$configDir/mnt/$i")"
 
-			# test if file exists in the user's local trash directory by comparing checksums
-			if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
-				# file is in trash, delete corresponding file on the server
-				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "rm $remoteDir/$i" || exit 1
+				# test if file exists in the user's local trash directory by comparing checksums
+				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
+					# file is in trash, delete corresponding file on the server
+					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
+				else
+					# file is not in trash, mark corresponding file on the server for deletion
+					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+						'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
+						exit 1
+				fi
 			else
-				# file is not in trash, mark corresponding file on the server for deletion
+				# $deleteAlways is set to 'yes', delete corresponding file on the server
 				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
-					exit 1
+					'rm "'$remoteDir/$i'"' || exit 1
 			fi
 		else
 			# new file, set priority so that it's at the top and copy to server
@@ -445,6 +456,9 @@ syncDir() {
 				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 		fi
 	done
+
+	# delete broken symlinks in local directory
+	find "$localDir" -xtype l -exec rm '{}' \;
 	echo "done"
 
 	# exit if priority.csv is empty
@@ -599,7 +613,7 @@ syncDir() {
 	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
 
 	# replace missing files with symlinks
-	find "$configDir/mnt" -not -name '.*.trash' -type f -exec cp -asn '{}' "$localDir" &> /dev/null \;
+	cp -asf "$configDir"/mnt/* "$localDir"
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
