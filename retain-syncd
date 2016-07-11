@@ -41,6 +41,7 @@ while read -r i; do
 		storageLimit
 		sshfsOptions
 		deleteAlways
+		syncExtraFiles
 	EOF
 	); then
 		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \
