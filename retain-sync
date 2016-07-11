@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+printHelp() {
+}
+
 readConfig() {
 	# accepts either the name of a configuration or the absolute path of a local
 	# sync directory
@@ -821,8 +824,11 @@ agePriority() {
 case "$1" in
 	'')
 		echo "Error: missing argument"
-		echo "help"
+		printHelp
 		exit 1 ;;
+	help|--help)
+		printHelp
+		shift 1 ;;
 	initialize)
 		initializeDir "$2"
 		shift 2 ;;
@@ -841,11 +847,8 @@ case "$1" in
 	age)
 		agePriority "$2"
 		shift 2 ;;
-	help|--help)
-		echo "help"
-		shift 1 ;;
 	*)
 		printf "Error: \'$1\' is not a valid command\n"
-		echo "help"
+		printHelp
 		exit 1 ;;
 esac
