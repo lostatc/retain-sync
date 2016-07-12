@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 printHelp() {
+	echo "help"
 }
 
 readConfig() {
@@ -46,7 +47,7 @@ readConfig() {
 			((configError++))
 		fi
 
-		# parse option
+		# parse option, removing leading/trailing whitespace
 		varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 		varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
@@ -331,9 +332,9 @@ initializeDir() {
 		sshMaster
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || \
+			exit 1
 	fi
-
 
 	# check if there is enough space on the server
 	printf "\nChecking space requirement... "
@@ -347,9 +348,24 @@ initializeDir() {
 		echo "done"
 	fi
 
+	# add all local symlinks to the exclude file so they don't get clobbered (this
+	# does not include symlinks to directories)
+	cat <<-EOF > "$configDir/exclude"
+		# This file contains paths to files (not directories) to exclude from syncing.
+		#
+		# The root of each file path is anchored to the local sync directory (see
+		# rsync(1) for details).
+		#
+		# You can use 'retain-sync exclude' and 'retain-sync include' to easily add or
+		# remove whole directories.
+	EOF
+	find "$localDir" -not -path '*/\.*' -type l -not -xtype d | sed "s|$localDir||g" >> \
+		"$configDir/exclude"
+
 	# copy local files to the server
 	printf "Copying local files to server... "
-	rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" "$localDir/" \
+	rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
+		--exclude-from="$configDir/exclude" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
 	# mount sshfs
@@ -365,8 +381,8 @@ initializeDir() {
 
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
-	echo "# editing this file by hand is not recommended" > "$configDir/priority.csv"
-	find "$configDir/mnt" -type f -exec echo '{},0' >> "$configDir/priority.csv" \;
+	echo "# Editing this file by hand is not recommended." > "$configDir/priority.csv"
+	find "$configDir/mnt" -not -type d -exec echo '{},0' >> "$configDir/priority.csv" \;
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
@@ -409,6 +425,15 @@ syncDir() {
 		exit 1
 	fi
 
+	# remove excluded files from priority.csv
+	while read -r i; do
+		[[ "$i" =~ ^# ]] && continue
+		[[ -z "$i" ]] && continue
+
+		fullPath="$(echo "$configDir/mnt$i" | sed 's/[][()\.^$?*+]/\\&/g')"
+		sed -i -e "s|$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
+	done <"$configDir/exclude"
+
 	# mount sshfs
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
@@ -416,11 +441,13 @@ syncDir() {
 	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
 	IFS=$'\n'
-	# 1) print list of files/symlinks in local directory (making paths relative)
+	# 1) print list of files/symlinks in local directory that aren't in the exclude
+	#	 file (making paths relative)
 	# 2) concatenate list of files in priority.csv (making paths relative)
 	# 3) remove all repeated entries in the list
-	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -type f -o -type l | \
-		sed "s|$localDir/||g")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
+	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -not -type d | \
+		sed "s|$localDir||g" | grep -Fvxf "$configDir/exclude" | sed \
+		's|^/||g')\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 2- | rev | sed "s|$configDir/mnt/||g")\n" | sort | uniq -u))
 	unset IFS
 
@@ -442,11 +469,11 @@ syncDir() {
 				IFS=$'\n'
 				[[ -z "${trashSums+x}" ]] && \
 					trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
-					-type f -print0 | xargs -0 md5sum | sort | uniq -w 32))
+						-not -type d -print0 | xargs -0 md5sum --ignore-missing | sort | uniq -w 32))
 				unset IFS
 
 				# compute checksum of current file
-				fileSum="$(md5sum "$configDir/mnt/$i")"
+				fileSum="$(md5sum --ignore-missing "$configDir/mnt/$i")"
 
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
@@ -486,7 +513,7 @@ syncDir() {
 	# create directory priority file containing a list of all directories in the
 	# tree
 	printf "Sorting directories by priority... "
-	dirPriorityFile=$(mktemp)
+	dirPriorityFile="$(mktemp)"
 	find "$configDir/mnt" -mindepth 1 -type d > "$dirPriorityFile"
 
 	# read directory priority file line-by-line
@@ -523,7 +550,7 @@ syncDir() {
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
-	dirTreeFile=$(mktemp)
+	dirTreeFile="$(mktemp)"
 	getSyncFiles() {
 		syncSize=0
 		while read -r i; do
@@ -585,7 +612,7 @@ syncDir() {
 		# until the storage limit is reached
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
-			noSyncSorted+=($(grep -xE "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/g'),[0-9\.]*$" \
+			noSyncSorted+=($(grep -Ex "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/g'),[0-9\.]*$" \
 				"$configDir/priority.csv"))
 		done
 		for i in "${!noSyncSorted[@]}"; do
@@ -645,18 +672,26 @@ syncDir() {
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
 	echo "done"
 
+	# download (and remove from the server) excluded files that are still on the server
+	printf "Downloading new files... "
+	find "$configDir/mnt" -not -type d | sed "s|$configDir/mnt||g" | grep -Fxf \
+		"$configDir/exclude" | rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
+		--remove-source-files "$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+
 	# make all paths in directory priority file relative
 	sed -i "s|$configDir/mnt/||" "$dirPriorityFile"
 
 	# download directories that are in the directory priority file but not stored
 	# locally
-	printf "Downloading new files... "
-	while read -r i; do
-		if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fq "$localDir/$i"; then
-			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
-				"$localDir/$i/.." || exit 1
-		fi
-	done <"$dirPriorityFile"
+	rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from="$dirPriorityFile" \
+		--exclude-from="$configDir/exclude" "$remoteUser$remoteHost:$remoteDir/" \
+		"$localDir" || exit 1
+	# while read -r i; do
+	# 	if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fvxf "$configDir/exclude" | grep -Fxq "$localDir/$i"; then
+	# 		rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
+	# 			"$localDir/$i/.." || exit 1
+	# 	fi
+	# done <"$dirPriorityFile"
 
 	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't

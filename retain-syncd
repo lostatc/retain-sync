@@ -28,7 +28,7 @@ while read -r i; do
 		((configError++))
 	fi
 
-	# parse varable
+	# parse option, removing leading/trailing whitespace
 	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 	varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 
