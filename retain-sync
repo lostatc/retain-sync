@@ -82,7 +82,7 @@ readConfig() {
 	sshfsOptions=(-o "$sshfsOptions")
 
 	# set defaults
-	sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
 }
 
 fileLock() {
@@ -187,7 +187,7 @@ genConfig() {
 	done
 
 	# set default options
-	sshfsOptions="reconnect,ServerAliveInterval=10,ServerAliveCountMax=2"
+	sshfsOptions="reconnect,ServerAliveInterval=7,ServerAliveCountMax=3"
 	deleteAlways="no"
 	syncExtraFiles="yes"
 
@@ -306,7 +306,7 @@ initializeDir() {
 		sshfsOptions=(-o $sshfsOptions)
 
 		# set defaults
-		sshOptions=(-o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
