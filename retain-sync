@@ -932,34 +932,25 @@ case "$1" in
 		printHelp
 		exit 1 ;;
 	help|--help)
-		printHelp
-		shift 1 ;;
+		printHelp ;;
 	initialize)
-		initializeDir "$2"
-		shift 2 ;;
+		initializeDir "$2" ;;
 	sync)
-		syncDir "$2"
-		shift 2 ;;
+		syncDir "$2" ;;
 	retrieve)
-		retrieveDir "$2"
-		shift 2 ;;
+		retrieveDir "$2" ;;
 	list-configs)
-		listConfigs
-		shift ;;
+		listConfigs ;;
 	empty-trash)
-		emptyTrash "$2"
-		shift 2 ;;
+		emptyTrash "$2" ;;
 	exclude)
 		shift
 		excludeFiles "$@" ;;
-		exit 0
 	include)
 		shift
 		includeFiles "$@" ;;
-		exit 0
 	age)
 		agePriority "$2"
-		shift 2 ;;
 	*)
 		printf "Error: \'$1\' is not a valid command\n"
 		printHelp
