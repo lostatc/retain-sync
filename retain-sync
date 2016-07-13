@@ -893,8 +893,13 @@ includeFiles() {
 		incFiles=($(find "$i" -not -path '*/\.*' -not -type d | sed "s|$localDir||g"))
 		unset IFS
 
-		# check that file/directory is in exclude file
-		if printf "%s\n" "${incFiles[@]}" | grep -Fxvqf "$configDir/exclude"; then
+		incDirAbsolute="$(find "$i" -maxdepth 0)"
+
+		# check that file/directory is valid
+		if ! find "$localDir" -not -path '*/\.*' | grep -Fxq "${exDirAbsolute%/}"; then
+			printf "Error: \'$i\' is not within the local sync directory\n"
+			exit 1
+		elif printf "%s\n" "${incFiles[@]}" | grep -Fxqf "$configDir/exclude"; then
 			printf "Error: \'$i\' is not in the exclude file\n"
 			exit 1
 		fi
@@ -950,7 +955,7 @@ case "$1" in
 		shift
 		includeFiles "$@" ;;
 	age)
-		agePriority "$2"
+		agePriority "$2" ;;
 	*)
 		printf "Error: \'$1\' is not a valid command\n"
 		printHelp
