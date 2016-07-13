@@ -837,6 +837,76 @@ emptyTrash() {
 		echo "done" || exit 1
 }
 
+excludeFiles() {
+	# read config file
+	readConfig "$1"
+	shift
+
+	if [[ -z "$1" ]]; then
+		echo "Error: must specify files to exclude"
+		exit 1
+	fi
+
+	exDirs=("$@")
+	for i in "${exDirs[@]}"; do
+		IFS=$'\n'
+		# get from input the list of files to exclude
+		exFiles=($(find "$i" -not -path '*/\.*' -not -type d | sed "s|$localDir||g"))
+		unset IFS
+
+		exDirAbsolute="$(find "$i" -maxdepth 0)"
+
+		# check that file/directory is valid
+		if [[ "$exDirAbsolute" == "$localDir" ]]; then
+			echo "Error: can not exclude entire local sync directory"
+			exit 1
+		elif ! find "$localDir" -not -path '*/\.*' | grep -Fxq "${exDirAbsolute%/}"; then
+			printf "Error: \'$i\' is not within the local sync directory\n"
+			exit 1
+		fi
+
+		for i in "${exFiles[@]}"; do
+			# add file to exclude file if it's not already there
+			if echo "$i" | grep -Fxqf "$configDir/exclude"; then
+				printf "Error: \'$localDir$i\' is already in exclude file\n"
+			else
+				echo "$i" >> "$configDir/exclude"
+			fi
+		done
+	done
+}
+
+includeFiles() {
+	# read config file
+	readConfig "$1"
+	shift
+
+	if [[ -z "$1" ]]; then
+		echo "Error: must specify files to include"
+		exit 1
+	fi
+
+	incDirs=("$@")
+	for i in "${incDirs[@]}"; do
+		IFS=$'\n'
+		# get from input the list of files to include
+		incFiles=($(find "$i" -not -path '*/\.*' -not -type d | sed "s|$localDir||g"))
+		unset IFS
+
+		# check that file/directory is in exclude file
+		if printf "%s\n" "${incFiles[@]}" | grep -Fxvqf "$configDir/exclude"; then
+			printf "Error: \'$i\' is not in the exclude file\n"
+			exit 1
+		fi
+
+		# remove files from exclude file
+		for i in "${incFiles[@]}"; do
+			i="$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/g')"
+			sed -i -e "s|$i||" -e '/^$/d' "$configDir/exclude"
+		done
+	done
+}
+
 agePriority() {
 	# read config file
 	readConfig "$1"
@@ -879,6 +949,14 @@ case "$1" in
 	empty-trash)
 		emptyTrash "$2"
 		shift 2 ;;
+	exclude)
+		shift
+		excludeFiles "$@" ;;
+		exit 0
+	include)
+		shift
+		includeFiles "$@" ;;
+		exit 0
 	age)
 		agePriority "$2"
 		shift 2 ;;
