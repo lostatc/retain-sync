@@ -278,9 +278,11 @@ initializeDir() {
 	# don't run if finishing an interrupted initialization
 	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
 		# check if directory has already been initialized
-		[[ -f "$localDir/.retain-sync_init" ]] && \
-			printf "Error: the specified directory directory has already been initialized by \'$(cat \
-			"$localDir/.retain-sync_init")\'.\n" && exit 1
+		if [[ -f "$localDir/.retain-sync_init" ]]; then
+			printf "Error: the specified directory has already been initialized by \'$(cat \
+				"$localDir/.retain-sync_init")\'.\n"
+			exit 1
+		fi
 
 		# check if directory includes the retain-sync config
 		if find "$localDir" -type d | grep -q "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
@@ -357,16 +359,20 @@ initializeDir() {
 	# add all local symlinks to the exclude file so they don't get clobbered (this
 	# does not include symlinks to directories)
 	cat <<-EOF > "$configDir/exclude"
-		# This file contains paths to files (not directories) to exclude from syncing.
+		# This file contains paths to files/directories to exclude from syncing.
 		#
 		# The root of each file path is anchored to the local sync directory (see
 		# rsync(1) for details).
 		#
-		# You can use 'retain-sync exclude' and 'retain-sync include' to easily add or
-		# remove whole directories.
+		# All user-created symbolic links in the local sync directory are excluded
+		# automatically.
 	EOF
 	find "$localDir" -not -path '*/\.*' -type l -not -xtype d | sed "s|$localDir||g" >> \
 		"$configDir/exclude"
+
+	IFS=$'\n'
+	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed "s|$localDir||g"))
+	unset IFS
 
 	# run if --exclude option was given
 	if [[ $optExclude -eq 1 ]]; then
@@ -376,9 +382,9 @@ initializeDir() {
 
 			# copy file path from input file to exclude file if it exists in
 			# the local sync directory
-			if echo "${i%/}" | grep -Fxqf <(find "$localDir" -not -path '*/\.*'); then
-				find "$i" -not -path '*/\.*' -not -type d | \
-					sed "s|$localDir||g" >> "$configDir/exclude"
+			i="$(sed "s|$localDir||" <<< "$i")"
+			if grep -Fxqf <(printf "%s\n" "${localFiles[@]}") <<< "${i%/}"; then
+				echo "$i" >> "$configDir/exclude"
 			fi
 		done <"$optExcludeFile"
 	fi
@@ -395,7 +401,7 @@ initializeDir() {
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
 	# replace local files with symlinks unless local directory is empty
-	if [[ -n "$(find "$localDir" -mindepth 1 -not -path '*/\.*')" ]]; then
+	if [[ -n "${localFiles[@]}" ]]; then
 		printf "Replacing local files with symbolic links... "
 		cp -asf "$configDir"/mnt/* "$localDir" && echo "done"
 	fi
@@ -448,8 +454,8 @@ syncDir() {
 
 	# remove excluded files from priority.csv
 	while read -r i; do
+		[[ "$i" =~ ^$ ]] && continue
 		[[ "$i" =~ ^# ]] && continue
-		[[ -z "$i" ]] && continue
 
 		fullPath="$(echo "$configDir/mnt$i" | sed 's/[][()\.^$?*+]/\\&/g')"
 		sed -i -e "s|$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
@@ -462,13 +468,19 @@ syncDir() {
 	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
 	IFS=$'\n'
+	# read contents of exclude file into an array of file paths
+	while read -r i; do
+		i="$localDir$i"
+		[[ -a "$i" ]] && \
+			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
+	done <"$configDir/exclude"
 	# 1) print list of files/symlinks in local directory that aren't in the exclude
 	#	 file (making paths relative)
 	# 2) concatenate list of files in priority.csv (making paths relative)
 	# 3) remove all repeated entries in the list
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -not -type d | \
-		sed "s|$localDir||g" | grep -Fvxf "$configDir/exclude" | sed \
-		's|^/||g')\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
+		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
+		sed "s|$localDir/||g")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 2- | rev | sed "s|$configDir/mnt/||g")\n" | sort | uniq -u))
 	unset IFS
 
@@ -695,9 +707,10 @@ syncDir() {
 
 	# download (and remove from the server) excluded files that are still on the server
 	printf "Downloading new files... "
-	find "$configDir/mnt" -not -type d | sed "s|$configDir/mnt||g" | grep -Fxf \
-		"$configDir/exclude" | rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
-		--remove-source-files "$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+	find "$configDir/mnt" -not -type d | sed "s|$configDir/mnt||g" | \
+		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}") | \
+		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
+		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
 	# make all paths in directory priority file relative
 	sed -i "s|$configDir/mnt/||" "$dirPriorityFile"
@@ -707,12 +720,6 @@ syncDir() {
 	rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from="$dirPriorityFile" \
 		--exclude-from="$configDir/exclude" "$remoteUser$remoteHost:$remoteDir/" \
 		"$localDir" || exit 1
-	# while read -r i; do
-	# 	if find "$localDir" -mindepth 1 -not -path '*/\.*' -type l | grep -Fvxf "$configDir/exclude" | grep -Fxq "$localDir/$i"; then
-	# 		rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
-	# 			"$localDir/$i/.." || exit 1
-	# 	fi
-	# done <"$dirPriorityFile"
 
 	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
@@ -769,10 +776,17 @@ retrieveDir() {
 		echo "done"
 	fi
 
-	# remove symlinks that aren't in the exclude file from local directory
+	# read contents of exclude file into an array of file paths
 	printf "Removing symbolic links from local directory... "
-	find "$localDir" -not -path '*/\.*' -type l | grep -Fxvf \
-		<(awk '{print "'$localDir'" $0}' "$configDir/exclude") | \
+	while read -r i; do
+		i="$localDir$i"
+		[[ -a "$i" ]] && \
+			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
+	done <"$configDir/exclude"
+
+	# remove symlinks that aren't in the exclude file from local directory
+	find "$localDir" -not -path '*/\.*' -type l | \
+		grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
 		xargs -d '\n' rm -f && echo "done"
 
 	# copy files from remote directory back to local directory
