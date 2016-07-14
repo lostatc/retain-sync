@@ -771,7 +771,9 @@ retrieveDir() {
 
 	# remove symlinks that aren't in the exclude file from local directory
 	printf "Removing symbolic links from local directory... "
-	find "$localDir" -type l -print0 | xargs -0 rm -f && echo "done"
+	find "$localDir" -not -path '*/\.*' -type l | grep -Fxvf \
+		<(awk '{print "'$localDir'" $0}' "$configDir/exclude") | \
+		xargs -d '\n' rm -f && echo "done"
 
 	# copy files from remote directory back to local directory
 	printf "Copying remote files to local machine... "
