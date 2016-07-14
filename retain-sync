@@ -106,7 +106,7 @@ sshMaster() {
 
 	# all subsequent ssh commands (excluding sshfs)  will use this master connection
 	# instead of reconnecting each time
-	coproc sshMaster { ssh "${sshOptions[@]}" -NM "$remoteUser$remoteHost" 2>&1; }
+	coproc sshMaster { ssh "${sshOptions[@]}" -NM "$remoteUser$remoteHost" 2>&1; } || exit 1
 
 	# open file descriptor with stdout of ssh master command
 	exec {sshFD}<&${sshMaster[0]}
@@ -263,6 +263,12 @@ initializeDir() {
 		exit 1
 	fi
 
+	# check if exclude input file is a valid file
+	if ! [[ -f "$optExcludeFile" ]]; then
+		echo "Error: input file is invalid"
+		exit 1
+	fi
+
 	# lock this configuration
 	fileLock
 
@@ -361,6 +367,21 @@ initializeDir() {
 	EOF
 	find "$localDir" -not -path '*/\.*' -type l -not -xtype d | sed "s|$localDir||g" >> \
 		"$configDir/exclude"
+
+	# run if --exclude option was given
+	if [[ $optExclude -eq 1 ]]; then
+		while read -r i; do
+			[[ "$i" =~ ^$ ]] && continue
+			[[ "$i" =~ ^# ]] && continue
+
+			# copy file path from input file to exclude file if it exists in
+			# the local sync directory
+			if echo "${i%/}" | grep -Fxqf <(find "$localDir" -not -path '*/\.*'); then
+				find "$i" -not -path '*/\.*' -not -type d | \
+					sed "s|$localDir||g" >> "$configDir/exclude"
+			fi
+		done <"$optExcludeFile"
+	fi
 
 	# copy local files to the server
 	printf "Copying local files to server... "
@@ -748,7 +769,7 @@ retrieveDir() {
 		echo "done"
 	fi
 
-	# remove symlinks from local directory
+	# remove symlinks that aren't in the exclude file from local directory
 	printf "Removing symbolic links from local directory... "
 	find "$localDir" -type l -print0 | xargs -0 rm -f && echo "done"
 
@@ -939,7 +960,27 @@ case "$1" in
 	help|--help)
 		printHelp ;;
 	initialize)
-		initializeDir "$2" ;;
+		shift
+		opt=$(getopt -o e: -l exclude: -n 'retain-sync' -- "$@")
+		eval set -- "$opt"
+
+		# parse options
+		while true; do
+			case "$1" in
+				-e|--exclude)
+					optExclude=1
+					optExcludeFile="$2"
+					shift 2 ;;
+				--)
+					shift
+					break ;;
+				*)
+					echo "Error: invalid argument"
+					exit 1 ;;
+			esac
+		done
+
+		initializeDir "$1" ;;
 	sync)
 		syncDir "$2" ;;
 	retrieve)
