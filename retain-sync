@@ -644,9 +644,9 @@ syncDir() {
 	# get list of individual files that aren't included in the directory priority file
 	printf "Sorting remaining files by priority... "
 	IFS=$'\n'
-	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -type f))
+	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -not -type d))
 	while read -r i; do
-		noSyncFiles+=($(find "$i" -not -name '.*.trash' -type f))
+		noSyncFiles+=($(find "$i" -not -name '.*.trash' -not -type d))
 	done <"$dirPriorityFile"
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
 
@@ -738,7 +738,7 @@ syncDir() {
 		extraFiles=($(printf "%s\n" "${extraFiles[@]}" | sed "s|$configDir/mnt/||"))
 		unset IFS
 		for i in "${extraFiles[@]}"; do
-			if ! find "$localDir" -not -path '*/\.*' -type f | grep -Fq "$localDir/$i"; then
+			if ! find "$localDir" -not -path '*/\.*' -not -type d | grep -Fq "$localDir/$i"; then
 				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
 					"$localDir/$i" || exit 1
 			fi
@@ -807,7 +807,7 @@ retrieveDir() {
 	# remove files from the server only if they've been successfully downloaded to the
 	# local machine first
 	printf "Removing files from server... "
-	find "$localDir" -not -path '*/\.*' -type f -print0 | sed "s|$localDir|$remoteDir|g" | \
+	find "$localDir" -not -path '*/\.*' -not -type d -print0 | sed "s|$localDir|$remoteDir|g" | \
 		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'xargs -0 rm -f' || exit 1
 
 	# remove empty directories
@@ -880,7 +880,7 @@ emptyTrash() {
 	# empty trash
 	printf "Emptying trash... "
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'find "'$remoteDir'" -type f -name ".*.trash" -print0 | xargs -0 rm' && \
+		'find "'$remoteDir'" -not -type d -name ".*.trash" -print0 | xargs -0 rm' && \
 		echo "done" || exit 1
 }
 
