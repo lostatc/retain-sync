@@ -524,12 +524,19 @@ syncDir() {
 					'rm "'$remoteDir/$i'"' || exit 1
 			fi
 		else
-			# new file, set priority so that it's at the top and copy to server
-			echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
-			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-				'mkdir -p "$(dirname "'$remoteDir/$i'")"'
-			rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
-				"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
+			# new file
+			if [[ -L "$localDir/$i" ]]; then
+				# file is a symlink, add to exclude file
+				echo "/$i" >> "$configDir/exclude"
+			else
+				# file is not a symlink, set priority so that it's at the top and
+				# copy to server
+				echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
+				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+					'mkdir -p "$(dirname "'$remoteDir/$i'")"'
+				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
+					"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
+			fi
 		fi
 	done
 
@@ -623,6 +630,9 @@ syncDir() {
 	}
 	getSyncFiles
 	while true; do
+		# break if file is empty
+		[[ ! -s "$dirPriorityFile" ]] && break
+
 		# remove subdirectories of directories in the list from the directory priority
 		# file, then re-calculate the list with those subdirectories gone
 		grep -Fvxf "$dirTreeFile" "$dirPriorityFile" > "$dirPriorityFile.swp"
