@@ -48,8 +48,8 @@ readConfig() {
 		fi
 
 		# parse option, removing leading/trailing whitespace
-		varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
-		varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e \
+		varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
+		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
 		# run if option is unrecognized
@@ -126,7 +126,7 @@ genConfig() {
 	# prompt user for name of config
 	while true; do
 		read -erp "Enter a name for this configuration: " configName
-		configName="$(echo "$configName" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
+		configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
 		if [[ -z "$configName" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ "$configName" =~ [\ ]+ ]]; then
@@ -141,7 +141,7 @@ genConfig() {
 	# prompt user for user name on remote machine
 	while true; do
 		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser
-		remoteUser="$(echo "$remoteUser" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
+		remoteUser="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUser")"
 		if [[ "$remoteUser" =~ [\ ]+ ]]; then
 			echo "Error: user name may not contain spaces"
 		else
@@ -152,7 +152,7 @@ genConfig() {
 	# prompt user for hostname of remote machine
 	while true; do
 		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost
-		remoteHost="$(echo "$remoteHost" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
+		remoteHost="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHost")"
 		if [[ -z "$remoteHost" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ "$remoteHost" =~ [\ ]+ ]]; then
@@ -165,7 +165,7 @@ genConfig() {
 	# prompt user for directory to sync to on remote machine
 	while true; do
 		read -erp "Enter the directory to sync to on the remote machine: " remoteDir
-		remoteDir="$(echo "$remoteDir" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
+		remoteDir="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDir")"
 		if [[ -z "$remoteDir" ]]; then
 			echo "Error: this value may not be blank"
 		elif [[ ! "$remoteDir" =~ ^/ ]]; then
@@ -178,7 +178,7 @@ genConfig() {
 	# prompt user for storage limit
 	while true; do
 		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
-		storageLimit="$(echo "$storageLimit" | sed -r 's/(^|[^\\])[\"'\'']/\1/g')"
+		storageLimit="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$storageLimit")"
 		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
 			echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
@@ -457,7 +457,7 @@ syncDir() {
 		[[ "$i" =~ ^$ ]] && continue
 		[[ "$i" =~ ^# ]] && continue
 
-		fullPath="$(echo "$configDir/mnt$i" | sed 's/[][()\.^$?*+]/\\&/g')"
+		fullPath="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir/mnt$i")"
 		sed -i -e "s|$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
 	done <"$configDir/exclude"
 
@@ -655,18 +655,17 @@ syncDir() {
 		# until the storage limit is reached
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
-			noSyncSorted+=($(grep -Ex "$(echo "$i" | sed 's/[][()\.^$?*+]/\\&/g'),[0-9\.]*$" \
+			noSyncSorted+=($(grep -Ex "$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
 				"$configDir/priority.csv"))
 		done
 		for i in "${!noSyncSorted[@]}"; do
 			# adjust priority for file size
-			currentFile="$(echo "${noSyncSorted[$i]}" | rev | cut -d ',' -f 2- | rev)"
+			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
 			currentFileSize=$(du -sb "$currentFile" | awk '{print $1}')
 			if [[ $currentFileSize -gt 0 ]]; then
-				adjustedPriority=$(echo "scale=6; $(echo "${noSyncSorted[$i]}" | rev | \
+				adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
 					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
-				noSyncSorted[$i]="$(echo "${noSyncSorted[$i]}" | \
-					sed "s/,[0-9\.]*$/,$adjustedPriority/")"
+				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< "${noSyncSorted[$i]}")"
 			fi
 		done
 		noSyncSorted=($(printf "%s\n" "${noSyncSorted[@]}" | awk -F ',' '{print $NF,$0}' | \
@@ -897,8 +896,8 @@ agePriority() {
 
 	# divide the priority of every file by 1.1
 	while read -r i; do
-		fileName="$(echo "$i" | rev | cut -d ',' -f 2- | rev)"
-		newPriority=$(echo "scale=6; $(echo "$i" | rev | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
+		fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
+		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
 		sed -i "s|$fileName,[0-9\.]*$|$fileName,${newPriority:-0}|" "$configDir/priority.csv"
 	done <"$configDir/priority.csv"
 }
