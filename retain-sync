@@ -80,6 +80,8 @@ readConfig() {
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
 	sshfsOptions=(-o "$sshfsOptions")
+	storageLimit="$(echo "$storageLimit" | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
+		-e 's/G/\*1073741824/' | bc)"
 
 	# set defaults
 	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
@@ -312,6 +314,8 @@ initializeDir() {
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
 		sshfsOptions=(-o $sshfsOptions)
+		storageLimit="$(echo "$storageLimit" | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
+			-e 's/G/\*1073741824/' | bc)"
 
 		# set defaults
 		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
@@ -584,17 +588,13 @@ syncDir() {
 	mv "$dirPriorityFile.swp" "$dirPriorityFile"
 	sed -i 's/,[0-9\.]*$//' "$dirPriorityFile"
 
-	# convert human-readable storage limit to bytes
-	storageLimitBytes=$(echo $storageLimit | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
-		-e 's/G/\*1073741824/' | bc)
-
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
 	dirTreeFile="$(mktemp)"
 	getSyncFiles() {
 		syncSize=0
 		while read -r i; do
-			if [[ $(du -sb "$i" | awk '{print $1}') -gt $storageLimitBytes ]]; then
+			if [[ $(du -sb "$i" | awk '{print $1}') -gt $storageLimit ]]; then
 				# current directory alone is larger than the storage limit, remove from
 				# directory priority file
 				sed -i -e "s|$i$||" -e '/^$/d' "$dirPriorityFile"
@@ -603,7 +603,7 @@ syncDir() {
 				# size of the list
 				((syncSize+=$(du -sb "$i" | awk '{print $1}')))
 
-				if [[ $syncSize -gt $storageLimitBytes ]]; then
+				if [[ $syncSize -gt $storageLimit ]]; then
 					# total list size has exceeded the storage limit
 					if ! grep -Fqxf "$dirTreeFile" "$dirPriorityFile"; then
 						# none of the directories in the list have subdirectories,
@@ -678,7 +678,7 @@ syncDir() {
 			((syncSize+=currentFileSize))
 
 			# check if the total size of the list has exceeded the storage limit
-			if [[ $syncSize -gt $storageLimitBytes ]]; then
+			if [[ $syncSize -gt $storageLimit ]]; then
 				# current file is too big, skip to next one
 				((syncSize-=currentFileSize))
 			else
