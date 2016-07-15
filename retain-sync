@@ -62,6 +62,7 @@ readConfig() {
 			sshfsOptions
 			deleteAlways
 			syncExtraFiles
+			inflatePriority
 		EOF
 		); then
 			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
@@ -72,6 +73,7 @@ readConfig() {
 		if echo "$varName" | grep -qFf <(cat <<-EOF
 			deleteAlways
 			syncExtraFiles
+			inflatePriority
 		EOF
 		); then
 			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
@@ -209,6 +211,7 @@ genConfig() {
 	sshfsOptions="reconnect,ServerAliveInterval=7,ServerAliveCountMax=3"
 	deleteAlways="no"
 	syncExtraFiles="yes"
+	inflatePriority="yes"
 
 	# create config directory
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
@@ -240,12 +243,16 @@ genConfig() {
 		# mount options to pass to sshfs
 		sshfsOptions=$sshfsOptions
 
-		# always delete files from the server when their local counterparts are deleted
+		# always delete files from the server when their local counterparts are
+		# deleted, even if copies aren't found in the local user's trash
 		deleteAlways=$deleteAlways
 
 		# start syncing individual files once no more whole directories can fit within
 		# the storage limit
 		syncExtraFiles=$syncExtraFiles
+
+		# inflate the priority of new local files so that they stick around longer
+		inflatePriority=$inflatePriority
 	EOF
 }
 
@@ -556,9 +563,16 @@ syncDir() {
 				# file is a symlink, add to exclude file
 				echo "/$i" >> "$configDir/exclude"
 			else
-				# file is not a symlink, set priority so that it's at the top and
+				# file is not a symlink
+				if [[ "${inflatePriority,,}" == "yes" ]]; then
+					# set priority so that it's at the top
+					echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
+				else
+					# set priority to zero
+					echo "$configDir/mnt/$i,0" >> "$configDir/priority.csv"
+				fi
+
 				# copy to server
-				echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
 				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 					'mkdir -p "$(dirname "'$remoteDir/$i'")"'
 				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
@@ -688,7 +702,7 @@ syncDir() {
 			# adjust priority for file size
 			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
 			currentFileSize=$(du -sb "$currentFile" | awk '{print $1}')
-			if [[ $currentFileSize -gt 0 ]]; then
+			if [[ "$currentFileSize" -gt 0 ]]; then
 				adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
 					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
 				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< "${noSyncSorted[$i]}")"

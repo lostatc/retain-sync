@@ -42,6 +42,7 @@ while read -r i; do
 		sshfsOptions
 		deleteAlways
 		syncExtraFiles
+		inflatePriority
 	EOF
 	); then
 		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \
@@ -53,6 +54,7 @@ while read -r i; do
 	if echo "$varName" | grep -qFf <(cat <<-EOF
 		deleteAlways
 		syncExtraFiles
+		inflatePriority
 	EOF
 	); then
 		if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
