@@ -80,8 +80,8 @@ readConfig() {
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
 	sshfsOptions=(-o "$sshfsOptions")
-	storageLimit="$(echo "$storageLimit" | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
-		-e 's/G/\*1073741824/' | bc)"
+	storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
+		-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
 
 	# set defaults
 	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
@@ -321,8 +321,8 @@ initializeDir() {
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
 		sshfsOptions=(-o $sshfsOptions)
-		storageLimit="$(echo "$storageLimit" | sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
-			-e 's/G/\*1073741824/' | bc)"
+		storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
+			-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
 
 		# set defaults
 		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
