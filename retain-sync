@@ -854,7 +854,9 @@ retrieveDir() {
 
 	# unmount sshfs, remove init file, lock file and config directory
 	printf "Cleaning up... "
-	mountpoint -q "$configDir/mnt" && fusermount -u "$configDir/mnt" || exit 1
+	if mountpoint -q "$configDir/mnt"; then
+		fusermount -u "$configDir/mnt" || exit 1
+	fi
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part"
 	rm -f "$localDir/.retain-sync_lock"
 	rm -r "$configDir"
