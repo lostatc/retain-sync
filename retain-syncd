@@ -32,7 +32,7 @@ while read -r i; do
 	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 	varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 
-	# run if option is unrecognized
+	# check if option is recognized
 	if ! echo "$varName" | grep -qFf <(cat <<-EOF
 		localDir
 		remoteUser
@@ -47,6 +47,18 @@ while read -r i; do
 		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \
 			systemd-cat -p err -t 'retain-syncd'
 		((configError++))
+	fi
+
+	# check if value of boolean options is "yes" or "no"
+	if echo "$varName" | grep -qFf <(cat <<-EOF
+		deleteAlways
+		syncExtraFiles
+	EOF
+	); then
+		if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
+			printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+			((configError++))
+		fi
 	fi
 
 	# declare variable

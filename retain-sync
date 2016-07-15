@@ -52,7 +52,7 @@ readConfig() {
 		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
-		# run if option is unrecognized
+		# check if option is recognized
 		if ! echo "$varName" | grep -qFf <(cat <<-EOF
 			localDir
 			remoteUser
@@ -66,6 +66,18 @@ readConfig() {
 		); then
 			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
 			((configError++))
+		fi
+
+		# check if value of boolean options is "yes" or "no"
+		if echo "$varName" | grep -qFf <(cat <<-EOF
+			deleteAlways
+			syncExtraFiles
+		EOF
+		); then
+			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
+				printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+				((configError++))
+			fi
 		fi
 
 		# declare variable
