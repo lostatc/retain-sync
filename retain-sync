@@ -266,9 +266,11 @@ initializeDir() {
 	fi
 
 	# check if exclude input file is a valid file
-	if ! [[ -f "$optExcludeFile" ]]; then
-		echo "Error: input file is invalid"
-		exit 1
+	if [[ -n "$optExcludeFile" ]]; then
+		if ! [[ -f "$optExcludeFile" ]]; then
+			echo "Error: input file is invalid"
+			exit 1
+		fi
 	fi
 
 	# lock this configuration
@@ -733,15 +735,9 @@ syncDir() {
 	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
 		# already been downloaded
-		IFS=$'\n'
-		extraFiles=($(printf "%s\n" "${extraFiles[@]}" | sed "s|$configDir/mnt/||"))
-		unset IFS
-		for i in "${extraFiles[@]}"; do
-			if ! find "$localDir" -not -path '*/\.*' -not -type d | grep -Fq "$localDir/$i"; then
-				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/$i" \
-					"$localDir/$i" || exit 1
-			fi
-		done
+		printf "%s\n" "${extraFiles[@]}" | sed "s|$configDir/mnt/||g" | \
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
+			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 	fi
 	echo "done"
 }
@@ -815,7 +811,7 @@ retrieveDir() {
 
 	# unmount sshfs, remove init file, lock file and config directory
 	printf "Cleaning up... "
-	mountpoint -q "$configDir/mnt" || fusermount -u "$configDir/mnt" || exit 1
+	mountpoint -q "$configDir/mnt" && fusermount -u "$configDir/mnt" || exit 1
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part"
 	rm -f "$localDir/.retain-sync_lock"
 	rm -r "$configDir"
