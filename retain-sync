@@ -702,11 +702,14 @@ syncDir() {
 			# adjust priority for file size
 			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
 			currentFileSize=$(du -sb "$currentFile" | awk '{print $1}')
-			if [[ "$currentFileSize" -gt 0 ]]; then
-				adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
-					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
-				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< "${noSyncSorted[$i]}")"
+			if [[ "$currentFileSize" -lt 16 ]]; then
+				# set minimum file size of 16 bytes to perclude a "divide by zero"
+				# error with bc
+				currentFileSize=16
 			fi
+			adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
+				cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
+			noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< "${noSyncSorted[$i]}")"
 		done
 		noSyncSorted=($(printf "%s\n" "${noSyncSorted[@]}" | awk -F ',' '{print $NF,$0}' | \
 			sort -rn | cut -d ' ' -f 2- | rev | cut -d ',' -f 2- | rev))
