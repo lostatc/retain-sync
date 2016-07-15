@@ -617,7 +617,8 @@ syncDir() {
 	getSyncFiles() {
 		syncSize=0
 		while read -r i; do
-			if [[ $(du -sb "$i" | awk '{print $1}') -gt $storageLimit ]]; then
+			dirSize="$(du -sb "$i" | awk '{print $1}')"
+			if [[ "$dirSize" -gt $storageLimit ]]; then
 				# current directory alone is larger than the storage limit, remove from
 				# directory priority file
 				sed -i -e "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$||" \
@@ -625,7 +626,7 @@ syncDir() {
 			else
 				# get size of current directory in bytes and add it to the total
 				# size of the list
-				((syncSize+=$(du -sb "$i" | awk '{print $1}')))
+				((syncSize+=dirSize))
 
 				if [[ $syncSize -gt $storageLimit ]]; then
 					# total list size has exceeded the storage limit
@@ -635,7 +636,7 @@ syncDir() {
 						# because it is too large to fit within the storage limit
 						sed -i -e "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$||" \
 							-e '/^$/d' "$dirPriorityFile"
-						((syncSize-=$(du -sb "$i" | awk '{print $1}')))
+						((syncSize-=dirSize))
 					else
 						break
 					fi
