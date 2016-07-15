@@ -112,7 +112,7 @@ fileLock() {
 	flock -n $lockFD
 
 	# run if lock file was already open
-	if [[ $? -ne 0 ]]; then
+	if [[ "$?" -ne 0 ]]; then
 		echo "Error: another operation on this configuration is already running"
 		exit 1
 	fi
@@ -384,7 +384,7 @@ initializeDir() {
 	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
-	if [[ $localSize -gt $remoteSpace ]]; then
+	if [[ "$localSize" -gt "$remoteSpace" ]]; then
 		printf "\nError: not enough space on the server\n"
 		exit 1
 	else
@@ -410,7 +410,7 @@ initializeDir() {
 	unset IFS
 
 	# run if --exclude option was given
-	if [[ $optExclude -eq 1 ]]; then
+	if [[ "$optExclude" -eq 1 ]]; then
 		while read -r i; do
 			[[ "$i" =~ ^$ ]] && continue
 			[[ "$i" =~ ^# ]] && continue
@@ -607,7 +607,7 @@ syncDir() {
 
 		# adjust directory priority for the size of the directory
 		dirSize=$(du -sb "$i" | awk '{print $1}')
-		if [[ $dirSize -eq 0 ]]; then
+		if [[ "$dirSize" -eq 0 ]]; then
 			dirPriority=0
 		else
 			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
@@ -642,7 +642,7 @@ syncDir() {
 				# size of the list
 				((syncSize+=dirSize))
 
-				if [[ $syncSize -gt $storageLimit ]]; then
+				if [[ "$syncSize" -gt $storageLimit ]]; then
 					# total list size has exceeded the storage limit
 					if ! grep -Fqxf <(printf "%s\n" "${dirPriorityTree[@]}") "$dirPriorityFile"; then
 						# none of the directories in the list have subdirectories,
@@ -721,7 +721,7 @@ syncDir() {
 			((syncSize+=currentFileSize))
 
 			# check if the total size of the list has exceeded the storage limit
-			if [[ $syncSize -gt $storageLimit ]]; then
+			if [[ "$syncSize" -gt "$storageLimit" ]]; then
 				# current file is too big, skip to next one
 				((syncSize-=currentFileSize))
 			else
@@ -805,7 +805,7 @@ retrieveDir() {
 
 	# check if systemd service is running
 	systemctl --user status "retain-sync@$configName.service" &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if [[ "$?" -eq 0 ]]; then
 		echo "Error: retain-sync@$configName.service is running"
 		echo "Please stop and disable the service before proceeding."
 		exit 1
@@ -822,7 +822,7 @@ retrieveDir() {
 	remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 		'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
-	if [[ $remoteSize -gt $localSpace ]]; then
+	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
 		printf "\nError: not enough space on this machine to retrieve \'$configName\'\n"
 		exit 1
