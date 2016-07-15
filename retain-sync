@@ -434,9 +434,8 @@ syncDir() {
 		# drop the lock on this configuration (necessary becuase of sshfs)
 		flock -u $lockFD
 
-		# delete temp files
+		# delete temp file
 		rm -f "$dirPriorityFile"
-		rm -f "$dirTreeFile"
 	}
 
 	# read config file
@@ -592,7 +591,6 @@ syncDir() {
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
-	dirTreeFile="$(mktemp)"
 	getSyncFiles() {
 		syncSize=0
 		while read -r i; do
@@ -607,7 +605,7 @@ syncDir() {
 
 				if [[ $syncSize -gt $storageLimit ]]; then
 					# total list size has exceeded the storage limit
-					if ! grep -Fqxf "$dirTreeFile" "$dirPriorityFile"; then
+					if ! grep -Fqxf <(printf "%s\n" "${dirPriorityTree[@]}") "$dirPriorityFile"; then
 						# none of the directories in the list have subdirectories,
 						# remove current directory from the directory priority file
 						# because it is too large to fit within the storage limit
@@ -618,7 +616,7 @@ syncDir() {
 					fi
 				else
 					# total list size is still within the storage limit
-					find "$i" -mindepth 1 -type d >> "$dirTreeFile"
+					dirPriorityTree+=($(find "$i" -mindepth 1 -type d))
 
 					# check if the while loop has reached the last line of the directory
 					# priority file
@@ -637,7 +635,7 @@ syncDir() {
 
 		# remove subdirectories of directories in the list from the directory priority
 		# file, then re-calculate the list with those subdirectories gone
-		grep -Fvxf "$dirTreeFile" "$dirPriorityFile" > "$dirPriorityFile.swp"
+		grep -Fvxf <(printf "%s\n" "${dirPriorityTree[@]}") "$dirPriorityFile" > "$dirPriorityFile.swp"
 		mv "$dirPriorityFile.swp" "$dirPriorityFile"
 		getSyncFiles
 	done
