@@ -800,16 +800,10 @@ retrieveDir() {
 		grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
 		xargs -d '\n' rm -f && echo "done"
 
-	# copy files from remote directory back to local directory
-	printf "Copying remote files to local machine... "
-	rsync -e "ssh ${sshOptions[*]}" -asHAXS "$remoteUser$remoteHost:$remoteDir/" \
-		"$localDir" && echo "done" || exit 1
-
-	# remove files from the server only if they've been successfully downloaded to the
-	# local machine first
-	printf "Removing files from server... "
-	find "$localDir" -not -path '*/\.*' -not -type d -print0 | sed "s|$localDir|$remoteDir|g" | \
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'xargs -0 rm -f' || exit 1
+	# move files from remote directory back to local directory
+	printf "Moving remote files to local machine... "
+	rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
+		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
 	# remove empty directories
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
