@@ -723,6 +723,14 @@ syncDir() {
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
+	# find file paths in directory priority file
+	IFS=$'\n'
+	while read -r i; do
+		dirPriorityArray+=($(find "$i" -not -type d))
+	done <"$dirPriorityFile"
+	unset IFS
+	printf "%s\n" "${dirPriorityArray[@]}" > "$dirPriorityFile"
+
 	# make all paths in directory priority file relative
 	sed -i "s|$configDir/mnt/||" "$dirPriorityFile"
 
