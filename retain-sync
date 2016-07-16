@@ -53,7 +53,7 @@ readConfig() {
 			's/[ \t]*$//')"
 
 		# check if option is recognized
-		if ! echo "$varName" | grep -qFf <(cat <<-EOF
+		if ! echo "$varName" | grep -Fqf <(cat <<-EOF
 			localDir
 			remoteUser
 			remoteHost
@@ -89,6 +89,13 @@ readConfig() {
 	# exit if there were errors in config file
 	[[ ! $configError -ne 0 ]] || exit 1
 
+	# set defaults
+	sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
+	deleteAlways="${deleteAlways:-no}"
+	syncExtraFiles="${syncExtraFiles:-yes}"
+	inflatePriority="${inflatePriority:-yes}"
+	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+
 	# format variables
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
@@ -96,9 +103,9 @@ readConfig() {
 	sshfsOptions=(-o "$sshfsOptions")
 	storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
 		-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
-
-	# set defaults
-	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+	deleteAlways="${deleteAlways,,}"
+	syncExtraFiles="${syncExtraFiles,,}"
+	inflatePriority="${inflatePriority,,}"
 
 	# escape paths for use in sed substitutions
 	localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
@@ -241,18 +248,18 @@ genConfig() {
 		#-------------------------------------------------------------------------------
 
 		# mount options to pass to sshfs
-		sshfsOptions=$sshfsOptions
+		#sshfsOptions=$sshfsOptions
 
 		# always delete files from the server when their local counterparts are
 		# deleted, even if copies aren't found in the local user's trash
-		deleteAlways=$deleteAlways
+		#deleteAlways=$deleteAlways
 
 		# start syncing individual files once no more whole directories can fit within
 		# the storage limit
-		syncExtraFiles=$syncExtraFiles
+		#syncExtraFiles=$syncExtraFiles
 
 		# inflate the priority of new local files so that they stick around longer
-		inflatePriority=$inflatePriority
+		#inflatePriority=$inflatePriority
 	EOF
 }
 
@@ -335,21 +342,18 @@ initializeDir() {
 		# generate config and source variables from it
 		genConfig
 
+		# set defaults
+		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
+		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+
 		# format variables
 		localDir="${localDir%/}"
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions=(-o $sshfsOptions)
-		storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
-			-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
-
-		# set defaults
-		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+		sshfsOptions=(-o "$sshfsOptions")
 
 		# escape paths for use in sed substitutions
 		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
-		remoteDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$remoteDir")"
-		configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
 
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
@@ -530,7 +534,7 @@ syncDir() {
 			sed -i -e "s|$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
 				-e '/^$/d' "$configDir/priority.csv"
 
-			if [[ "${deleteAlways,,}" == "no" ]]; then
+			if [[ "$deleteAlways" == "no" ]]; then
 				# compute checksums of all files in the user's trash if it hasn't already
 				# been done
 				IFS=$'\n'
@@ -564,7 +568,7 @@ syncDir() {
 				echo "/$i" >> "$configDir/exclude"
 			else
 				# file is not a symlink
-				if [[ "${inflatePriority,,}" == "yes" ]]; then
+				if [[ "$inflatePriority" == "yes" ]]; then
 					# set priority so that it's at the top
 					echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
 				else
@@ -690,7 +694,7 @@ syncDir() {
 	done <"$dirPriorityFile"
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
 
-	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
+	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# from that list, get list of individual files that can fill the remaining space
 		# until the storage limit is reached
 		for i in "${noSyncFiles[@]}"; do
@@ -732,7 +736,7 @@ syncDir() {
 	fi
 
 	# get list of individual files to remove and change their path context
-	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
+	if [[ "$syncExtraFiles" == "yes" ]]; then
 		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
 			sed "s|$configDirEsc/mnt|$localDir|g"))
@@ -781,7 +785,7 @@ syncDir() {
 		--exclude-from="$configDir/exclude" "$remoteUser$remoteHost:$remoteDir/" \
 		"$localDir" || exit 1
 
-	if [[ "${syncExtraFiles,,}" == "yes" ]]; then
+	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
 		# already been downloaded
 		printf "%s\n" "${extraFiles[@]}" | sed "s|$configDirEsc/mnt/||g" | \

@@ -51,7 +51,7 @@ while read -r i; do
 	fi
 
 	# check if value of boolean options is "yes" or "no"
-	if echo "$varName" | grep -qFf <(cat <<-EOF
+	if echo "$varName" | grep -Fqf <(cat <<-EOF
 		deleteAlways
 		syncExtraFiles
 		inflatePriority
@@ -68,7 +68,10 @@ while read -r i; do
 done <"$configDir/config"
 
 # exit if there were errors in config file
-[[ ! $configError -ne 0 ]] || exit 1
+[[ ! "$configError" -ne 0 ]] || exit 1
+
+# set defaults
+sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
 
 # format variables
 localDir="${localDir%/}"
@@ -78,8 +81,6 @@ sshfsOptions=(-o "$sshfsOptions")
 
 # escape paths for use in sed substitutions
 localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
-remoteDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$remoteDir")"
-configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
 
 # check if initialization was interrupted
 if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -98,18 +99,18 @@ fileWatch() {
 	while true; do
 		# wait for a file to be opened
 		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" "$configDir/mnt" | \
-			sed "s|$localDir|$configDir/mnt|")"
+			sed "s|$localDirEsc|$configDir/mnt|")"
 
 		# make sure file is a normal file and not hidden or under a hidden directory
 		if [[ -f "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
 			# test if file exists in priority.csv
 			fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
 
-			if [ $? -eq 0 ]; then
+			if [ "$?" -eq 0 ]; then
 				# file exists, increase file priority by one
 				newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
 					cut -d ',' -f 1 | rev)+1" | bc)
-				sed -i "s|$fileName,[0-9\.]*$|$fileName,$newPriority|" \
+				sed -i "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
 					"$configDir/priority.csv"
 			else
 				# new file, priority will be set on next sync operation
