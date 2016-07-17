@@ -948,19 +948,39 @@ agePriority() {
 	done <"$configDir/priority.csv"
 }
 
+# parse global options
+optString=$(getopt -l help -n 'retain-sync' -- "$@")
+eval set -- "$optString"
+
+# read options
+while true; do
+	case "$1" in
+		--help)
+			printHelp
+			exit ;;
+		--)
+			shift
+			break ;;
+		*)
+			>&2 "Error: invalid argument"
+			exit 1 ;;
+	esac
+done
+
+# read commands
 case "$1" in
 	'')
 		>&2 echo "Error: missing argument"
 		printHelp
 		exit 1 ;;
-	help|--help)
-		printHelp ;;
 	initialize)
 		shift
+
+		# parse options
 		optString=$(getopt -o e: -l exclude: -n 'retain-sync' -- "$@")
 		eval set -- "$optString"
 
-		# parse options
+		# read options into variables
 		while true; do
 			case "$1" in
 				-e|--exclude)
