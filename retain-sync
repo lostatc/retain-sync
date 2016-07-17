@@ -21,11 +21,11 @@ readConfig() {
 			localDir="${1%/}"
 			configName=$(cat "$localDir/.retain-sync_part")
 		else
-			printf "Error: \'$1\' is not an initialized directory\n"
+			>&2 printf "Error: \'$1\' is not an initialized directory\n"
 			exit 1
 		fi
 	else
-		printf "Error: \'$1\' is not a valid configuration or an absolute path\n"
+		>&2 printf "Error: \'$1\' is not a valid configuration or an absolute path\n"
 		exit 1
 	fi
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
@@ -43,7 +43,7 @@ readConfig() {
 
 		# run if line is missing an equals sign
 		if ! [[ "$i" =~ = ]]; then
-			echo "Error: line $lineNumber of config file: unrecognized syntax"
+			>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
 			((configError++))
 		fi
 
@@ -65,7 +65,7 @@ readConfig() {
 			inflatePriority
 		EOF
 		); then
-			printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
+			>&2 printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
 			((configError++))
 		fi
 
@@ -77,7 +77,7 @@ readConfig() {
 		EOF
 		); then
 			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
-				printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+				>&2 printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
 				((configError++))
 			fi
 		fi
@@ -120,7 +120,7 @@ fileLock() {
 
 	# run if lock file was already open
 	if [[ "$?" -ne 0 ]]; then
-		echo "Error: another operation on this configuration is already running"
+		>&2 echo "Error: another operation on this configuration is already running"
 		exit 1
 	fi
 }
@@ -156,11 +156,11 @@ genConfig() {
 		read -erp "Enter a name for this configuration: " configName
 		configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
 		if [[ -z "$configName" ]]; then
-			echo "Error: this value may not be blank"
+			>&2 echo "Error: this value may not be blank"
 		elif [[ "$configName" =~ [\ ]+ ]]; then
-			echo "Error: this value may not contain spaces"
+			>&2 echo "Error: this value may not contain spaces"
 		elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
-			echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
+			>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
 		else
 			break
 		fi
@@ -171,7 +171,7 @@ genConfig() {
 		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser
 		remoteUser="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUser")"
 		if [[ "$remoteUser" =~ [\ ]+ ]]; then
-			echo "Error: user name may not contain spaces"
+			>&2 echo "Error: user name may not contain spaces"
 		else
 			break
 		fi
@@ -182,9 +182,9 @@ genConfig() {
 		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost
 		remoteHost="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHost")"
 		if [[ -z "$remoteHost" ]]; then
-			echo "Error: this value may not be blank"
+			>&2 echo "Error: this value may not be blank"
 		elif [[ "$remoteHost" =~ [\ ]+ ]]; then
-			echo "Error: hostname may not contain spaces"
+			>&2 echo "Error: hostname may not contain spaces"
 		else
 			break
 		fi
@@ -195,9 +195,9 @@ genConfig() {
 		read -erp "Enter the directory to sync to on the remote machine: " remoteDir
 		remoteDir="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDir")"
 		if [[ -z "$remoteDir" ]]; then
-			echo "Error: this value may not be blank"
+			>&2 >&2 echo "Error: this value may not be blank"
 		elif [[ ! "$remoteDir" =~ ^/ ]]; then
-			echo "Error: must be an absolute path"
+			>&2 echo "Error: must be an absolute path"
 		else
 			break
 		fi
@@ -208,7 +208,7 @@ genConfig() {
 		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
 		storageLimit="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$storageLimit")"
 		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
-			echo "Error: must be a whole number followed by a unit (e.g. 10G)"
+			>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
 			break
 		fi
@@ -286,20 +286,20 @@ initializeDir() {
 		localDir="${1%/}" # remove trailing slash
 	else
 		# not an absolute path
-		echo "Error: must be an absolute path"
+		>&2 echo "Error: must be an absolute path"
 		exit 1
 	fi
 
 	# check if local directory exists
 	if ! [[ -d "$1" ]]; then
-		printf "Error: no such directory \'$localDir\'\n"
+		>&2 printf "Error: no such directory \'$localDir\'\n"
 		exit 1
 	fi
 
 	# check if exclude input file is a valid file
 	if [[ -n "$optExcludeFile" ]]; then
 		if ! [[ -f "$optExcludeFile" ]]; then
-			echo "Error: input file is invalid"
+			>&2 echo "Error: input file is invalid"
 			exit 1
 		fi
 	fi
@@ -314,14 +314,14 @@ initializeDir() {
 	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
 		# check if directory has already been initialized
 		if [[ -f "$localDir/.retain-sync_init" ]]; then
-			printf "Error: the specified directory has already been initialized by \'$(cat \
+			>&2 printf "Error: the specified directory has already been initialized by \'$(cat \
 				"$localDir/.retain-sync_init")\'.\n"
 			exit 1
 		fi
 
 		# check if directory includes the retain-sync config
 		if find "$localDir" -type d | grep -q "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
-			echo "Error: the specified directory contains retain-sync config files"
+			>&2 echo "Error: the specified directory contains retain-sync config files"
 			exit 1
 		fi
 
@@ -332,7 +332,7 @@ initializeDir() {
 			localTreeTest=($(find "$localDirTest" -type d))
 			localTree=($(find "$localDir" -type d))
 			if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
-				printf "Error: the specified directory overlaps with the configuration \'$(basename "$i")\'\n"
+				>&2 printf "Error: the specified directory overlaps with the configuration \'$(basename "$i")\'\n"
 				exit 1
 			fi
 		done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 \
@@ -366,7 +366,7 @@ initializeDir() {
 
 		# check if remote directory is empty
 		if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
-			printf "\nError: remote directory is not empty\n"
+			>&2 printf "\nError: remote directory is not empty\n"
 			exit 1
 		fi
 	else
@@ -389,7 +389,7 @@ initializeDir() {
 		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ "$localSize" -gt "$remoteSpace" ]]; then
-		printf "\nError: not enough space on the server\n"
+		>&2 printf "\nError: not enough space on the server\n"
 		exit 1
 	else
 		echo "done"
@@ -810,7 +810,7 @@ retrieveDir() {
 	# check if systemd service is running
 	systemctl --user status "retain-sync@$configName.service" &> /dev/null
 	if [[ "$?" -eq 0 ]]; then
-		echo "Error: retain-sync@$configName.service is running"
+		>&2 echo "Error: retain-sync@$configName.service is running"
 		echo "Please stop and disable the service before proceeding."
 		exit 1
 	fi
@@ -828,7 +828,7 @@ retrieveDir() {
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
-		printf "\nError: not enough space on this machine to retrieve \'$configName\'\n"
+		>&2 printf "\nError: not enough space on this machine to retrieve \'$configName\'\n"
 		exit 1
 	else
 		echo "done"
@@ -950,7 +950,7 @@ agePriority() {
 
 case "$1" in
 	'')
-		echo "Error: missing argument"
+		>&2 echo "Error: missing argument"
 		printHelp
 		exit 1 ;;
 	help|--help)
@@ -971,7 +971,7 @@ case "$1" in
 					shift
 					break ;;
 				*)
-					echo "Error: invalid argument"
+					>&2 echo "Error: invalid argument"
 					exit 1 ;;
 			esac
 		done
@@ -988,7 +988,7 @@ case "$1" in
 	age)
 		agePriority "$2" ;;
 	*)
-		printf "Error: \'$1\' is not a valid command\n"
+		>&2 printf "Error: \'$1\' is not a valid command\n"
 		printHelp
 		exit 1 ;;
 esac
