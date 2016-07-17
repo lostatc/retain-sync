@@ -977,6 +977,9 @@ while [[ "$1" =~ ^- ]]; do
 		--version)
 			echo "retain-sync $version"
 			exit ;;
+		-q|--quiet)
+			exec > /dev/null
+			shift ;;
 		*)
 			>&2 echo "Error: unknown option"
 			>&2 printf "Try \'retain-sync --help\' for more information.\n"
