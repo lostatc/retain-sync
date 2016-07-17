@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# the current version of the program; this is set by the Makefile
+version="@VERSION@"
+
 printHelp() {
 	echo "help"
 }
@@ -970,6 +973,9 @@ while [[ "$1" =~ ^- ]]; do
 	case "$1" in
 		--help)
 			printHelp
+			exit ;;
+		--version)
+			echo "retain-sync $version"
 			exit ;;
 		*)
 			>&2 echo "Error: unknown option"
