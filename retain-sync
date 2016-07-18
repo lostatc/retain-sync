@@ -445,7 +445,7 @@ initializeDir() {
 		# All user-created symbolic links in the local initialized directory are excluded
 		# automatically.
 	EOF
-	find "$localDir" -not -path '*/\.*' -type l -not -xtype d | sed "s|$localDirEsc||g" >> \
+	find "$localDir" -not -path '*/\.*' -type l | sed "s|$localDirEsc||g" >> \
 		"$configDir/exclude"
 
 	IFS=$'\n'
