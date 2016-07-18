@@ -3,8 +3,44 @@
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
-printHelp() {
-	echo "help"
+usage() {
+	cat <<-EOF
+		usage: retain-sync [GLOBAL_OPTION] COMMAND [COMMAND_OPTION] [COMMAND_ARG]
+
+		Global options:
+		        --help		Display this help text and exit.
+		        --version	Print version number and exit.
+		    -q, --quiet		Suppress all normal output (errors are still printed).
+
+		Commands:
+		    initialize [OPTION] PATH
+		        Prepare the local directory PATH for syncing by moving it to the server and
+		        setting up an sshfs mountpoint in its place.
+
+		        -e, --exclude FILE
+		            Get a list of file/directory paths from FILE that will be excluded from
+		            syncing, meaning that they will always remain local.
+
+		    sync CONFIG|PATH
+		        Update the local and remote directories so that the highest priority files
+		        remain local. Also deal with deleted and newly created files. This command
+		        accepts the absolute path of a local initialized directory or the name of its
+		        configuration.
+
+		    retrieve CONFIG|PATH
+		        Retrieve all files from the server and de-initialize the local directory. This
+		        command accepts the absolute path of a local initialized directory or the name
+		        of its configuration.
+
+		    list-configs
+		        Print a table of all initialized directories and the names of their
+		        configurations.
+
+		    empty-trash CONFIG|PATH
+		        Permanently delete all files on the server that are marked for deletion. This
+		        command accepts the absolute path of a local initialized directory or the name
+		        of its configuration.
+	EOF
 }
 
 readConfig() {
@@ -403,10 +439,10 @@ initializeDir() {
 	cat <<-EOF > "$configDir/exclude"
 		# This file contains paths to files/directories to exclude from syncing.
 		#
-		# The root of each file path is anchored to the local sync directory (see
+		# The root of each file path is anchored to the local initialized directory (see
 		# rsync(1) for details).
 		#
-		# All user-created symbolic links in the local sync directory are excluded
+		# All user-created symbolic links in the local initialized directory are excluded
 		# automatically.
 	EOF
 	find "$localDir" -not -path '*/\.*' -type l -not -xtype d | sed "s|$localDirEsc||g" >> \
@@ -847,7 +883,7 @@ retrieveDir() {
 			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
 	done <"$configDir/exclude"
 
-	# remove symlinks that aren't in the exclude file from local directory
+	# remove symlinks that aren't in the exclude file from the local directory
 	find "$localDir" -not -path '*/\.*' -type l | \
 		grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
 		xargs -d '\n' rm -f && echo "done"
@@ -972,7 +1008,7 @@ done
 while [[ "$1" =~ ^- ]]; do
 	case "$1" in
 		--help)
-			printHelp
+			usage
 			exit ;;
 		--version)
 			echo "retain-sync $version"
