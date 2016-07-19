@@ -455,8 +455,13 @@ initializeDir() {
 	# run if --exclude option was given
 	if [[ "$optExclude" -eq 1 ]]; then
 		while read -r i; do
-			[[ "$i" =~ ^$ ]] && continue
-			[[ "$i" =~ ^# ]] && continue
+			[[ "$i" =~ ^$ ]] && continue	# skip empty line
+			[[ "$i" =~ ^# ]] && continue	# skip commented line
+
+			# add leading slash if it doesn't exist
+			if ! [[ "$i" =~ ^/ ]]; then
+				i="/$i"
+			fi
 
 			# copy file path from input file to exclude file if it exists in
 			# the local sync directory
