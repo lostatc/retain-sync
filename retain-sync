@@ -547,15 +547,18 @@ syncDir() {
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
 
-	# get list of files that have been created or removed since last sync operation
 	printf "Checking for new files... "
-	IFS=$'\n'
+
 	# read contents of exclude file into an array of file paths
+	IFS=$'\n'
 	while read -r i; do
 		i="$localDir$i"
 		[[ -a "$i" ]] && \
 			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
 	done <"$configDir/exclude"
+
+	# get list of files that have been created or removed since last sync operation
+	#
 	# 1) print list of files/symlinks in local directory that aren't in the exclude
 	#	 file (making paths relative)
 	# 2) concatenate list of files in priority.csv (making paths relative)
@@ -593,7 +596,7 @@ syncDir() {
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 					# file is in trash, delete corresponding file on the server
-					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'rm "'$remoteDir/$i'"' || exit 1
+					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'rm -f "'$remoteDir/$i'"' || exit 1
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
 					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
@@ -603,7 +606,7 @@ syncDir() {
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
 				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'rm "'$remoteDir/$i'"' || exit 1
+					'rm -f "'$remoteDir/$i'"' || exit 1
 			fi
 		else
 			# new file
@@ -649,19 +652,24 @@ syncDir() {
 	while read -r i; do
 		# total the priorities of all the files in each directory to get the
 		# directory priority
-		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep "$i" | rev | \
+		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -F "$i" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
-		# adjust directory priority for the size of the directory
-		dirSize=$(du -sb "$i" | awk '{print $1}')
-		if [[ "$dirSize" -eq 0 ]]; then
-			dirPriority=0
-		else
-			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
-			# numbers easier to work with
-			dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
+		# get the size of the directory in bytes
+		dirSize="$(du -sb "$i" | awk '{print $1}')"
+
+		# set minimum dir size of 16 bytes to perclude a "divide by zero"
+		# error with bc
+		if [[ "$dirSize" -lt 16 ]]; then
+			dirSize=16
 		fi
+
+		# adjust directory priority for the number of files and the size of the
+		# directory
+		# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
+		# numbers easier to work with
+		dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
 
 		# write directory priority to file
 		sed -i "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$|$i,$dirPriority|" \
@@ -741,29 +749,36 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# from that list, get list of individual files that can fill the remaining space
 		# until the storage limit is reached
+
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
 			noSyncSorted+=($(grep -Ex "$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
 				"$configDir/priority.csv"))
 		done
+
+		# adjust priority for file size
 		for i in "${!noSyncSorted[@]}"; do
-			# adjust priority for file size
 			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
 			currentFileSize=$(du -sb "$currentFile" | awk '{print $1}')
+
+			# set minimum file size of 16 bytes to perclude a "divide by zero"
+			# error with bc
 			if [[ "$currentFileSize" -lt 16 ]]; then
-				# set minimum file size of 16 bytes to perclude a "divide by zero"
-				# error with bc
 				currentFileSize=16
 			fi
+
 			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
 			# numbers easier to work with
 			adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
 				cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
 			noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< "${noSyncSorted[$i]}")"
 		done
+
+		# sort files by priority
 		noSyncSorted=($(printf "%s\n" "${noSyncSorted[@]}" | awk -F ',' '{print $NF,$0}' | \
 			sort -rn | cut -d ' ' -f 2- | rev | cut -d ',' -f 2- | rev))
 		unset IFS
+
 		for i in "${noSyncSorted[@]}"; do
 			currentFileSize=$(du -sb "$i" | awk '{print $1}')
 
