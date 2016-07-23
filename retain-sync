@@ -587,7 +587,8 @@ syncDir() {
 				IFS=$'\n'
 				[[ -z "${trashSums+x}" ]] && \
 					trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
-						-not -type d -print0 | xargs -0 md5sum | sort | uniq -w 32))
+						-not -type d -not -type l -print0 | xargs -0 md5sum | sort | \
+						uniq -w 32))
 				unset IFS
 
 				# compute checksum of current file
