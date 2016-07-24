@@ -442,8 +442,8 @@ initializeDir() {
 		# The root of each file path is anchored to the local initialized directory (see
 		# rsync(1) for details).
 		#
-		# All user-created symbolic links in the local initialized directory are excluded
-		# automatically.
+		# All user-created symbolic links in the local initialized directory are added
+		# to this file automatically.
 	EOF
 	find "$localDir" -not -path '*/\.*' -type l | sed "s|$localDirEsc||g" >> \
 		"$configDir/exclude"
@@ -536,8 +536,8 @@ syncDir() {
 
 	# remove excluded files from priority.csv
 	while read -r i; do
-		[[ "$i" =~ ^$ ]] && continue
-		[[ "$i" =~ ^# ]] && continue
+		[[ "$i" =~ ^$ ]] && continue # skip line if empty
+		[[ "$i" =~ ^# ]] && continue # skip line if a comment
 
 		fullPath="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir/mnt$i")"
 		sed -i -e "s|$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
@@ -569,7 +569,7 @@ syncDir() {
 		cut -d ',' -f 2- | rev | sed "s|$configDirEsc/mnt/||g")\n" | sort | uniq -u))
 	unset IFS
 
-	# find highest priority in the file priority file and add one to it
+	# find highest priority in the file priority file and add 1 to it
 	newPriority="$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 1 | rev | sort -nr | head -n 1 | \
 		awk '{print "scale=6; " $0 "+1"}' | bc)" 2> /dev/null
@@ -817,7 +817,7 @@ syncDir() {
 	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
 
 	# replace missing files with symlinks
-	cp -asf "$configDir"/mnt/* "$localDir"
+	cp -asn "$configDir"/mnt/* "$localDir" &> /dev/null
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
