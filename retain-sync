@@ -22,7 +22,7 @@ usage() {
 		            syncing, meaning that they will always remain local.
 
 		    sync CONFIG|PATH
-		        Reshuffle files between the local and remote directories based on their
+		        Redistribute files between the local and remote directories based on their
 		        priority and update the server with any new or deleted files. This command
 		        accepts the absolute path of a local initialized directory or the name of its
 		        configuration.
@@ -445,11 +445,11 @@ initializeDir() {
 		# All user-created symbolic links in the local initialized directory are added
 		# to this file automatically.
 	EOF
-	find "$localDir" -not -path '*/\.*' -type l | sed "s|$localDirEsc||g" >> \
+	find "$localDir" -not -path '*/\.*' -type l | sed "s|$localDirEsc||" >> \
 		"$configDir/exclude"
 
 	IFS=$'\n'
-	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed "s|$localDirEsc||g"))
+	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed "s|$localDirEsc||"))
 	unset IFS
 
 	# run if --exclude option was given
@@ -463,9 +463,9 @@ initializeDir() {
 				i="/$i"
 			fi
 
-			# copy file path from input file to exclude file if it exists in
-			# the local sync directory
-			i="$(sed "s|$localDirEsc||" <<< "$i")"
+			# if it exists in the local sync directory, copy file path from input file
+			# to exclude file
+			i="${i/"$localDirEsc"/}"
 			if grep -Fxqf <(printf "%s\n" "${localFiles[@]}") <<< "${i%/}"; then
 				echo "$i" >> "$configDir/exclude"
 			fi
@@ -540,7 +540,7 @@ syncDir() {
 		[[ "$i" =~ ^# ]] && continue # skip line if a comment
 
 		fullPath="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir/mnt$i")"
-		sed -i -e "s|$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
+		sed -i -e "s|^$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
 	done <"$configDir/exclude"
 
 	# mount sshfs
@@ -565,8 +565,8 @@ syncDir() {
 	# 3) remove all repeated entries in the list
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -not -type d | \
 		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed "s|$localDirEsc/||g")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
-		cut -d ',' -f 2- | rev | sed "s|$configDirEsc/mnt/||g")\n" | sort | uniq -u))
+		sed "s|$localDirEsc/||")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
+		cut -d ',' -f 2- | rev | sed "s|$configDirEsc/mnt/||")\n" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add 1 to it
@@ -688,13 +688,15 @@ syncDir() {
 	# stored locally without exceeding the storage limit
 	while true; do
 		syncSize=0
+
 		while read -r i; do
 			dirSize="$(du -sb "$i" | awk '{print $1}')"
+
 			if [[ "$dirSize" -gt $storageLimit ]]; then
 				# current directory alone is larger than the storage limit, remove from
 				# directory priority file
-				sed -i -e "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$||" \
-					-e '/^$/d' "$dirPriorityFile"
+				grep -Fv "$i" "$dirPriorityFile" > "$dirPriorityFile.swp"
+				mv "$dirPriorityFile.swp" "$dirPriorityFile"
 			else
 				# get size of current directory in bytes and add it to the total
 				# size of the list
@@ -703,11 +705,13 @@ syncDir() {
 				if [[ "$syncSize" -gt $storageLimit ]]; then
 					# total list size has exceeded the storage limit
 					if ! grep -Fqxf <(printf "%s\n" "${dirPriorityTree[@]}") "$dirPriorityFile"; then
-						# none of the directories in the list have subdirectories,
-						# remove current directory from the directory priority file
-						# because it is too large to fit within the storage limit
-						sed -i -e "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$||" \
-							-e '/^$/d' "$dirPriorityFile"
+						# none of the directories in the list have subdirectories in
+						# the list, remove current directory from the directory
+						# priority file because it is too large to fit within the
+						# storage limit
+						grep -Fv "$i" "$dirPriorityFile" > "$dirPriorityFile.swp"
+						mv "$dirPriorityFile.swp" "$dirPriorityFile"
+
 						((syncSize-=dirSize))
 					else
 						break
@@ -800,13 +804,13 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
-			sed "s|$configDirEsc/mnt|$localDir|g"))
+			sed "s|$configDirEsc/mnt|$localDir|"))
 		unset IFS
 		echo "done"
 	else
 		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed \
-			"s|$configDirEsc/mnt|$localDir|g"))
+			"s|$configDirEsc/mnt|$localDir|"))
 		unset IFS
 		echo "done"
 	fi
@@ -820,7 +824,7 @@ syncDir() {
 
 	# remove symlinks to files marked for deletion
 	find "$configDir/mnt" -not -type d -name '.*.trash' | \
-		sed "s|$configDirEsc/mnt|$localDirEsc|g" | xargs -d '\n' rm -f
+		sed "s|$configDirEsc/mnt|$localDirEsc|" | xargs -d '\n' rm -f
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
@@ -828,7 +832,7 @@ syncDir() {
 
 	# download (and remove from the server) excluded files that are still on the server
 	printf "Downloading new files... "
-	find "$configDir/mnt" -not -type d | sed "s|$configDirEsc/mnt||g" | \
+	find "$configDir/mnt" -not -type d | sed "s|$configDirEsc/mnt||" | \
 		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}") | \
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
@@ -852,7 +856,7 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
 		# already been downloaded
-		printf "%s\n" "${extraFiles[@]}" | sed "s|$configDirEsc/mnt/||g" | \
+		printf "%s\n" "${extraFiles[@]}" | sed "s|$configDirEsc/mnt/||" | \
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
 			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 	fi
@@ -1020,6 +1024,7 @@ for ((i=1; i<=$#; i++)); do
 	# if parameter is multiple short options sandwitched together, separate them
 	if [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
 		set -- ${@:1:$((i-1))} $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") ${@:$((i+1))}
+
 	# if parameter is a long option with an argument separated by an equals
 	# sign, replace the equals sign with a space
 	elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
@@ -1063,6 +1068,7 @@ case "$1" in
 			# if parameter is multiple short options sandwitched together, separate them
 			if [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
 				set -- ${@:1:$((i-1))} $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") ${@:$((i+1))}
+
 			# if parameter is a long option with an argument separated by an equals
 			# sign, replace the equals sign with a space
 			elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
