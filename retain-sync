@@ -686,7 +686,7 @@ syncDir() {
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
-	getSyncFiles() {
+	while true; do
 		syncSize=0
 		while read -r i; do
 			dirSize="$(du -sb "$i" | awk '{print $1}')"
@@ -714,6 +714,7 @@ syncDir() {
 					fi
 				else
 					# total list size is still within the storage limit
+
 					dirPriorityTree+=($(find "$i" -mindepth 1 -type d))
 
 					# check if the while loop has reached the last line of the directory
@@ -725,17 +726,14 @@ syncDir() {
 				fi
 			fi
 		done <"$dirPriorityFile"
-	}
-	getSyncFiles
-	while true; do
+
 		# break if file is empty
 		[[ ! -s "$dirPriorityFile" ]] && break
 
 		# remove subdirectories of directories in the list from the directory priority
-		# file, then re-calculate the list with those subdirectories gone
+		# file
 		grep -Fvxf <(printf "%s\n" "${dirPriorityTree[@]}") "$dirPriorityFile" > "$dirPriorityFile.swp"
 		mv "$dirPriorityFile.swp" "$dirPriorityFile"
-		getSyncFiles
 	done
 	echo "done"
 
