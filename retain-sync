@@ -453,7 +453,7 @@ initializeDir() {
 	unset IFS
 
 	# run if --exclude option was given
-	if [[ "$optExclude" -eq 1 ]]; then
+	if [[ -n "$optExcludeFile" ]]; then
 		while read -r i; do
 			[[ "$i" =~ ^$ ]] && continue	# skip empty line
 			[[ "$i" =~ ^# ]] && continue	# skip commented line
@@ -1076,7 +1076,6 @@ case "$1" in
 		while [[ "$1" =~ ^- ]]; do
 			case "$1" in
 				-e|--exclude)
-					optExclude=1
 					optExcludeFile="$2"
 					shift 2 ;;
 				*)
