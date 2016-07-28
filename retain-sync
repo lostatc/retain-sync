@@ -15,15 +15,15 @@ usage() {
 		Commands:
 		    initialize [OPTION] PATH
 		        Prepare the local directory PATH for syncing by moving it to the server and
-		        setting up an sshfs mountpoint in its place.
+		        setting up an sshfs mountpoint for it.
 
 		        -e, --exclude FILE
 		            Get a list of file/directory paths from FILE that will be excluded from
 		            syncing, meaning that they will always remain local.
 
 		    sync CONFIG|PATH
-		        Update the local and remote directories so that the highest priority files
-		        remain local. Also deal with deleted and newly created files. This command
+		        Reshuffle files between the local and remote directories based on their
+		        priority and update the server with any new or deleted files. This command
 		        accepts the absolute path of a local initialized directory or the name of its
 		        configuration.
 
@@ -585,10 +585,11 @@ syncDir() {
 				# compute checksums of all files in the user's trash if it hasn't already
 				# been done
 				IFS=$'\n'
-				[[ -z "${trashSums+x}" ]] && \
+				if [[ -z "${trashSums+x}" ]]; then
 					trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
 						-not -type d -not -type l -print0 | xargs -0 md5sum | sort | \
 						uniq -w 32))
+				fi
 				unset IFS
 
 				# compute checksum of current file
