@@ -359,7 +359,7 @@ initializeDir() {
 		fi
 
 		# check if directory includes the retain-sync config
-		if find "$localDir" -type d | grep -q "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
+		if find "$localDir" -type d | grep -Fq "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
 			>&2 echo "Error: the specified directory contains retain-sync config files"
 			exit 1
 		fi
@@ -819,6 +819,10 @@ syncDir() {
 	# replace missing files with symlinks
 	cp -asn "$configDir"/mnt/* "$localDir" &> /dev/null
 
+	# remove symlinks to files marked for deletion
+	find "$configDir/mnt" -not -type d -name '.*.trash' | \
+		sed "s|$configDirEsc/mnt|$localDirEsc|g" | xargs -d '\n' rm -f
+
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
 	echo "done"
@@ -833,7 +837,7 @@ syncDir() {
 	# find file paths in directory priority file
 	IFS=$'\n'
 	while read -r i; do
-		dirPriorityArray+=($(find "$i" -not -type d))
+		dirPriorityArray+=($(find "$i" -not -type d -not -name '.*.trash'))
 	done <"$dirPriorityFile"
 	unset IFS
 	printf "%s\n" "${dirPriorityArray[@]}" > "$dirPriorityFile"
@@ -841,8 +845,7 @@ syncDir() {
 	# make all paths in directory priority file relative
 	sed -i "s|$configDirEsc/mnt/||" "$dirPriorityFile"
 
-	# download directories that are in the directory priority file but not stored
-	# locally
+	# download directories that are in the directory priority file but not stored # locally
 	rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from="$dirPriorityFile" \
 		--exclude-from="$configDir/exclude" "$remoteUser$remoteHost:$remoteDir/" \
 		"$localDir" || exit 1
