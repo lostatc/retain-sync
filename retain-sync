@@ -974,11 +974,6 @@ listConfigs() {
 }
 
 emptyTrash() {
-	# When files on the local machine are deleted and copies aren't found in the user's
-	# trash, their corresponding files on the server are renamed to mark them as
-	# 'deleted' so that they can be recovered. This function allows the user to
-	# actually delete said files.
-
 	# read config file
 	readConfig "$1"
 
@@ -989,11 +984,22 @@ emptyTrash() {
 		exit 1
 	fi
 
-	# empty trash
-	printf "Emptying trash... "
-	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'find "'$remoteDir'" -not -type d -name ".*.trash" -print0 | xargs -0 rm' && \
-		echo "done" || exit 1
+	# get list of files marked for deletion
+	IFS=$'\n'
+	trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+		'find "'$remoteDir'" -not -type d -name ".*.trash"'))
+	unset IFS
+
+	# delete files if there are any
+	if [[ "${#trashFiles[@]}" -ne 0 ]]; then
+		printf "Emptying trash... "
+		printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
+			"$remoteUser$remoteHost" 'xargs rm'
+		echo "done"
+		echo "${#trashFiles[@]} files deleted"
+	else
+		echo "No files to delete"
+	fi
 }
 
 agePriority() {
