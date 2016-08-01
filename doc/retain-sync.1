@@ -1,0 +1,142 @@
+.TH RETAIN-SYNC 1 "2016-07-31" "" ""
+.SH NAME
+retain-sync \- distribute files based on how frequently they're accessed
+.SH SYNOPSIS
+\fBretain-sync\fR [\fIGLOBAL_OPTIONS\fR] \fICOMMAND\fR [\fICOMMAND_OPTIONS\fR] [\fICOMMAND_ARG\fR]
+.SH DESCRIPTION
+\fBretain-sync\fR is a program that distributes files between a local and remote
+directory based on how frequently they're accessed with the intent of conserving disk
+space. It uses sshfs and symbolic links to allow local and remote files to exist in the
+same directory. All files are assigned a "priority" value based on how frequently and
+recently they've been accessed as well as the file size. The highest-priority files are
+kept on the local machine for quick access, while lower priority files are moved to the
+server to conserve disk space. The user can specify how much data they want to remain on
+the local machine at any given point in time.
+.sp
+\fBretain-sync\fR does not need to be installed on the remote machine to work, although
+you do need to have ssh access to it via public key authentication. The server must have
+enough free disk space to accomodate all of your files, as files aren't removed from the
+server when they're copied to the local machine. \fBretain-sync\fR will exit with an
+error if it detects that the server does not have enough free disk space.
+\fBretain-sync\fR does not require root access, and is meant to run as an unprivileged
+user on both the server and client.
+.SH GLOBAL OPTIONS
+\fB--help\fR
+.RS 4
+Display a usage message and exit.
+.RE
+.PP
+\fB--version\fR
+.RS 4
+Print version number and exit.
+.RE
+.PP
+\fB-q\fR, \fB--quiet\fR
+.RS 4
+Suppress all normal output (errors are still printed).
+.SH COMMANDS
+\fBinitialize\fR [\fIOPTIONS\fR] \fIPATH\fR
+.RS 4
+Prepare the local directory \fIPATH\fR for syncing by moving it to the server and
+generating a config file for it.
+.sp
+\fB-e\fR, \fB--exclude\fR \fIFILE\fR
+.RS 4
+Get a list of file/directory paths from \fIFILE\fR that will be excluded from
+syncing, meaning that they will never leave the local machine
+(see \fBEXCLUDING\fR).
+.RE 1
+.PP
+\fBsync\fR \fICONFIG\fR|\fIPATH\fR
+.RS 4
+Redistribute files between the local and remote directories based on their priority and
+update the server with any new or deleted files. This command accepts the absolute path
+of a local initialized directory or the name of its configuration. This command is run
+automatically once an hour by the daemon (see \fBSYNCING\fR).
+.RE
+.PP
+\fBretrieve\fR \fICONFIG\fR|\fIPATH\fR
+.RS 4
+Retrieve all files from the server and de-initialize the local directory. This command
+accepts the absolute path of a local initialized directory or the name of its
+configuration.
+.RE
+.PP
+\fBlist-configs\fR
+.RS 4
+Print a table of all initialized directories and the names of their
+configurations.
+.RE
+.PP
+\fBempty-trash\fR \fICONFIG\fR|\fIPATH\fR
+.RS 4
+Permanently delete all files on the server that are marked for deletion
+(see \fBTRASH\fR). This command accepts the absolute path of a local initialized
+directory or the name of its configuration.
+.SH SYNCING
+Whenever a directory is initialized, \fBretain-sync\fR will direct the user to start the
+daemon for that directory. This daemon keeps track of file access within the initialized
+directory tree, adjusts file priority for time and runs the \fBsync\fR command hourly by
+default, although this can be configured in the systemd unit file
+\'retain-sync-age@.timer'.
+.sp
+Whenever the \fBsync\fR command is run, \fBretain-sync\fR first tries to sync whole
+directories.  When a directory is synced, all subdirectories are included. Once no more
+whole directories can fit within the user-defined storage limit, \fBretain-sync\fR will
+try to sync individual files until the storage limit is reached. This behavior can be
+overridden by setting \fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config.
+\fBretain-sync\fR deliberately ignores hidden files and directories, meaning that they
+never leave the local machine.
+.SH EXCLUDING
+\fBretain-sync\fR allows the user to define certain files or directories to be excluded
+from syncing, meaning that they will never leave the local machine. This is done in the
+\'exclude' file (see \fBFILES\fR). To keep user-created symbolic links from being
+clobbered, all symbolic links found in the local initialized directory are added to the
+exclude file automatically. The root of each file/directory path in the exclude file is
+anchored to the local initialized directory.
+.SH TRASH
+Files that exist only on the server are represented locally as symbolic links. Whenever
+the \fBsync\fR command is run, local files (including symbolic links) that were deleted
+since the last sync operation are removed from the server. If the user deletes a local
+symbolic link, the file it points to won't appear in their local trash, making the file
+unrecoverable. For this reason, \fBretain-sync\fR implements a simple trash system.
+.sp
+Before \fBretain-sync\fR deletes a file on the server, it first searches for the file in
+the user's local trash directory. If it finds a copy of the file in the user's trash,
+then it permanently deletes the file on the server. Otherwise, it only marks the file
+for deletion. Files marked for deletion are made hidden and have '.trash' appended to
+the end of the file name. This behavior can be overridden by setting \fBdeleteAlways\fR
+to 'yes' in the \fBretain-sync\fR config. The command \fBempty-trash\fR can be used to
+permanently delete all files on the server that are marked for deletion. Note that when
+a file is marked for deletion, it will override any previously marked file with the same
+name.
+.SH FILES
+~/.config/retain-sync/<config_name>/
+.RS 4
+This directory exists for each directory that has been initialized by the user, where
+<config_name> is the user-specified name of the configuration. \fBretain-sync\fR will
+respect XDG_CONFIG_HOME, and if it is set, put the directory there instead.
+.sp
+mnt/
+.RS 4
+This is the sshfs mountpoint for the remote directory. Symbolic links in the local
+initialized directory point to files in this directory.
+.RE 2
+.PP
+config
+.RS 4
+This is the main configuration file for the initialized directory. It contains required
+information that the user is prompted for when the \fBinitialize\fR command is run as
+well as additional settings that can be configured.
+.RE 2
+.PP
+exclude
+.RS 4
+This file contains a list of file/directory paths to be excluded from syncing (see \fBEXCLUDING\fR).
+.RE 2
+.PP
+priority.csv
+.RS 4
+This file keeps track of file priority and should not be edited by hand.
+.SH AUTHOR
+Garrett Powell <garrett@gpowell.net>
