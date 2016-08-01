@@ -5,21 +5,21 @@ version="@VERSION@"
 
 usage() {
 	cat <<-EOF
-		usage: retain-sync [GLOBAL_OPTION] COMMAND [COMMAND_OPTION] [COMMAND_ARG]
+		usage: retain-sync [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS] [COMMAND_ARG]
 
 		Global options:
-		        --help		Display this help text and exit.
+		        --help		Display this usage message and exit.
 		        --version	Print version number and exit.
 		    -q, --quiet		Suppress all normal output (errors are still printed).
 
 		Commands:
-		    initialize [OPTION] PATH
+		    initialize [OPTIONS] PATH
 		        Prepare the local directory PATH for syncing by moving it to the server and
-		        setting up an sshfs mountpoint for it.
+		        generating a config file for it.
 
 		        -e, --exclude FILE
 		            Get a list of file/directory paths from FILE that will be excluded from
-		            syncing, meaning that they will always remain local.
+		            syncing, meaning that they will always remain on the local machine.
 
 		    sync CONFIG|PATH
 		        Redistribute files between the local and remote directories based on their
@@ -439,8 +439,8 @@ initializeDir() {
 	cat <<-EOF > "$configDir/exclude"
 		# This file contains paths to files/directories to exclude from syncing.
 		#
-		# The root of each file path is anchored to the local initialized directory (see
-		# rsync(1) for details).
+		# The root of each file/directory path is anchored to the local initialized
+		# directory (see rsync(1) for details).
 		#
 		# All user-created symbolic links in the local initialized directory are added
 		# to this file automatically.

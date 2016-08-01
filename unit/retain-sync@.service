@@ -1,6 +1,6 @@
 [Unit]
 Description=Watch for file access in a specific directory
-Documentation=man:retain-sync(1) man:retain-syncd(1)
+Documentation=man:retain-sync(1)
 Requires=retain-sync-age@%i.timer
 Wants=retain-sync-resync@%i.timer
 
