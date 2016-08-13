@@ -91,9 +91,13 @@ if [[ -f "$localDir/.retain-sync_part" ]]; then
 	exit 1
 fi
 
-# mount sshfs share if not already mounted
+# mount sshfs if not already mounted
 mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
+	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
+if [[ $? -ne 0 ]]; then
+	echo "Error: unable to mount sshfs share" | systemd-cat -p err -t 'retain-syncd'
+	exit 1
+fi
 
 fileWatch() {
 	while true; do

@@ -6,3 +6,4 @@ Documentation=man:retain-sync(1)
 Type=oneshot
 ExecStart=/usr/local/bin/retain-sync sync %i
 StandardOutput=journal
+StandardError=journal

@@ -9,6 +9,7 @@ Type=forking
 ExecStart=/usr/local/bin/retain-syncd %i
 PIDFile=%t/retain-sync/retain-syncd.pid
 StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=network-online.service
