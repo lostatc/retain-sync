@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-08-13" "" ""
+.TH RETAIN-SYNC 1 "2016-08-14" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they're accessed
 .SH SYNOPSIS
@@ -44,9 +44,10 @@ configuration, information about the server, and the storage limit.
 .sp
 \fB-e\fR, \fB--exclude\fR \fIFILE\fR
 .RS 4
-Get a list of file/directory paths from \fIFILE\fR that will be excluded from
-syncing, meaning that they will never leave the local machine
-(see \fBEXCLUDING\fR).
+Get a list of file/directory paths from \fIFILE\fR (one per line) that will be excluded
+from syncing, meaning that they will never leave the local machine (see
+\fBEXCLUDING\fR). If \fIFILE\fR is '-', then a newline-separated list of file paths will
+be accepted from stdin.
 .RE 1
 .PP
 \fBsync\fR \fICONFIG\fR|\fIPATH\fR

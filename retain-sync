@@ -15,11 +15,13 @@ usage() {
 		Commands:
 		    initialize [OPTIONS] PATH
 		        Prepare the local directory PATH for syncing by moving it to the server and
-		        generating a config file for it.
+		        generating a configuration for it.
 
 		        -e, --exclude FILE
-		            Get a list of file/directory paths from FILE that will be excluded from
-		            syncing, meaning that they will never leave the local machine.
+		            Get a list of file/directory paths from FILE (one per line) that will be
+		            excluded from syncing, meaning that they will never leave the local
+		            machine. If FILE is '-', then a newline-separated list of file paths will
+		            be accepted from stdin.
 
 		    sync CONFIG|PATH
 		        Redistribute files between the local and remote directories based on their
@@ -192,7 +194,7 @@ sshMaster() {
 genConfig() {
 	# prompt user for name of config
 	while true; do
-		read -erp "Enter a name for this configuration: " configName
+		read -erp "Enter a name for this configuration: " configName </dev/tty
 		configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
 		if [[ -z "$configName" ]]; then
 			>&2 echo "Error: this value may not be blank"
@@ -207,7 +209,7 @@ genConfig() {
 
 	# prompt user for user name on remote machine
 	while true; do
-		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser
+		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser </dev/tty
 		remoteUser="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUser")"
 		if [[ "$remoteUser" =~ [\ ]+ ]]; then
 			>&2 echo "Error: user name may not contain spaces"
@@ -218,7 +220,7 @@ genConfig() {
 
 	# prompt user for hostname of remote machine
 	while true; do
-		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost
+		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost </dev/tty
 		remoteHost="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHost")"
 		if [[ -z "$remoteHost" ]]; then
 			>&2 echo "Error: this value may not be blank"
@@ -231,7 +233,7 @@ genConfig() {
 
 	# prompt user for directory to sync to on remote machine
 	while true; do
-		read -erp "Enter the directory to sync to on the remote machine: " remoteDir
+		read -erp "Enter the directory to sync to on the remote machine: " remoteDir </dev/tty
 		remoteDir="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDir")"
 		if [[ -z "$remoteDir" ]]; then
 			>&2 >&2 echo "Error: this value may not be blank"
@@ -244,7 +246,7 @@ genConfig() {
 
 	# prompt user for storage limit
 	while true; do
-		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit
+		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit </dev/tty
 		storageLimit="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$storageLimit")"
 		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
 			>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
@@ -334,9 +336,16 @@ initializeDir() {
 		exit 1
 	fi
 
-	# check if exclude input file is a valid file
+	# check argument for --exclude option
 	if [[ -n "$optExcludeFile" ]]; then
-		if ! [[ -f "$optExcludeFile" ]]; then
+		if [[ -f "$optExcludeFile" ]]; then
+			# read contents of exclude input file to array
+			mapfile -t excludeInputFiles < "$optExcludeFile"
+		elif [[ "$optExcludeFile" == "-" ]]; then
+			# read contents of stdin to array
+			mapfile -t excludeInputFiles
+		else
+			# argument is invalid
 			>&2 echo "Error: input file is invalid"
 			exit 1
 		fi
@@ -453,7 +462,7 @@ initializeDir() {
 
 	# run if --exclude option was given
 	if [[ -n "$optExcludeFile" ]]; then
-		while read -r i; do
+		for i in "${excludeInputFiles[@]}"; do
 			[[ "$i" =~ ^$ ]] && continue	# skip empty line
 			[[ "$i" =~ ^# ]] && continue	# skip commented line
 
@@ -468,7 +477,7 @@ initializeDir() {
 			if grep -Fxqf <(printf "%s\n" "${localFiles[@]}") <<< "${i%/}"; then
 				echo "$i" >> "$configDir/exclude"
 			fi
-		done <"$optExcludeFile"
+		done
 	fi
 
 	# copy local files to the server
