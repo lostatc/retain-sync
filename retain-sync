@@ -560,10 +560,16 @@ syncDir() {
 	# read contents of exclude file into an array of file paths
 	IFS=$'\n'
 	while read -r i; do
+		[[ "$i" =~ ^$ ]] && continue # skip line if empty
+		[[ "$i" =~ ^# ]] && continue # skip line if a comment
+
 		i="$localDir$i"
-		[[ -a "$i" ]] && \
-			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
+		[[ -e "$i" ]] && excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
 	done <"$configDir/exclude"
+
+	# remove broken symlinks that aren't in the exclude file
+	find "$localDir" -xtype l | grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
+		xargs -d '\n' rm -f
 
 	# get list of files that have been created or removed since last sync operation
 	#
