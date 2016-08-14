@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-07-31" "" ""
+.TH RETAIN-SYNC 1 "2016-08-13" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they're accessed
 .SH SYNOPSIS
@@ -6,20 +6,21 @@ retain-sync \- distribute files based on how frequently they're accessed
 .SH DESCRIPTION
 \fBretain-sync\fR is a program that distributes files between a local and remote
 directory based on how frequently they're accessed with the intent of conserving disk
-space. It uses sshfs and symbolic links to allow local and remote files to exist in the
-same directory. All files are assigned a "priority" value based on how frequently and
-recently they've been accessed as well as the file size. The highest-priority files are
-kept on the local machine for quick access, while lower priority files are moved to the
-server to conserve disk space. The user can specify how much data they want to remain on
-the local machine at any given point in time.
+space. All files are assigned a "priority" value based on how frequently and recently
+they've been accessed as well as the file size. The highest-priority files are kept on
+the local machine for quick access, while lower priority files are moved to the server
+to conserve disk space. It uses sshfs and symbolic links to allow local and remote files
+to be accessible from the same directory. The user can specify how much data they want
+to remain on the local machine at any given point in time (hereafter referred to as
+the "storage limit").
 .sp
 \fBretain-sync\fR does not need to be installed on the remote machine to work, although
-you do need to have ssh access to it via public key authentication. The server must have
-enough free disk space to accomodate all of your files, as files aren't removed from the
-server when they're copied to the local machine. \fBretain-sync\fR will exit with an
-error if it detects that the server does not have enough free disk space.
-\fBretain-sync\fR does not require root access, and is meant to run as an unprivileged
-user on both the server and client.
+you do need to have passwordless ssh access to it (i.e. via public key authentication).
+The server must have enough free disk space to accomodate all of your files, as files
+aren't removed from the server when they're copied to the local machine.
+\fBretain-sync\fR will exit with an error if it detects that the server does not have
+enough free disk space.  \fBretain-sync\fR does not require root access, and is meant to
+run as an unprivileged user on both the server and client.
 .SH GLOBAL OPTIONS
 \fB--help\fR
 .RS 4
@@ -38,7 +39,8 @@ Suppress all normal output (errors are still printed).
 \fBinitialize\fR [\fIOPTIONS\fR] \fIPATH\fR
 .RS 4
 Prepare the local directory \fIPATH\fR for syncing by moving it to the server and
-generating a config file for it.
+generating a configuration for it. The user will be prompted to give a name for the
+configuration, information about the server, and the storage limit.
 .sp
 \fB-e\fR, \fB--exclude\fR \fIFILE\fR
 .RS 4
@@ -90,26 +92,26 @@ never leave the local machine.
 .SH EXCLUDING
 \fBretain-sync\fR allows the user to define certain files or directories to be excluded
 from syncing, meaning that they will never leave the local machine. This is done in the
-\'exclude' file (see \fBFILES\fR). To keep user-created symbolic links from being
-clobbered, all symbolic links found in the local initialized directory are added to the
-exclude file automatically. The root of each file/directory path in the exclude file is
-anchored to the local initialized directory.
+\'exclude' file for that configuration (see \fBFILES\fR).  To keep user-created symbolic
+links from being clobbered, all symbolic links found in the local initialized directory
+are added to the exclude file automatically. The root of each file/directory path in the
+exclude file is anchored to the local initialized directory.
 .SH TRASH
 Files that exist only on the server are represented locally as symbolic links. Whenever
-the \fBsync\fR command is run, local files (including symbolic links) that were deleted
-since the last sync operation are removed from the server. If the user deletes a local
-symbolic link, the file it points to won't appear in their local trash, making the file
-unrecoverable. For this reason, \fBretain-sync\fR implements a simple trash system.
+the \fBsync\fR command is run, local files (including these symbolic links) that were
+deleted since the last sync operation are removed from the server. If the user deletes a
+local symbolic link, the file it points to won't appear in their local trash, making the
+file unrecoverable. For this reason, \fBretain-sync\fR implements a simple trash system.
 .sp
 Before \fBretain-sync\fR deletes a file on the server, it first searches for the file in
-the user's local trash directory. If it finds a copy of the file in the user's trash,
-then it permanently deletes the file on the server. Otherwise, it only marks the file
-for deletion. Files marked for deletion are made hidden and have '.trash' appended to
-the end of the file name. This behavior can be overridden by setting \fBdeleteAlways\fR
-to 'yes' in the \fBretain-sync\fR config. The command \fBempty-trash\fR can be used to
-permanently delete all files on the server that are marked for deletion. Note that when
-a file is marked for deletion, it will override any previously marked file with the same
-name.
+the user's local trash directory by comparing checksums. If it finds a copy of the file
+in the user's trash, then it permanently deletes the file on the server. Otherwise, it
+only marks the file for deletion. Files marked for deletion are made hidden and have
+\'.trash' appended to the end of the file name. This behavior can be overridden by
+setting \fBdeleteAlways\fR to 'yes' in the \fBretain-sync\fR config. The command
+\fBempty-trash\fR can be used to permanently delete all files on the server that are
+marked for deletion. Note that when a file is marked for deletion, it will override any
+previously marked file with the same name.
 .SH FILES
 ~/.config/retain-sync/<config_name>/
 .RS 4
