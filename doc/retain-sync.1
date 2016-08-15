@@ -19,8 +19,10 @@ you do need to have passwordless ssh access to it (i.e. via public key authentic
 The server must have enough free disk space to accomodate all of your files, as files
 aren't removed from the server when they're copied to the local machine.
 \fBretain-sync\fR will exit with an error if it detects that the server does not have
-enough free disk space.  \fBretain-sync\fR does not require root access, and is meant to
-run as an unprivileged user on both the server and client.
+enough free disk space. \fBretain-sync\fR deliberately ignores hidden files and
+directories, meaning that they never leave the local machine. As of right now, it does
+not support file names containing newlines. \fBretain-sync\fR does not require root
+access, and is meant to run as an unprivileged user on both the server and client.
 .SH GLOBAL OPTIONS
 \fB--help\fR
 .RS 4
@@ -88,8 +90,6 @@ directories.  When a directory is synced, all subdirectories are included. Once 
 whole directories can fit within the user-defined storage limit, \fBretain-sync\fR will
 try to sync individual files until the storage limit is reached. This behavior can be
 overridden by setting \fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config.
-\fBretain-sync\fR deliberately ignores hidden files and directories, meaning that they
-never leave the local machine.
 .SH EXCLUDING
 \fBretain-sync\fR allows the user to define certain files or directories to be excluded
 from syncing, meaning that they will never leave the local machine. This is done in the
