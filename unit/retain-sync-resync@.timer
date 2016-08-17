@@ -4,7 +4,8 @@ Documentation=man:retain-sync(1)
 PartOf=retain-sync@%i.service
 
 [Timer]
-OnActiveSec=1h
+OnBootSec=5m
+OnUnitInactiveSec=1h
 
 [Install]
 WantedBy=timers.target
