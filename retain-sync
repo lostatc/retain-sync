@@ -271,6 +271,7 @@ genConfig() {
 		# retain-sync config
 		#
 
+
 		# directory to sync on local machine
 		localDir=$localDir
 
@@ -531,6 +532,13 @@ syncDir() {
 
 	# run cleanup function on script exit
 	trap cleanup EXIT
+
+	# get environment variables for ssh-agent that aren't available when retain-sync is
+	# run as a systemd service (there has to be a better way to do this)
+	[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(pgrep -U "$USER" \
+		ssh-agent | head -n 1)"
+	[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -path "*ssh*" \
+		-type s -iname "agent.$((SSH_AGENT_PID - 1))" 2> /dev/null)"
 
 	# start ssh master connection
 	sshMaster

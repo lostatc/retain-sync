@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-08-17" "" ""
+.TH RETAIN-SYNC 1 "2016-08-18" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they're accessed
 .SH SYNOPSIS
@@ -15,15 +15,15 @@ to remain on the local machine at any given point in time (hereafter referred to
 the "storage limit").
 .sp
 \fBretain-sync\fR does not need to be installed on the remote machine to work, although
-you do need to have passwordless ssh access to it (i.e. via public key authentication).
-The server must have enough free disk space to accomodate all of your files, as files
-aren't removed from the server when they're copied to the local machine.
-\fBretain-sync\fR will exit with an error if it detects that the server does not have
-enough free disk space. \fBretain-sync\fR deliberately ignores hidden files and
+you do need to have passwordless ssh access to it (i.e. via public key authentication
+with an ssh agent). The server must have enough free disk space to accomodate all of
+your files, as files aren't removed from the server when they're copied to the local
+machine. \fBretain-sync\fR will exit with an error if it detects that the server does
+not have enough free disk space. \fBretain-sync\fR deliberately ignores hidden files and
 directories, meaning that they never leave the local machine. The program currently does
 not support file names containing newlines, but other ascii characters should work fine.
-It does not require root access, and is meant to run as an unprivileged user on both the
-server and client.
+\fBretain-sync\fR does not require root access, and is meant to run as an unprivileged
+user on both the server and client.
 .SH GLOBAL OPTIONS
 \fB--help\fR
 .RS 4
