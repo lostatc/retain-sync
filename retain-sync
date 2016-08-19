@@ -454,11 +454,11 @@ initializeDir() {
 		# All user-created symbolic links in the local initialized directory are added
 		# to this file automatically.
 	EOF
-	find "$localDir" -not -path '*/\.*' -type l | sed "s|$localDirEsc||" >> \
+	find "$localDir" -not -path '*/\.*' -type l | sed -r "s|$localDirEsc||" >> \
 		"$configDir/exclude"
 
 	IFS=$'\n'
-	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed "s|$localDirEsc||"))
+	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
 	unset IFS
 
 	# run if --exclude option was given
@@ -556,7 +556,7 @@ syncDir() {
 		[[ "$i" =~ ^# ]] && continue # skip line if a comment
 
 		fullPath="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir/mnt$i")"
-		sed -i -e "s|^$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
+		sed -i -r -e "s|^$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
 	done <"$configDir/exclude"
 
 	# mount sshfs
@@ -587,8 +587,8 @@ syncDir() {
 	# 3) remove all repeated entries in the list
 	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -not -type d | \
 		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed "s|$localDirEsc/||")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
-		cut -d ',' -f 2- | rev | sed "s|$configDirEsc/mnt/||")\n" | sort | uniq -u))
+		sed -r "s|$localDirEsc/||")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
+		cut -d ',' -f 2- | rev | sed -r "s|$configDirEsc/mnt/||")\n" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add 1 to it
@@ -596,11 +596,11 @@ syncDir() {
 		cut -d ',' -f 1 | rev | sort -nr | head -n 1 | \
 		awk '{print "scale=6; " $0 "+1"}' | bc)" 2> /dev/null
 
-	# go through files that have chaged since last sync one at a time
+	# go through files that have chaged since the last sync one at a time
 	for i in "${diffFiles[@]}"; do
 		if grep -Fq "$configDir/mnt/$i" "$configDir/priority.csv"; then
-			# file no longer present in local directory, remove from priority file
-			sed -i -e "s|^$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
+			# file is no longer present in local directory, remove from priority file
+			sed -i -r -e "s|^$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
 				-e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
@@ -696,7 +696,7 @@ syncDir() {
 		dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
 
 		# write directory priority to file
-		sed -i "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$|$i,$dirPriority|" \
+		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$|$i,$dirPriority|" \
 			"$dirPriorityFile"
 	done <"$dirPriorityFile"
 
@@ -826,12 +826,12 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
-			sed "s|$configDirEsc/mnt|$localDir|"))
+			sed -r "s|$configDirEsc/mnt|$localDir|"))
 		unset IFS
 		echo "done"
 	else
 		IFS=$'\n'
-		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed \
+		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed -r \
 			"s|$configDirEsc/mnt|$localDir|"))
 		unset IFS
 		echo "done"
@@ -846,7 +846,7 @@ syncDir() {
 
 	# remove symlinks to files marked for deletion
 	find "$configDir/mnt" -not -type d -name '.*.trash' | \
-		sed "s|$configDirEsc/mnt|$localDirEsc|" | xargs -d '\n' rm -f
+		sed -r "s|$configDirEsc/mnt|$localDirEsc|" | xargs -d '\n' rm -f
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
@@ -854,7 +854,7 @@ syncDir() {
 
 	# download (and remove from the server) excluded files that are still on the server
 	printf "Downloading new files... "
-	find "$configDir/mnt" -not -type d | sed "s|$configDirEsc/mnt||" | \
+	find "$configDir/mnt" -not -type d | sed -r "s|$configDirEsc/mnt||" | \
 		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}") | \
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
@@ -868,7 +868,7 @@ syncDir() {
 	printf "%s\n" "${dirPriorityArray[@]}" > "$dirPriorityFile"
 
 	# make all paths in directory priority file relative
-	sed -i "s|$configDirEsc/mnt/||" "$dirPriorityFile"
+	sed -i -r "s|$configDirEsc/mnt/||" "$dirPriorityFile"
 
 	# download directories that are in the directory priority file but not stored # locally
 	rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from="$dirPriorityFile" \
@@ -878,7 +878,7 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
 		# already been downloaded
-		printf "%s\n" "${extraFiles[@]}" | sed "s|$configDirEsc/mnt/||" | \
+		printf "%s\n" "${extraFiles[@]}" | sed -r "s|$configDirEsc/mnt/||" | \
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
 			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 	fi
@@ -1040,7 +1040,7 @@ agePriority() {
 	while read -r i; do
 		fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
 		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
-		sed -i "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
+		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
 			"$configDir/priority.csv"
 	done <"$configDir/priority.csv"
 }
