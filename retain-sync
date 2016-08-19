@@ -156,8 +156,8 @@ readConfig() {
 
 fileLock() {
 	# open lock file
-	exec {lockFD}>"$localDir/.retain-sync_lock"
-	flock -n $lockFD
+	exec 200>"$localDir/.retain-sync_lock"
+	flock -n 200
 
 	# run if lock file was already open
 	if [[ "$?" -ne 0 ]]; then
@@ -175,20 +175,7 @@ sshMaster() {
 
 	# all subsequent ssh commands (excluding sshfs)  will use this master connection
 	# instead of reconnecting each time
-	coproc sshMaster { ssh "${sshOptions[@]}" -NM "$remoteUser$remoteHost" 2>&1; } || exit 1
-
-	# open file descriptor with stdout of ssh master command
-	exec {sshFD}<&${sshMaster[0]}
-
-	# suppress certain output from ssh master command
-	while read -ru $sshFD i; do
-		if ! echo "$i" | grep -qEf <(cat <<-EOF
-			ControlSocket .* already exists, disabling multiplexing
-		EOF
-		); then
-			echo "$i"
-		fi
-	done &
+	ssh "${sshOptions[@]}" -fNM "$remoteUser$remoteHost"
 }
 
 genConfig() {
@@ -312,7 +299,7 @@ initializeDir() {
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
 		# drop the lock on this configuration (necessary becuase of sshfs)
-		flock -u $lockFD
+		flock -u 200
 
 		# inform user if initialization is interrupted
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -518,7 +505,7 @@ syncDir() {
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
 
 		# drop the lock on this configuration (necessary becuase of sshfs)
-		flock -u $lockFD
+		flock -u 200
 
 		# delete temp file
 		rm -f "$dirPriorityFile"
@@ -649,7 +636,7 @@ syncDir() {
 
 				# copy to server
 				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'mkdir -p "$(dirname "'$remoteDir/$i'")"'
+					'mkdir -p "$(dirname "'$remoteDir/$i'")"' || exit 1
 				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
 					"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 			fi
@@ -1010,7 +997,7 @@ emptyTrash() {
 	# get list of files marked for deletion
 	IFS=$'\n'
 	trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'find "'$remoteDir'" -not -type d -name ".*.trash"'))
+		'find "'$remoteDir'" -not -type d -name ".*.trash"')) || exit 1
 	unset IFS
 
 	# delete files if there are any
