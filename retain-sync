@@ -1017,7 +1017,7 @@ emptyTrash() {
 	if [[ "${#trashFiles[@]}" -ne 0 ]]; then
 		printf "Emptying trash... "
 		printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
-			"$remoteUser$remoteHost" 'xargs rm'
+			"$remoteUser$remoteHost" 'xargs -d "\n" rm'
 		echo "done"
 		echo "${#trashFiles[@]} files deleted"
 	else
