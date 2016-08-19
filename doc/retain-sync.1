@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-08-18" "" ""
+.TH RETAIN-SYNC 1 "2016-08-19" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they're accessed
 .SH SYNOPSIS
@@ -43,14 +43,18 @@ Suppress all normal output (errors are still printed).
 .RS 4
 Prepare the local directory \fIPATH\fR for syncing by moving it to the server and
 generating a configuration for it. The user will be prompted to give a name for the
-configuration, information about the server and the storage limit.
+configuration, information about the server and the storage limit. At the input prompts,
+all characters are taken literally except single quotes, double quotes and backslashes,
+which must be escaped. Backslash control sequences are not interpreted.
 .sp
 \fB-e\fR, \fB--exclude\fR \fIFILE\fR
 .RS 4
 Get a list of file/directory paths from \fIFILE\fR (one per line) that will be excluded
 from syncing, meaning that they will never leave the local machine (see
 \fBEXCLUDING\fR). If \fIFILE\fR is '-', then a newline-separated list of file paths will
-be accepted from stdin.
+be accepted from stdin. File paths specified here can be relative or absolute, and will
+be converted to the proper format and added to the 'exclude' file automatically once it
+is generated.
 .RE 1
 .PP
 \fBsync\fR \fICONFIG\fR|\fIPATH\fR
@@ -88,17 +92,24 @@ default, although this can be configured in the systemd unit file
 specific user, copy the unit file into ~/.config/systemd/user/ before editing it.
 .sp
 Whenever the \fBsync\fR command is run, \fBretain-sync\fR first tries to sync whole
-directories.  When a directory is synced, all subdirectories are included. Once no more
-whole directories can fit within the user-defined storage limit, \fBretain-sync\fR will
-try to sync individual files until the storage limit is reached. This behavior can be
-overridden by setting \fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config.
+directories. Directories are synced recursively, meaning that when a directory is
+synced, all subdirectories are included. Once no more whole directories can fit within
+the user-defined storage limit, \fBretain-sync\fR will try to sync individual files
+until the storage limit is reached. This behavior can be overridden by setting
+\fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config.
+.sp
+\fBretain-sync\fR uses rsync for copying files between the local and remote machines,
+and should preserve symbolic links, permissions, modification times, ownership, hard
+links, ACLs, extended attributes and sparse files as long as the remote filesystem
+supports them. It can also work with special files such as devices and sockets.
 .SH EXCLUDING
 \fBretain-sync\fR allows the user to define certain files or directories to be excluded
 from syncing, meaning that they will never leave the local machine. This is done in the
 \'exclude' file for that configuration (see \fBFILES\fR).  To keep user-created symbolic
 links from being clobbered, all symbolic links found in the local initialized directory
-are added to the exclude file automatically. The root of each file/directory path in the
-exclude file is anchored to the local initialized directory.
+that \fBretain-sync\fR didn't put there are added to the exclude file automatically.
+The root of each file/directory path in the exclude file is anchored to the local
+initialized directory.
 .SH TRASH
 Files that exist only on the server are represented locally as symbolic links. Whenever
 the \fBsync\fR command is run, local files (including these symbolic links) that were
