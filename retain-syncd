@@ -5,8 +5,7 @@ configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
 # check if specified config exists
 if ! [[ -d "$configDir" ]]; then
-	printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n" | \
-		systemd-cat -p err -t 'retain-syncd'
+	>&2 printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n"
 	exit 1
 fi
 
@@ -23,8 +22,7 @@ while read -r i; do
 
 	# run if line is missing an equals sign
 	if ! [[ "$i" =~ = ]]; then
-		echo "Error: line $lineNumber of config file: unrecognized syntax" | \
-			systemd-cat -p err -t 'retain-syncd'
+		>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
 		((configError++))
 	fi
 
@@ -45,8 +43,7 @@ while read -r i; do
 		inflatePriority
 	EOF
 	); then
-		printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'" | \
-			systemd-cat -p err -t 'retain-syncd'
+		>&2 printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
 		((configError++))
 	fi
 
@@ -58,7 +55,7 @@ while read -r i; do
 	EOF
 	); then
 		if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
-			printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+			>&2 printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
 			((configError++))
 		fi
 	fi
@@ -84,10 +81,8 @@ localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
 
 # check if initialization was interrupted
 if [[ -f "$localDir/.retain-sync_part" ]]; then
-	echo "Initialization of this directory was interrupted." | \
-		systemd-cat -p err -t 'retain-syncd'
-	printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n" | \
-		systemd-cat -p err -t 'retain-syncd'
+	>&2 echo "Initialization of this directory was interrupted."
+	>&2 printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
 	exit 1
 fi
 
@@ -95,7 +90,7 @@ fi
 mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
 if [[ $? -ne 0 ]]; then
-	echo "Error: unable to mount remote directory over sshfs" | systemd-cat -p err -t 'retain-syncd'
+	>&2 echo "Error: unable to mount remote directory over sshfs"
 	exit 1
 fi
 
@@ -153,6 +148,5 @@ remoteWatch &
 # to local files can still be recorded without an internet connection
 wait
 
-echo "Error: monitoring failed on both local and remote directories" | \
-	systemd-cat -p err -t 'retain-syncd'
+>&2 echo "Error: monitoring failed on both local and remote directories"
 exit 1
