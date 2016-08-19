@@ -600,7 +600,7 @@ syncDir() {
 	for i in "${diffFiles[@]}"; do
 		if grep -Fq "$configDir/mnt/$i" "$configDir/priority.csv"; then
 			# file no longer present in local directory, remove from priority file
-			sed -i -e "s|$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
+			sed -i -e "s|^$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
 				-e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
@@ -778,7 +778,7 @@ syncDir() {
 
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
-			noSyncSorted+=($(grep -Ex "$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
+			noSyncSorted+=($(grep -Ex "^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
 				"$configDir/priority.csv"))
 		done
 
@@ -1040,7 +1040,7 @@ agePriority() {
 	while read -r i; do
 		fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
 		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
-		sed -i "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
+		sed -i "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
 			"$configDir/priority.csv"
 	done <"$configDir/priority.csv"
 }
