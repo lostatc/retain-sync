@@ -95,43 +95,64 @@ fi
 mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
 if [[ $? -ne 0 ]]; then
-	echo "Error: unable to mount sshfs share" | systemd-cat -p err -t 'retain-syncd'
+	echo "Error: unable to mount remote directory over sshfs" | systemd-cat -p err -t 'retain-syncd'
 	exit 1
 fi
 
-fileWatch() {
-	while true; do
-		# wait for a file to be opened
-		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" "$configDir/mnt" | \
-			sed "s|$localDirEsc|$configDir/mnt|")"
+fileParse() {
+	fileName="$1"
 
-		# make sure file is a normal file and not hidden or under a hidden directory
-		if [[ -f "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
-			# test if file exists in priority.csv
-			fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
+	# make sure file is not a directory and not hidden or under a hidden directory
+	if [[ ! -d "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
+		# test if file exists in priority.csv
+		fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
 
-			if [ "$?" -eq 0 ]; then
-				# file exists, increase file priority by one
-				newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
-					cut -d ',' -f 1 | rev)+1" | bc)
-				sed -i "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
-					"$configDir/priority.csv"
-			else
-				# new file, priority will be set on next sync operation
-				continue
-			fi
+		if [ "$?" -eq 0 ]; then
+			# file exists, increase file priority by one
+			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
+				cut -d ',' -f 1 | rev)+1" | bc)
+			sed -i "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
+				"$configDir/priority.csv"
+
+			# sleep to prevent file access from being registered multiple times
+			sleep 1
 		else
-			# file is hidden or not a normal file
+			# new file, priority will be set on next sync operation
 			continue
 		fi
+	else
+		# file is hidden or not a normal file
+		continue
+	fi
+}
 
-		# sleep to prevent file access from being registered multiple times
-		sleep 1
+localWatch() {
+	while true; do
+		# wait for a file to be opened
+		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
+			sed "s|$localDirEsc|$configDir/mnt|")" || break
+
+		fileParse "$fileName"
 	done
 }
 
-fileWatch &
+remoteWatch() {
+	while true; do
+		# wait for a file to be opened
+		fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" | \
+			sed "s|$localDirEsc|$configDir/mnt|")" || break
 
-# create PIDfile
-mkdir -p "$XDG_RUNTIME_DIR/retain-sync"
-echo "$!" > "$XDG_RUNTIME_DIR/retain-sync/retain-syncd.pid"
+		fileParse "$fileName"
+	done
+}
+
+localWatch &
+remoteWatch &
+
+# wait until monitoring fails on both directories before exiting daemon so that access
+# to local files can still be recorded without an internet connection
+wait
+
+echo "Error: monitoring failed on both local and remote directories" | \
+	systemd-cat -p err -t 'retain-syncd'
+exit 1

@@ -946,8 +946,9 @@ retrieveDir() {
 	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
 		echo "done" || exit 1
 
-	# unmount sshfs, remove init file, lock file and config directory
 	printf "Cleaning up... "
+
+	# unmount sshfs, remove init file, lock file and config directory
 	if mountpoint -q "$configDir/mnt" || [[ ! -d "$configDir/mnt" ]]; then
 		fusermount -u "$configDir/mnt" || exit 1
 	fi

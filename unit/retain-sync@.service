@@ -5,9 +5,8 @@ Requires=retain-sync-age@%i.timer
 Wants=retain-sync-resync@%i.timer
 
 [Service]
-Type=forking
+Type=simple
 ExecStart=/usr/local/bin/retain-syncd %i
-PIDFile=%t/retain-sync/retain-syncd.pid
 StandardOutput=journal
 StandardError=journal
 
