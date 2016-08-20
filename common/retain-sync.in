@@ -1049,6 +1049,18 @@ agePriority() {
 	done <"$configDir/priority.csv"
 }
 
+# check for dependencies
+[[ ! -x "$(which rsync 2> /dev/null)" ]] && \
+    printf "Error: missing dependency \'rsync\'\n" && exit 1
+[[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
+    printf "Error: missing dependency \'sshfs\'\n" && exit 1
+[[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
+    printf "Error: missing dependency \'inotify-tools\'\n" && exit 1
+[[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
+    printf "Error: missing dependency \'systemd\'\n" && exit 1
+[[ ! -x "$(which bc 2> /dev/null)" ]] && \
+    printf "Error: missing dependency \'bc\'\n" && exit 1
+
 # parse global options
 for ((i=1; i<=$#; i++)); do
 	# Note: getopt isn't being used here because getopt doesn't allow for

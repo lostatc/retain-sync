@@ -106,7 +106,7 @@ fileParse() {
 			# file exists, increase file priority by one
 			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
 				cut -d ',' -f 1 | rev)+1" | bc)
-			sed -i "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
+			sed -i -r "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
 				"$configDir/priority.csv"
 
 			# sleep to prevent file access from being registered multiple times
@@ -125,7 +125,7 @@ localWatch() {
 	while true; do
 		# wait for a file to be opened
 		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
-			sed "s|$localDirEsc|$configDir/mnt|")" || break
+			sed -r "s|$localDirEsc|$configDir/mnt|")" || break
 
 		fileParse "$fileName"
 	done
@@ -135,7 +135,7 @@ remoteWatch() {
 	while true; do
 		# wait for a file to be opened
 		fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" | \
-			sed "s|$localDirEsc|$configDir/mnt|")" || break
+			sed -r "s|$localDirEsc|$configDir/mnt|")" || break
 
 		fileParse "$fileName"
 	done
