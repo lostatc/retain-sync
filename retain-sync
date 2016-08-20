@@ -477,7 +477,11 @@ initializeDir() {
 	# mount sshfs
 	mkdir -p "$configDir/mnt"
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
+		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
+	if [[ $? -ne 0 ]]; then
+		>&2 echo "Error: unable to mount remote directory over sshfs"
+		exit 1
+	fi
 
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "${localFiles[@]}" ]]; then
@@ -548,7 +552,11 @@ syncDir() {
 
 	# mount sshfs
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt" || exit 1
+		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
+	if [[ $? -ne 0 ]]; then
+		>&2 echo "Error: unable to mount remote directory over sshfs"
+		exit 1
+	fi
 
 	printf "Checking for new files... "
 
@@ -634,11 +642,20 @@ syncDir() {
 					echo "$configDir/mnt/$i,0" >> "$configDir/priority.csv"
 				fi
 
-				# copy to server
-				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'mkdir -p "$(dirname "'$remoteDir/$i'")"' || exit 1
-				rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
-					"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
+				# check if there's enough space on the server for the file
+				remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+					'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}') || exit 1
+				if [[ "$(du -b "$i" | awk '{print $1}')" -gt "$remoteSpace" ]]; then
+					# not enough space
+					>&2 printf "\nError: not enough space on the server\n"
+					exit 1
+				else
+					# copy file to server
+					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+						'mkdir -p "$(dirname "'$remoteDir/$i'")"' || exit 1
+					rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
+						"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
+				fi
 			fi
 		fi
 	done
