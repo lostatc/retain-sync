@@ -6,7 +6,7 @@ Wants=retain-sync-resync@%i.timer
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/retain-syncd %i
+ExecStart=@DAEMON@ %i
 StandardOutput=journal
 StandardError=journal
 

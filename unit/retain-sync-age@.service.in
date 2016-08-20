@@ -4,6 +4,6 @@ Documentation=man:retain-sync(1)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/retain-sync age %i
+ExecStart=@PROGRAM@ age %i
 StandardOutput=journal
 StandardError=journal
