@@ -541,15 +541,6 @@ syncDir() {
 		exit 1
 	fi
 
-	# remove excluded files from priority.csv
-	while read -r i; do
-		[[ "$i" =~ ^$ ]] && continue # skip line if empty
-		[[ "$i" =~ ^# ]] && continue # skip line if a comment
-
-		fullPath="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir/mnt$i")"
-		sed -i -r -e "s|^$fullPath,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
-	done <"$configDir/exclude"
-
 	# mount sshfs
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
@@ -569,6 +560,13 @@ syncDir() {
 		i="$localDir$i"
 		[[ -e "$i" ]] && excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
 	done <"$configDir/exclude"
+
+	# remove excluded files from priority.csv
+	for i in "${excludeFiles[@]}"; do
+		i="$(sed -r "s|$localDirEsc|$configDir/mnt|" <<< "$i")"
+		sed -i -r -e "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" -e '/^$/d' \
+			"$configDir/priority.csv"
+	done
 
 	# remove broken symlinks that aren't in the exclude file
 	find "$localDir" -xtype l | grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
@@ -859,7 +857,7 @@ syncDir() {
 	# download (and remove from the server) excluded files that are still on the server
 	printf "Downloading new files... "
 	find "$configDir/mnt" -not -type d | sed -r "s|$configDirEsc/mnt||" | \
-		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}") | \
+		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | \
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
@@ -1018,7 +1016,7 @@ emptyTrash() {
 	unset IFS
 
 	# delete files if there are any
-	if [[ "${#trashFiles[@]}" -ne 0 ]]; then
+	if [[ "${#trashFiles[@]}" -gt 0 ]]; then
 		printf "Emptying trash... "
 		printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
 			"$remoteUser$remoteHost" 'xargs -d "\n" rm'
