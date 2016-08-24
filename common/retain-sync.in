@@ -541,7 +541,11 @@ syncDir() {
 		exit 1
 	fi
 
-	# mount sshfs
+	# umount sshfs if mountpoint is broken
+	mkdir -p "$configDir/mnt" 2> /dev/null
+	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+
+	# mount sshfs if not already mounted
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
 	if [[ $? -ne 0 ]]; then

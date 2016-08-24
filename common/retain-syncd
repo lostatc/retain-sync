@@ -86,6 +86,10 @@ if [[ -f "$localDir/.retain-sync_part" ]]; then
 	exit 1
 fi
 
+# umount sshfs if mountpoint is broken
+mkdir -p "$configDir/mnt" 2> /dev/null
+[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+
 # mount sshfs if not already mounted
 mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
