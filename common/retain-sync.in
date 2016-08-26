@@ -326,12 +326,12 @@ initializeDir() {
 
 	# check argument for --exclude option
 	if [[ -n "$optExcludeFile" ]]; then
-		if [[ -f "$optExcludeFile" ]]; then
-			# read contents of exclude input file to array
-			mapfile -t excludeInputFiles < "$optExcludeFile"
-		elif [[ "$optExcludeFile" == "-" ]]; then
+		if [[ "$optExcludeFile" == "-" ]]; then
 			# read contents of stdin to array
 			mapfile -t excludeInputFiles
+		elif [[ -f "$optExcludeFile" ]]; then
+			# read contents of exclude input file to array
+			mapfile -t excludeInputFiles < "$optExcludeFile"
 		else
 			# argument is invalid
 			>&2 echo "Error: input file is invalid"
@@ -1070,19 +1070,23 @@ agePriority() {
 [[ ! -x "$(which bc 2> /dev/null)" ]] && \
     printf "Error: missing dependency \'bc\'\n" && exit 1
 
-# parse global options
+# parse options
 for ((i=1; i<=$#; i++)); do
 	# Note: getopt isn't being used here because getopt doesn't allow for
 	# parameters to have their own options
 
-	# if parameter is multiple short options sandwitched together, separate them
-	if [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
-		set -- ${@:1:$((i-1))} $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") ${@:$((i+1))}
+	# if parameter is a double dash, stop parsing options
+    if [[ "${@:$i:1}" == "--" ]]; then
+        break
+
+	# if parameter is multiple short options sharing a hyphen, separate them
+	elif [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
+		set -- "${@:1:$((i-1))}" $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") "${@:$((i+1))}"
 
 	# if parameter is a long option with an argument separated by an equals
 	# sign, replace the equals sign with a space
 	elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
-		set -- ${@:1:$((i-1))} $(sed -e 's/=/ /' <<< "${@:$i:1}") ${@:$((i+1))}
+		set -- "${@:1:$((i-1))}" $(sed -e 's/=/ /' <<< "${@:$i:1}") "${@:$((i+1))}"
 	fi
 done
 
@@ -1098,6 +1102,9 @@ while [[ "$1" =~ ^- ]]; do
 		-q|--quiet)
 			exec > /dev/null
 			shift ;;
+		--)
+			shift
+			break ;;
 		*)
 			>&2 echo "Error: unknown option"
 			>&2 printf "Try \'retain-sync --help\' for more information.\n"
@@ -1105,7 +1112,7 @@ while [[ "$1" =~ ^- ]]; do
 	esac
 done
 
-# read subcommands
+# read subcommand
 case "$1" in
 	'')
 		>&2 echo "Error: missing argument"
@@ -1114,28 +1121,15 @@ case "$1" in
 	initialize)
 		shift
 
-		# parse options
-		for ((i=1; i<=$#; i++)); do
-			# Note: getopt isn't being used here because getopt doesn't allow for
-			# parameters to have their own options
-
-			# if parameter is multiple short options sandwitched together, separate them
-			if [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
-				set -- ${@:1:$((i-1))} $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") ${@:$((i+1))}
-
-			# if parameter is a long option with an argument separated by an equals
-			# sign, replace the equals sign with a space
-			elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
-				set -- ${@:1:$((i-1))} $(sed -e 's/=/ /' <<< "${@:$i:1}") ${@:$((i+1))}
-			fi
-		done
-
 		# read options
 		while [[ "$1" =~ ^- ]]; do
 			case "$1" in
 				-e|--exclude)
 					optExcludeFile="$2"
 					shift 2 ;;
+				--)
+					shift
+					break ;;
 				*)
 					>&2 echo "Error: unknown option"
 					>&2 printf "Try \'retain-sync --help\' for more information.\n"
