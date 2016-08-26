@@ -305,6 +305,8 @@ initializeDir() {
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
 			printf "\nInitialization was interrupted.\n"
 			printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
+			rm -rf "$configDir"
 		fi
 	}
 
@@ -390,9 +392,6 @@ initializeDir() {
 		# escape paths for use in sed substitutions
 		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
 
-		# generate file indicating that the initialization process is in progress
-		echo "$configName" > "$localDir/.retain-sync_part"
-
 		# start ssh master connection
 		sshMaster
 
@@ -404,6 +403,9 @@ initializeDir() {
 			>&2 printf "\nError: remote directory is not empty\n"
 			exit 1
 		fi
+
+		# generate file indicating that the initialization process is in progress
+		echo "$configName" > "$localDir/.retain-sync_part"
 	else
 		echo "Resuming initialization..."
 
