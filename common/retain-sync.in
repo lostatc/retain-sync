@@ -98,6 +98,7 @@ readConfig() {
 			localDir
 			remoteUser
 			remoteHost
+			port
 			remoteDir
 			storageLimit
 			sshfsOptions
@@ -135,13 +136,13 @@ readConfig() {
 	deleteAlways="${deleteAlways:-no}"
 	syncExtraFiles="${syncExtraFiles:-yes}"
 	inflatePriority="${inflatePriority:-yes}"
-	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3 -p "$port")
 
 	# format variables
 	localDir="${localDir%/}"
 	remoteDir="${remoteDir%/}"
 	remoteUser="${remoteUser:+$remoteUser@}"
-	sshfsOptions=(-o "$sshfsOptions")
+	sshfsOptions=(-o "$sshfsOptions" -p "$port")
 	storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
 		-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
 	deleteAlways="${deleteAlways,,}"
@@ -218,6 +219,21 @@ genConfig() {
 		fi
 	done
 
+	# prompt user for port number
+	while true; do
+		read -erp "Enter the port number to connect to on the remote machine (defaults to port 22): " port </dev/tty
+		if [[ -z "$port" ]]; then
+			port=22
+			break
+		elif ! [[ "$port" =~ ^[0-9]+$ ]]; then
+			>&2 echo "Error: value must be a number in the range 0-65535"
+		elif [[ "$port" -lt 1 || "$port" -gt 65535 ]]; then
+			>&2 echo "Error: value must be a number in the range 0-65535"
+		else
+			break
+		fi
+	done
+
 	# prompt user for directory to sync to on remote machine
 	while true; do
 		read -erp "Enter the directory to sync to on the remote machine: " remoteDir </dev/tty
@@ -234,8 +250,7 @@ genConfig() {
 	# prompt user for storage limit
 	while true; do
 		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit </dev/tty
-		storageLimit="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$storageLimit")"
-		if [[ ! "$storageLimit" =~ [0-9]+[KMG] ]]; then
+		if [[ ! "$storageLimit" =~ ^[0-9]+[KMG]$ ]]; then
 			>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
 			break
@@ -258,7 +273,6 @@ genConfig() {
 		# retain-sync config
 		#
 
-
 		# directory to sync on local machine
 		localDir=$localDir
 
@@ -267,6 +281,9 @@ genConfig() {
 
 		# hostname, ip address or domain name of remote machine
 		remoteHost=$remoteHost
+
+		# port number to connect to on remote machine
+		port=$port
 
 		# directory to sync to on remote machine
 		remoteDir=$remoteDir
@@ -381,13 +398,13 @@ initializeDir() {
 
 		# set defaults
 		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
-		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3)
+		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3 -p "$port")
 
 		# format variables
 		localDir="${localDir%/}"
 		remoteDir="${remoteDir%/}"
 		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions=(-o "$sshfsOptions")
+		sshfsOptions=(-o "$sshfsOptions" -p "$port")
 
 		# escape paths for use in sed substitutions
 		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"

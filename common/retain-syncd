@@ -35,6 +35,7 @@ while read -r i; do
 		localDir
 		remoteUser
 		remoteHost
+		port
 		remoteDir
 		storageLimit
 		sshfsOptions
@@ -74,7 +75,7 @@ sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMa
 localDir="${localDir%/}"
 remoteDir="${remoteDir%/}"
 remoteUser="${remoteUser:+$remoteUser@}"
-sshfsOptions=(-o "$sshfsOptions")
+sshfsOptions=(-o "$sshfsOptions" -p "$port")
 
 # escape paths for use in sed substitutions
 localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
