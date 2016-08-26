@@ -617,7 +617,11 @@ syncDir() {
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 					# file is in trash, delete corresponding file on the server
-					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'rm -f "'$remoteDir/$i'"' || exit 1
+
+					# Note: we are going through the mountpoint becuase deleting the file using the
+					# ssh command causes sshfs to pretend that the file is still there until someone
+					# actually looks inside the mountpoint to update it
+					rm -f "$configDir/mnt/$i" || exit 1
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
 					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
@@ -626,8 +630,11 @@ syncDir() {
 				fi
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
-				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'rm -f "'$remoteDir/$i'"' || exit 1
+
+				# Note: we are going through the mountpoint becuase deleting the file using the
+				# ssh command causes sshfs to pretend that the file is still there until someone
+				# actually looks inside the mountpoint to update it
+				rm -f "$configDir/mnt/$i" || exit 1
 			fi
 		else
 			# new file
@@ -647,7 +654,7 @@ syncDir() {
 				# check if there's enough space on the server for the file
 				remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 					'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}') || exit 1
-				if [[ "$(du -b "$i" | awk '{print $1}')" -gt "$remoteSpace" ]]; then
+				if [[ "$(du -b "$localDir/$i" | awk '{print $1}')" -gt "$remoteSpace" ]]; then
 					# not enough space
 					>&2 printf "\nError: not enough space on the server\n"
 					exit 1
