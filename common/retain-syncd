@@ -1,5 +1,37 @@
 #!/usr/bin/env bash
 
+cleanup() {
+	kill "$sshfsPID"
+	kill "$localPID"
+}
+
+fileParse() {
+	fileName="$1"
+
+	# make sure file is not a directory and not hidden or under a hidden directory
+	if [[ ! -d "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
+		# test if file exists in priority.csv
+		fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
+
+		if [ "$?" -eq 0 ]; then
+			# file exists, increase file priority by one
+			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
+				cut -d ',' -f 1 | rev)+1" | bc)
+			sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
+				"$configDir/priority.csv"
+
+			# sleep to prevent file access from being registered multiple times
+			sleep 1
+		else
+			# new file, priority will be set on next sync operation
+			continue
+		fi
+	else
+		# file is hidden or not a normal file
+		continue
+	fi
+}
+
 configName="$1"
 configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
@@ -69,7 +101,7 @@ done <"$configDir/config"
 [[ ! "$configError" -ne 0 ]] || exit 1
 
 # set defaults
-sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
+sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 
 # format variables
 localDir="${localDir%/}"
@@ -89,76 +121,45 @@ fi
 
 # get environment variables for ssh-agent that aren't available when retain-sync is
 # run as a systemd service (there has to be a better way to do this)
-[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(pgrep -U "$USER" \
-	ssh-agent | head -n 1)"
-[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -path "*ssh*" \
-	-type s -iname "agent.$((SSH_AGENT_PID - 1))" 2> /dev/null)"
+[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(ps aux | grep "garrett" | \
+    grep "ssh-agent" | grep -v "grep" | awk '{print $2}' | sort -n | head -n 1)"
+[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+    -path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
 
-# umount sshfs if mountpoint is broken
-mkdir -p "$configDir/mnt" 2> /dev/null
-[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+while true; do
+	# systemd user services can't reference system targets like network-online.target,
+	# so we need to have an endless loop here
 
-# mount sshfs if not already mounted
-mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-	"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
-if [[ $? -ne 0 ]]; then
-	>&2 echo "Error: unable to mount remote directory over sshfs"
-	exit 1
-fi
+	# umount sshfs if mountpoint is broken
+	mkdir -p "$configDir/mnt" 2> /dev/null
+	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
-fileParse() {
-	fileName="$1"
-
-	# make sure file is not a directory and not hidden or under a hidden directory
-	if [[ ! -d "$fileName" ]] && [[ ! "${fileName//$configDir/}" =~ /\. ]]; then
-		# test if file exists in priority.csv
-		fileLine=$(grep -F "$fileName" "$configDir/priority.csv")
-
-		if [ "$?" -eq 0 ]; then
-			# file exists, increase file priority by one
-			newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
-				cut -d ',' -f 1 | rev)+1" | bc)
-			sed -i -r "s|$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,$newPriority|" \
-				"$configDir/priority.csv"
-
-			# sleep to prevent file access from being registered multiple times
-			sleep 1
-		else
-			# new file, priority will be set on next sync operation
-			continue
-		fi
+	if ! mountpoint -q "$configDir/mnt"; then
+		# mount sshfs
+		sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
+			"$configDir/mnt" 2> /dev/null
 	else
-		# file is hidden or not a normal file
-		continue
+		sleep 10
 	fi
-}
+done &
+sshfsPID="$!"
 
-localWatch() {
-	while true; do
-		# wait for a file to be opened
-		fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
-			sed -r "s|$localDirEsc|$configDir/mnt|")" || break
+while true; do
+	# wait for a file to be opened in local dir
+	fileName="$(inotifywait -qre open --format '%w%f' "$localDir" | \
+		sed -r "s|$localDirEsc|$configDir/mnt|")"
 
-		fileParse "$fileName"
-	done
-}
+	fileParse "$fileName"
+done &
+localPID="$!"
 
-remoteWatch() {
-	while true; do
-		# wait for a file to be opened
-		fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" | \
-			sed -r "s|$localDirEsc|$configDir/mnt|")" || break
+# run cleanup function on script exit
+trap cleanup EXIT
 
-		fileParse "$fileName"
-	done
-}
+while true; do
+	# wait for a file to be opened in remote dir
+	fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" | \
+		sed -r "s|$localDirEsc|$configDir/mnt|")" &> /dev/null
 
-localWatch &
-remoteWatch &
-
-# wait until monitoring fails on both directories before exiting daemon so that access
-# to local files can still be recorded without an internet connection
-wait
-
->&2 echo "Error: monitoring failed on both local and remote directories"
-exit 1
+	fileParse "$fileName"
+done

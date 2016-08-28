@@ -1,8 +1,8 @@
 [Unit]
 Description=Watch for file access in a specific directory
 Documentation=man:retain-sync(1)
-Requires=retain-sync-age@%i.timer
 Wants=retain-sync-resync@%i.timer
+Requires=retain-sync-age@%i.timer
 
 [Service]
 Type=simple
@@ -11,4 +11,4 @@ StandardOutput=journal
 StandardError=journal
 
 [Install]
-WantedBy=network-online.service
+WantedBy=default.target

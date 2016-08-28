@@ -2,6 +2,7 @@
 Description=Pull commonly accessed files from a server
 Documentation=man:retain-sync(1)
 PartOf=retain-sync@%i.service
+After=retain-sync@%i.service
 
 [Timer]
 OnBootSec=5m

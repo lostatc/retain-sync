@@ -132,11 +132,11 @@ readConfig() {
 	[[ ! $configError -ne 0 ]] || exit 1
 
 	# set defaults
-	sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
+	sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 	deleteAlways="${deleteAlways:-no}"
 	syncExtraFiles="${syncExtraFiles:-yes}"
 	inflatePriority="${inflatePriority:-yes}"
-	sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3 -p "$port")
+	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$port")
 
 	# format variables
 	localDir="${localDir%/}"
@@ -258,7 +258,7 @@ genConfig() {
 	done
 
 	# set default options
-	sshfsOptions="reconnect,ServerAliveInterval=7,ServerAliveCountMax=3"
+	sshfsOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"
 	deleteAlways="no"
 	syncExtraFiles="yes"
 	inflatePriority="yes"
@@ -397,8 +397,8 @@ initializeDir() {
 		genConfig
 
 		# set defaults
-		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=7,ServerAliveCountMax=3}"
-		sshOptions=(-o ServerAliveInterval=7 -o ServerAliveCountMax=3 -p "$port")
+		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
+		sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$port")
 
 		# format variables
 		localDir="${localDir%/}"
@@ -545,10 +545,10 @@ syncDir() {
 
 	# get environment variables for ssh-agent that aren't available when retain-sync is
 	# run as a systemd service (there has to be a better way to do this)
-	[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(pgrep -U "$USER" \
-		ssh-agent | head -n 1)"
-	[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -path "*ssh*" \
-		-type s -iname "agent.$((SSH_AGENT_PID - 1))" 2> /dev/null)"
+	[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(ps aux | grep "garrett" | \
+		grep "ssh-agent" | grep -v "grep" | awk '{print $2}' | sort -n | head -n 1)"
+	[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+		-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
 
 	# start ssh master connection
 	sshMaster
@@ -640,12 +640,11 @@ syncDir() {
 					# Note: we are going through the mountpoint becuase deleting the file using the
 					# ssh command causes sshfs to pretend that the file is still there until someone
 					# actually looks inside the mountpoint to update it
-					rm -f "$configDir/mnt/$i" || exit 1
+					rm "$configDir/mnt/$i" || exit 1
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
-					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-						'mv "'$remoteDir/$i'" "'$remoteDir'/$(dirname "'$i'")/.$(basename "'$i'").trash"' || \
-						exit 1
+					mv "$configDir/mnt/$i" \
+						"$configDir/mnt/$(dirname "$i")/.$(basename "$i").trash" || exit 1
 				fi
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
@@ -653,7 +652,7 @@ syncDir() {
 				# Note: we are going through the mountpoint becuase deleting the file using the
 				# ssh command causes sshfs to pretend that the file is still there until someone
 				# actually looks inside the mountpoint to update it
-				rm -f "$configDir/mnt/$i" || exit 1
+				rm "$configDir/mnt/$i" || exit 1
 			fi
 		else
 			# new file
