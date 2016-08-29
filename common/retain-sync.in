@@ -1028,8 +1028,22 @@ listConfigs() {
 }
 
 emptyTrash() {
+	cleanup() {
+		# stop ssh master connection
+		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.socket "$remoteUser$remoteHost" &> /dev/null
+	}
+
 	# read config file
 	readConfig "$1"
+
+	# lock this configuration
+	fileLock
+
+	# run cleanup function on script exit
+	trap cleanup EXIT
+
+	# start ssh master connection
+	sshMaster
 
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
