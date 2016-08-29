@@ -62,11 +62,11 @@ readConfig() {
 			localDir="${1%/}"
 			configName=$(cat "$localDir/.retain-sync_part")
 		else
-			>&2 printf "Error: \'$1\' is not an initialized directory\n"
+			>&2 echo "Error: '$1' is not an initialized directory"
 			exit 1
 		fi
 	else
-		>&2 printf "Error: \'$1\' is not a valid configuration or an absolute path\n"
+		>&2 echo "Error: '$1' is not a valid configuration or an absolute path"
 		exit 1
 	fi
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
@@ -107,7 +107,7 @@ readConfig() {
 			inflatePriority
 		EOF
 		); then
-			>&2 printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'\n"
+			>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
 			((configError++))
 		fi
 
@@ -119,7 +119,7 @@ readConfig() {
 		EOF
 		); then
 			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
-				>&2 printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+				>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
 				((configError++))
 			fi
 		fi
@@ -320,8 +320,8 @@ initializeDir() {
 
 		# inform user if initialization is interrupted
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
-			printf "\nInitialization was interrupted.\n"
-			printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+			printf "\n%s\n" "Initialization was interrupted."
+			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
 			rm -rf "$configDir"
 		fi
@@ -339,7 +339,7 @@ initializeDir() {
 
 	# check if local directory exists
 	if ! [[ -d "$1" ]]; then
-		>&2 printf "Error: no such directory \'$localDir\'\n"
+		>&2 echo "Error: no such directory '$localDir'"
 		exit 1
 	fi
 
@@ -368,8 +368,7 @@ initializeDir() {
 	if [[ ! -f "$localDir/.retain-sync_part" ]]; then
 		# check if directory has already been initialized
 		if [[ -f "$localDir/.retain-sync_init" ]]; then
-			>&2 printf "Error: the specified directory has already been initialized by \'$(cat \
-				"$localDir/.retain-sync_init")\'.\n"
+			>&2 echo "Error: the specified directory has already been initialized by '$(cat "$localDir/.retain-sync_init")'"
 			exit 1
 		fi
 
@@ -386,7 +385,7 @@ initializeDir() {
 			localTreeTest=($(find "$localDirTest" -type d))
 			localTree=($(find "$localDir" -type d))
 			if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
-				>&2 printf "Error: the specified directory overlaps with the configuration \'$(basename "$i")\'\n"
+				>&2 echo "Error: the specified directory overlaps with the configuration '$(basename "$i")'"
 				exit 1
 			fi
 		done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 \
@@ -413,11 +412,11 @@ initializeDir() {
 		sshMaster
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || exit 1
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || exit 1
 
 		# check if remote directory is empty
-		if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -mindepth 1')" ]]; then
-			>&2 printf "\nError: remote directory is not empty\n"
+		if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
+			>&2 printf "\n%s\n" "Error: remote directory is not empty"
 			exit 1
 		fi
 
@@ -433,17 +432,17 @@ initializeDir() {
 		sshMaster
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'mkdir -p "'$remoteDir'"' || \
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || \
 			exit 1
 	fi
 
 	# check if there is enough space on the server
-	printf "\nChecking space requirement... "
+	printf "\n%s" "Checking space requirement... "
 	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}')
+		"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ "$localSize" -gt "$remoteSpace" ]]; then
-		>&2 printf "\nError: not enough space on the server\n"
+		>&2 printf "\n%s\n" "Error: not enough space on the server"
 		exit 1
 	else
 		echo "done"
@@ -488,7 +487,7 @@ initializeDir() {
 	fi
 
 	# copy local files to the server
-	printf "Copying local files to server... "
+	printf "%s" "Copying local files to server... "
 	rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
 		--exclude-from="$configDir/exclude" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
@@ -504,7 +503,7 @@ initializeDir() {
 
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "${localFiles[@]}" ]]; then
-		printf "Replacing local files with symbolic links... "
+		printf "%s" "Replacing local files with symbolic links... "
 		cp -asf "$configDir"/mnt/* "$localDir" && echo "done"
 	fi
 
@@ -518,8 +517,8 @@ initializeDir() {
 	mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
 
 	# advise user to start/enable the daemon
-	printf "\nRun \'systemctl --user start retain-sync@$configName.service\' to start the daemon.\n"
-	printf "Run \'systemctl --user enable retain-sync@$configName.service\' to start the daemon automatically on login.\n"
+	printf "\n%s\n" "Run 'systemctl --user start retain-sync@$configName.service' to start the daemon."
+	echo "Run 'systemctl --user enable retain-sync@$configName.service' to start the daemon automatically on login."
 }
 
 syncDir() {
@@ -545,10 +544,12 @@ syncDir() {
 
 	# get environment variables for ssh-agent that aren't available when retain-sync is
 	# run as a systemd service (there has to be a better way to do this)
-	[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(ps aux | grep "garrett" | \
-		grep "ssh-agent" | grep -v "grep" | awk '{print $2}' | sort -n | head -n 1)"
-	[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+	[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
+		head -n 1)"
+	[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
 		-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+	export SSH_AGENT_PID
+	export SSH_AUTH_SOCK
 
 	# start ssh master connection
 	sshMaster
@@ -556,7 +557,7 @@ syncDir() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 		exit 1
 	fi
 
@@ -572,7 +573,7 @@ syncDir() {
 		exit 1
 	fi
 
-	printf "Checking for new files... "
+	printf "%s" "Checking for new files... "
 
 	# read contents of exclude file into an array of file paths
 	IFS=$'\n'
@@ -601,10 +602,10 @@ syncDir() {
 	#	 file (making paths relative)
 	# 2) concatenate list of files in priority.csv (making paths relative)
 	# 3) remove all repeated entries in the list
-	diffFiles=($(printf "$(find "$localDir" -not -path '*/\.*' -not -type d | \
+	diffFiles=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -not -type d | \
 		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed -r "s|$localDirEsc/||")\n$(grep -v '^#' "$configDir/priority.csv" | rev | \
-		cut -d ',' -f 2- | rev | sed -r "s|$configDirEsc/mnt/||")\n" | sort | uniq -u))
+		sed -r "s|$localDirEsc/||")" "$(grep -v '^#' "$configDir/priority.csv" | rev | \
+		cut -d ',' -f 2- | rev | sed -r "s|$configDirEsc/mnt/||")" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add 1 to it
@@ -660,7 +661,7 @@ syncDir() {
 				# file is a symlink, add to exclude file
 				echo "/$i" >> "$configDir/exclude"
 			else
-				# file is not a symlink
+				# file is not a symlink, add to priority.csv
 				if [[ "$inflatePriority" == "yes" ]]; then
 					# set priority so that it's at the top
 					echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
@@ -671,15 +672,15 @@ syncDir() {
 
 				# check if there's enough space on the server for the file
 				remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					'df -B 1 "'$remoteDir'"' | tail -n 1 | awk '{print $4}') || exit 1
+					"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}') || exit 1
 				if [[ "$(du -b "$localDir/$i" | awk '{print $1}')" -gt "$remoteSpace" ]]; then
 					# not enough space
-					>&2 printf "\nError: not enough space on the server\n"
+					>&2 printf "\n%s\n" "Error: not enough space on the server"
 					exit 1
 				else
 					# copy file to server
 					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-						'mkdir -p "$(dirname "'$remoteDir/$i'")"' || exit 1
+						"mkdir -p '$(dirname "$remoteDir/$i")'" || exit 1
 					rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
 						"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
 				fi
@@ -699,7 +700,7 @@ syncDir() {
 
 	# create directory priority file containing a list of all directories in the
 	# tree
-	printf "Sorting directories by priority... "
+	printf "%s" "Sorting directories by priority... "
 	dirPriorityFile="$(mktemp)"
 	find "$configDir/mnt" -mindepth 1 -type d > "$dirPriorityFile"
 
@@ -795,7 +796,7 @@ syncDir() {
 	echo "done"
 
 	# get list of individual files that aren't included in the directory priority file
-	printf "Sorting remaining files by priority... "
+	printf "%s" "Sorting remaining files by priority... "
 	IFS=$'\n'
 	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -not -type d))
 	while read -r i; do
@@ -869,7 +870,7 @@ syncDir() {
 	fi
 
 	# remove files that aren't in the directory priority file or the extra files list
-	printf "Removing unused files... "
+	printf "%s" "Removing unused files... "
 	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
 
 	# replace missing files with symlinks
@@ -884,7 +885,7 @@ syncDir() {
 	echo "done"
 
 	# download (and remove from the server) excluded files that are still on the server
-	printf "Downloading new files... "
+	printf "%s" "Downloading new files... "
 	find "$configDir/mnt" -not -type d | sed -r "s|$configDirEsc/mnt||" | \
 		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | \
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
@@ -943,20 +944,20 @@ retrieveDir() {
 	sshMaster
 
 	# check if there is enough free space on the local machine
-	printf "Checking space requirement... "
+	printf "%s" "Checking space requirement... "
 	remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'du -sb "'$remoteDir'"' | awk '{print $1}') || exit 1
+		"du -sb '$remoteDir'" | awk '{print $1}') || exit 1
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
-		>&2 printf "\nError: not enough space on this machine to retrieve \'$configName\'\n"
+		>&2 printf "\n%s\n" "Error: not enough space on this machine to retrieve '$configName'"
 		exit 1
 	else
 		echo "done"
 	fi
 
 	# read contents of exclude file into an array of file paths
-	printf "Removing symbolic links from local directory... "
+	printf "%s" "Removing symbolic links from local directory... "
 	while read -r i; do
 		i="$localDir$i"
 		[[ -a "$i" ]] && \
@@ -969,15 +970,15 @@ retrieveDir() {
 		xargs -d '\n' rm -f && echo "done"
 
 	# move files from remote directory back to local directory
-	printf "Moving remote files to local machine... "
+	printf "%s" "Moving remote files to local machine... "
 	rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
 		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
 	# remove empty directories
-	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" 'find "'$remoteDir'" -type d -empty -delete' && \
+	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -type d -empty -delete" && \
 		echo "done" || exit 1
 
-	printf "Cleaning up... "
+	printf "%s" "Cleaning up... "
 
 	# unmount sshfs, remove init file, lock file and config directory
 	if mountpoint -q "$configDir/mnt" || [[ ! -d "$configDir/mnt" ]]; then
@@ -1001,7 +1002,7 @@ listConfigs() {
 	unset IFS
 
 	if [[ "${#configName[@]}" -eq 0 ]]; then
-		printf "\n-- No configs --\n\n"
+		printf "\n%s\n\n" "-- No configs --"
 		return 0
 	fi
 
@@ -1048,21 +1049,21 @@ emptyTrash() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 		exit 1
 	fi
 
 	# get list of files marked for deletion
 	IFS=$'\n'
 	trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		'find "'$remoteDir'" -not -type d -name ".*.trash"')) || exit 1
+		"find '$remoteDir' -not -type d -name '.*.trash'")) || exit 1
 	unset IFS
 
 	# delete files if there are any
 	if [[ "${#trashFiles[@]}" -gt 0 ]]; then
-		printf "Emptying trash... "
+		printf "%s" "Emptying trash... "
 		printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
-			"$remoteUser$remoteHost" 'xargs -d "\n" rm'
+			"$remoteUser$remoteHost" "xargs -d '\n' rm"
 		echo "done"
 		echo "${#trashFiles[@]} files deleted"
 	else
@@ -1077,7 +1078,7 @@ agePriority() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 		exit 1
 	fi
 
@@ -1092,15 +1093,15 @@ agePriority() {
 
 # check for dependencies
 [[ ! -x "$(which rsync 2> /dev/null)" ]] && \
-    printf "Error: missing dependency \'rsync\'\n" && exit 1
+    echo "Error: missing dependency 'rsync'" && exit 1
 [[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
-    printf "Error: missing dependency \'sshfs\'\n" && exit 1
+    echo "Error: missing dependency 'sshfs'" && exit 1
 [[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
-    printf "Error: missing dependency \'inotify-tools\'\n" && exit 1
+    echo "Error: missing dependency 'inotify-tools'" && exit 1
 [[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
-    printf "Error: missing dependency \'systemd\'\n" && exit 1
+    echo "Error: missing dependency 'systemd'" && exit 1
 [[ ! -x "$(which bc 2> /dev/null)" ]] && \
-    printf "Error: missing dependency \'bc\'\n" && exit 1
+    echo "Error: missing dependency 'bc'" && exit 1
 
 # parse options
 for ((i=1; i<=$#; i++)); do
@@ -1139,7 +1140,7 @@ while [[ "$1" =~ ^- ]]; do
 			break ;;
 		*)
 			>&2 echo "Error: unknown option"
-			>&2 printf "Try \'retain-sync --help\' for more information.\n"
+			>&2 echo "Try 'retain-sync --help' for more information."
 			exit 1 ;;
 	esac
 done
@@ -1148,7 +1149,7 @@ done
 case "$1" in
 	'')
 		>&2 echo "Error: missing argument"
-		>&2 printf "Try \'retain-sync --help\' for more information.\n"
+		>&2 echo "Try 'retain-sync --help' for more information."
 		exit 1 ;;
 	initialize)
 		shift
@@ -1164,7 +1165,7 @@ case "$1" in
 					break ;;
 				*)
 					>&2 echo "Error: unknown option"
-					>&2 printf "Try \'retain-sync --help\' for more information.\n"
+					>&2 echo "Try 'retain-sync --help' for more information."
 					exit 1 ;;
 			esac
 		done
@@ -1181,7 +1182,7 @@ case "$1" in
 	age)
 		agePriority "$2" ;;
 	*)
-		>&2 printf "Error: \'$1\' is not a valid command\n"
-		>&2 printf "Try \'retain-sync --help\' for more information.\n"
+		>&2 echo "Error: '$1' is not a valid command"
+		>&2 echo "Try 'retain-sync --help' for more information."
 		exit 1 ;;
 esac

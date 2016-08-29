@@ -22,13 +22,7 @@ fileParse() {
 
 			# sleep to prevent file access from being registered multiple times
 			sleep 1
-		else
-			# new file, priority will be set on next sync operation
-			continue
 		fi
-	else
-		# file is hidden or not a normal file
-		continue
 	fi
 }
 
@@ -37,7 +31,7 @@ configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
 
 # check if specified config exists
 if ! [[ -d "$configDir" ]]; then
-	>&2 printf "\'$configName\' is not a valid configuration. Please run \'retain-sync initialize\'.\n"
+	>&2 echo "Error: '$configName' is not a valid configuration"
 	exit 1
 fi
 
@@ -76,7 +70,7 @@ while read -r i; do
 		inflatePriority
 	EOF
 	); then
-		>&2 printf "Error: line $lineNumber of config file: unrecognized option \'$varName\'"
+		>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
 		((configError++))
 	fi
 
@@ -88,7 +82,7 @@ while read -r i; do
 	EOF
 	); then
 		if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
-			>&2 printf "Error: line $lineNumber of config file: unrecognized value for boolean option\n"
+			>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
 			((configError++))
 		fi
 	fi
@@ -115,16 +109,18 @@ localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
 # check if initialization was interrupted
 if [[ -f "$localDir/.retain-sync_part" ]]; then
 	>&2 echo "Initialization of this directory was interrupted."
-	>&2 printf "Please run \'retain-sync initialize\' to complete it or \'retain-sync retrieve\' to cancel it.\n"
+	>&2 echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 	exit 1
 fi
 
 # get environment variables for ssh-agent that aren't available when retain-sync is
 # run as a systemd service (there has to be a better way to do this)
-[[ -z ${SSH_AGENT_PID+x} ]] && export SSH_AGENT_PID="$(ps aux | grep "garrett" | \
-    grep "ssh-agent" | grep -v "grep" | awk '{print $2}' | sort -n | head -n 1)"
-[[ -z ${SSH_AUTH_SOCK+x} ]] && export SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
-    -path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
+	head -n 1)"
+[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+	-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+export SSH_AGENT_PID
+export SSH_AUTH_SOCK
 
 while true; do
 	# systemd user services can't reference system targets like network-online.target,
