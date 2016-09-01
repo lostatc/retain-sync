@@ -615,9 +615,11 @@ syncDir() {
 
 	# go through files that have chaged since the last sync one at a time
 	for i in "${diffFiles[@]}"; do
-		if grep -Fq "$configDir/mnt/$i" "$configDir/priority.csv"; then
+		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< $i)"
+
+		if grep -Exq "$configDirEsc/mnt/$iEsc,[0-9\.]*" "$configDir/priority.csv"; then
 			# file is no longer present in local directory, remove from priority file
-			sed -i -r -e "s|^$configDirEsc/mnt/$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" \
+			sed -i -r -e "s|^$configDirEsc/mnt/$iEsc,[0-9\.]*$||" \
 				-e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
@@ -697,6 +699,10 @@ syncDir() {
 		echo "Local directory is empty. There is nothing else to do."
 		exit 0
 	fi
+
+	# reupload files that have changed since the last sync
+	rsync -e "ssh ${sshOptions[*]}" -aHAXSu --exclude-from="$configDir/exclude" \
+		--exclude=".*" --safe-links "$localDir/" "$configDir/mnt"
 
 	# create directory priority file containing a list of all directories in the
 	# tree
@@ -1152,13 +1158,17 @@ case "$1" in
 		>&2 echo "Try 'retain-sync --help' for more information."
 		exit 1 ;;
 	initialize)
-		shift
+		if [[ -z "$2" ]]; then
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+		fi
 
 		# read options
-		while [[ "$1" =~ ^- ]]; do
-			case "$1" in
+		while [[ "$2" =~ ^- ]]; do
+			case "$2" in
 				-e|--exclude)
-					optExcludeFile="$2"
+					optExcludeFile="$3"
 					shift 2 ;;
 				--)
 					shift
@@ -1170,16 +1180,36 @@ case "$1" in
 			esac
 		done
 
-		initializeDir "$1" ;;
+		initializeDir "$2" ;;
 	sync)
+		if [[ -z "$2" ]]; then
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+		fi
 		syncDir "$2" ;;
 	retrieve)
+		if [[ -z "$2" ]]; then
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+		fi
 		retrieveDir "$2" ;;
 	list-configs)
 		listConfigs ;;
 	empty-trash)
+		if [[ -z "$2" ]]; then
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+		fi
 		emptyTrash "$2" ;;
 	age)
+		if [[ -z "$2" ]]; then
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+		fi
 		agePriority "$2" ;;
 	*)
 		>&2 echo "Error: '$1' is not a valid command"
