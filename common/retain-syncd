@@ -104,7 +104,7 @@ localDir="${localDirIn%/}"
 remoteUser="${remoteUserIn:+$remoteUserIn@}"
 remoteHost="$remoteHostIn"
 remoteDir="${remoteDirIn%/}"
-sshfsOptions=(-o "$sshfsOptions" -p "$portIn")
+sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
 
 # escape paths for use in sed substitutions
 localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
@@ -131,7 +131,7 @@ while true; do
 	# so we need to have an endless loop here
 
 	# umount sshfs if mountpoint is broken
-	mkdir -p "$configDir/mnt" 2> /dev/null
+	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
 	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
 	if ! mountpoint -q "$configDir/mnt"; then
@@ -158,7 +158,7 @@ trap cleanup EXIT
 
 while true; do
 	# wait for a file to be opened in remote dir
-	fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt")" &> /dev/null
+	fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" 2> /dev/null)"
 
 	# make sure file is not a directory
 	[[ -d "$fileName" ]] || fileParse "$(sed "s|$configDirEsc/mnt||" <<< "$fileName")"
