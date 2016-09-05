@@ -265,6 +265,15 @@ genConfig() {
 	syncExtraFiles="yes"
 	inflatePriority="yes"
 
+	# check if config name is unique
+	IFS=$'\n'
+	if grep -Fxq "$configName" <(basename -a $(printf "%s\n" "${configDirs[@]}") 2> /dev/null); then
+		uniqueConfigName="no"
+		>&2 echo "Error: the name '$configName' is already in use"
+		exit 1
+	fi
+	unset IFS
+
 	# create config directory
 	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
 	mkdir "$configDir"
@@ -321,11 +330,13 @@ initializeDir() {
 		flock -u 200
 
 		# inform user if initialization is interrupted
-		if [[ -f "$localDir/.retain-sync_part" ]]; then
-			printf "\n%s\n" "Initialization was interrupted."
-			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
-		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
-			rm -rf "$configDir"
+		if [[ "$uniqueConfigName" != "no" ]]; then
+			if [[ -f "$localDir/.retain-sync_part" ]]; then
+				printf "\n%s\n" "Initialization was interrupted."
+				echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+			elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
+				rm -rf "$configDir"
+			fi
 		fi
 	}
 
