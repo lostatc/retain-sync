@@ -459,7 +459,7 @@ initializeDir() {
 		"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ "$localSize" -gt "$remoteSpace" ]]; then
-		>&2 printf "\n%s\n" "Error: not enough space on the server"
+		>&2 printf "\n%s\n" "Error: not enough free space on the server"
 		exit 1
 	else
 		echo "done"
@@ -651,7 +651,7 @@ syncDir() {
 				unset IFS
 
 				# compute checksum of current file
-				fileSum="$(md5sum "$configDir/mnt/$i")"
+				fileSum="$(md5sum "$configDir/mnt$i")"
 
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
@@ -660,11 +660,11 @@ syncDir() {
 					# Note: we are going through the mountpoint becuase deleting the file using the
 					# ssh command causes sshfs to pretend that the file is still there until someone
 					# actually looks inside the mountpoint to update it
-					rm "$configDir/mnt/$i" || exit 1
+					rm "$configDir/mnt$i" || exit 1
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
-					mv "$configDir/mnt/$i" \
-						"$configDir/mnt/$(dirname "$i")/.$(basename "$i").trash" || exit 1
+					mv "$configDir/mnt$i" \
+						"$configDir/mnt$(dirname "$i")/.$(basename "$i").trash" || exit 1
 				fi
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
@@ -672,11 +672,11 @@ syncDir() {
 				# Note: we are going through the mountpoint becuase deleting the file using the
 				# ssh command causes sshfs to pretend that the file is still there until someone
 				# actually looks inside the mountpoint to update it
-				rm "$configDir/mnt/$i" || exit 1
+				rm "$configDir/mnt$i" || exit 1
 			fi
 		else
 			# new file
-			if [[ -L "$localDir/$i" ]]; then
+			if [[ -L "$localDir$i" ]]; then
 				# file is a symlink, add to exclude file
 				echo "$i" >> "$configDir/exclude"
 			else
@@ -689,27 +689,14 @@ syncDir() {
 					echo "$i,0" >> "$configDir/priority.csv"
 				fi
 
-				# check if there's enough space on the server for the file
-				remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-					"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}') || exit 1
-				if [[ "$(du -b "$localDir/$i" | awk '{print $1}')" -gt "$remoteSpace" ]]; then
-					# not enough space
-					>&2 printf "\n%s\n" "Error: not enough space on the server"
-					exit 1
-				else
-					# copy file to server
-					ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-						"mkdir -p '$(dirname "$remoteDir/$i")'" || exit 1
-					rsync -e "ssh ${sshOptions[*]}" -asHAXS "$localDir/$i" \
-						"$remoteUser$remoteHost:$remoteDir/$i" || exit 1
-				fi
+				# total size of all new files
+				((newFilesSize+="$(du -b "$localDir$i" | awk '{print $1}')"))
 			fi
 		fi
 	done
 
 	# delete broken symlinks in local directory
 	find "$localDir" -xtype l -exec rm '{}' \;
-	echo "done"
 
 	# exit if priority.csv is empty
 	if ! grep -vq '^#' "$configDir/priority.csv"; then
@@ -717,13 +704,24 @@ syncDir() {
 		exit 0
 	fi
 
-	# reupload files that have changed since the last sync
-	rsync -e "ssh ${sshOptions[*]}" -aHAXSu --exclude-from="$configDir/exclude" \
-		--exclude=".*" --safe-links "$localDir/" "$configDir/mnt"
+	# check if there's enough space on the server for the new files
+	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+		"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}') || exit 1
+	if [[ "$newFilesSize" -gt "$remoteSpace" ]]; then
+		>&2 printf "\n%s\n" "Error: not enough free space on the server"
+		exit 1
+	fi
+
+	# upload new files and files that have changed since the last sync
+	rsync -aHAXSu --exclude-from="$configDir/exclude" --exclude=".*" --safe-links \
+		"$localDir/" "$configDir/mnt"
+
+	echo "done"
+
+	printf "%s" "Sorting directories by priority... "
 
 	# create directory priority file containing a list of all directories in the
 	# tree
-	printf "%s" "Sorting directories by priority... "
 	dirPriorityFile="$(mktemp)"
 	find "$configDir/mnt" -mindepth 1 -type d | sed -r "s|$configDirEsc/mnt||" > "$dirPriorityFile"
 
@@ -972,7 +970,7 @@ retrieveDir() {
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
-		>&2 printf "\n%s\n" "Error: not enough space on this machine to retrieve '$configName'"
+		>&2 printf "\n%s\n" "Error: not enough free space on this machine to retrieve '$configName'"
 		exit 1
 	else
 		echo "done"
