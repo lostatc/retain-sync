@@ -407,6 +407,7 @@ initializeDir() {
 
 		# escape paths for use in sed substitutions
 		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
+		configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
 
 		# start ssh master connection
 		sshMaster
@@ -510,7 +511,8 @@ initializeDir() {
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
 	echo "# Editing this file by hand is not recommended." > "$configDir/priority.csv"
-	find "$configDir/mnt" -not -type d -exec echo '{},0' >> "$configDir/priority.csv" \;
+	find "$configDir/mnt" -not -type d -exec echo '{},0' \; | \
+		sed -r "s|$configDirEsc/mnt||" >> "$configDir/priority.csv"
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
@@ -587,7 +589,7 @@ syncDir() {
 
 	# remove excluded files from priority.csv
 	for i in "${excludeFiles[@]}"; do
-		i="$(sed -r "s|$localDirEsc|$configDir/mnt|" <<< "$i")"
+		i="$(sed -r "s|$localDirEsc||" <<< "$i")"
 		sed -i -r -e "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" -e '/^$/d' \
 			"$configDir/priority.csv"
 	done
@@ -604,8 +606,8 @@ syncDir() {
 	# 3) remove all repeated entries in the list
 	diffFiles=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -not -type d | \
 		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed -r "s|$localDirEsc/||")" "$(grep -v '^#' "$configDir/priority.csv" | rev | \
-		cut -d ',' -f 2- | rev | sed -r "s|$configDirEsc/mnt/||")" | sort | uniq -u))
+		sed -r "s|$localDirEsc||")" "$(grep -v '^#' "$configDir/priority.csv" | rev | \
+		cut -d ',' -f 2- | rev)" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add 1 to it
@@ -617,10 +619,9 @@ syncDir() {
 	for i in "${diffFiles[@]}"; do
 		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< $i)"
 
-		if grep -Exq "$configDirEsc/mnt/$iEsc,[0-9\.]*" "$configDir/priority.csv"; then
+		if grep -Exq "$iEsc,[0-9\.]*" "$configDir/priority.csv"; then
 			# file is no longer present in local directory, remove from priority file
-			sed -i -r -e "s|^$configDirEsc/mnt/$iEsc,[0-9\.]*$||" \
-				-e '/^$/d' "$configDir/priority.csv"
+			sed -i -r -e "s|^$iEsc,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
 				# compute checksums of all files in the user's trash if it hasn't already
@@ -661,15 +662,15 @@ syncDir() {
 			# new file
 			if [[ -L "$localDir/$i" ]]; then
 				# file is a symlink, add to exclude file
-				echo "/$i" >> "$configDir/exclude"
+				echo "$i" >> "$configDir/exclude"
 			else
 				# file is not a symlink, add to priority.csv
 				if [[ "$inflatePriority" == "yes" ]]; then
 					# set priority so that it's at the top
-					echo "$configDir/mnt/$i,${newPriority:-0}" >> "$configDir/priority.csv"
+					echo "$i,${newPriority:-0}" >> "$configDir/priority.csv"
 				else
 					# set priority to zero
-					echo "$configDir/mnt/$i,0" >> "$configDir/priority.csv"
+					echo "$i,0" >> "$configDir/priority.csv"
 				fi
 
 				# check if there's enough space on the server for the file
@@ -708,24 +709,22 @@ syncDir() {
 	# tree
 	printf "%s" "Sorting directories by priority... "
 	dirPriorityFile="$(mktemp)"
-	find "$configDir/mnt" -mindepth 1 -type d > "$dirPriorityFile"
+	find "$configDir/mnt" -mindepth 1 -type d | sed -r "s|$configDirEsc/mnt||" > "$dirPriorityFile"
 
 	# read directory priority file line-by-line
 	while read -r i; do
 		# total the priorities of all the files in each directory to get the
 		# directory priority
-		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -F "$i" | rev | \
+		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -F "$i/" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
 		# get the size of the directory in bytes
-		dirSize="$(du -sb "$i" | awk '{print $1}')"
+		dirSize="$(du -sb "$configDir/mnt$i" | awk '{print $1}')"
 
 		# set minimum dir size of 16 bytes to perclude a "divide by zero"
 		# error with bc
-		if [[ "$dirSize" -lt 16 ]]; then
-			dirSize=16
-		fi
+		[[ "$dirSize" -lt 16 ]] && dirSize=16
 
 		# adjust directory priority for the number of files and the size of the
 		# directory
@@ -750,7 +749,7 @@ syncDir() {
 		syncSize=0
 
 		while read -r i; do
-			dirSize="$(du -sb "$i" | awk '{print $1}')"
+			dirSize="$(du -sb "$configDir/mnt$i" | awk '{print $1}')"
 
 			if [[ "$dirSize" -gt $storageLimit ]]; then
 				# current directory alone is larger than the storage limit, remove from
@@ -779,7 +778,8 @@ syncDir() {
 				else
 					# total list size is still within the storage limit
 
-					dirPriorityTree+=($(find "$i" -mindepth 1 -type d))
+					dirPriorityTree+=($(find "$configDir/mnt$i" -mindepth 1 -type d | \
+						sed -r "s|$configDirEsc/mnt||"))
 
 					# check if the while loop has reached the last line of the directory
 					# priority file
@@ -804,9 +804,11 @@ syncDir() {
 	# get list of individual files that aren't included in the directory priority file
 	printf "%s" "Sorting remaining files by priority... "
 	IFS=$'\n'
-	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -not -type d))
+	noSyncFiles=($(find "$configDir/mnt" -not -name '.*.trash' -not -type d | \
+		sed -r "s|$configDirEsc/mnt||"))
 	while read -r i; do
-		noSyncFiles+=($(find "$i" -not -name '.*.trash' -not -type d))
+		noSyncFiles+=($(find "$configDir/mnt$i" -not -name '.*.trash' -not -type d | \
+			sed -r "s|$configDirEsc/mnt||"))
 	done <"$dirPriorityFile"
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
 
@@ -823,7 +825,7 @@ syncDir() {
 		# adjust priority for file size
 		for i in "${!noSyncSorted[@]}"; do
 			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
-			currentFileSize=$(du -sb "$currentFile" | awk '{print $1}')
+			currentFileSize=$(du -sb "$configDir/mnt$currentFile" | awk '{print $1}')
 
 			# set minimum file size of 16 bytes to perclude a "divide by zero"
 			# error with bc
@@ -844,7 +846,7 @@ syncDir() {
 		unset IFS
 
 		for i in "${noSyncSorted[@]}"; do
-			currentFileSize=$(du -sb "$i" | awk '{print $1}')
+			currentFileSize=$(du -sb "$configDir/mnt$i" | awk '{print $1}')
 
 			# get size of current file in bytes and add it to the total size
 			((syncSize+=currentFileSize))
@@ -864,34 +866,34 @@ syncDir() {
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
-			sed -r "s|$configDirEsc/mnt|$localDir|"))
+			sed "s|^|$localDir|"))
 		unset IFS
 		echo "done"
 	else
 		IFS=$'\n'
-		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed -r \
-			"s|$configDirEsc/mnt|$localDir|"))
+		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed "s|^|$localDir|"))
 		unset IFS
 		echo "done"
 	fi
 
 	# remove files that aren't in the directory priority file or the extra files list
 	printf "%s" "Removing unused files... "
-	printf "%s\0" "${rmFiles[@]}" | xargs -0 rm -f
+	printf "%s\n" "${rmFiles[@]}" | xargs -d '\n' rm -f
 
 	# replace missing files with symlinks
 	cp -asn "$configDir"/mnt/* "$localDir" &> /dev/null
 
 	# remove symlinks to files marked for deletion
 	find "$configDir/mnt" -not -type d -name '.*.trash' | \
-		sed -r "s|$configDirEsc/mnt|$localDirEsc|" | xargs -d '\n' rm -f
+		sed -r "s|$configDirEsc/mnt|$localDir|" | xargs -d '\n' rm -f
 
 	# remove empty directories
 	find "$localDir" -not -path '*/\.*' -type d -empty -delete
 	echo "done"
 
-	# download (and remove from the server) excluded files that are still on the server
 	printf "%s" "Downloading new files... "
+
+	# download (and remove from the server) excluded files that are still on the server
 	find "$configDir/mnt" -not -type d | sed -r "s|$configDirEsc/mnt||" | \
 		grep -Fxf <(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | \
 		rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- --remove-source-files \
@@ -900,23 +902,21 @@ syncDir() {
 	# find file paths in directory priority file
 	IFS=$'\n'
 	while read -r i; do
-		dirPriorityArray+=($(find "$i" -not -type d -not -name '.*.trash'))
+		downloadFiles+=($(find "$configDir/mnt$i" -not -type d -not -name '.*.trash' | \
+			sed -r "s|$configDirEsc/mnt||"))
 	done <"$dirPriorityFile"
 	unset IFS
-	printf "%s\n" "${dirPriorityArray[@]}" > "$dirPriorityFile"
 
-	# make all paths in directory priority file relative
-	sed -i -r "s|$configDirEsc/mnt/||" "$dirPriorityFile"
-
-	# download directories that are in the directory priority file but not stored # locally
-	rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from="$dirPriorityFile" \
-		--exclude-from="$configDir/exclude" "$remoteUser$remoteHost:$remoteDir/" \
-		"$localDir" || exit 1
+	# download directories that are in the directory priority file but not stored
+	# locally
+	printf "%s\n" "${downloadFiles[@]}" | rsync -e "ssh ${sshOptions[*]}" -asHAXS \
+		--files-from=- --exclude-from="$configDir/exclude" \
+		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that haven't
 		# already been downloaded
-		printf "%s\n" "${extraFiles[@]}" | sed -r "s|$configDirEsc/mnt/||" | \
+		printf "%s\n" "${extraFiles[@]}" | \
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS --files-from=- \
 			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
 	fi
