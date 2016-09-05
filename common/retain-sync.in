@@ -437,6 +437,42 @@ initializeDir() {
 			exit 1
 		fi
 
+		# add all local symlinks to the exclude file so they don't get clobbered (this
+		# does not include symlinks to directories)
+		cat <<-EOF > "$configDir/exclude"
+			# This file contains paths to files/directories to exclude from syncing.
+			#
+			# The root of each file/directory path is anchored to the local initialized
+			# directory (see rsync(1) for details).
+			#
+			# All user-created symbolic links in the local initialized directory are added
+			# to this file automatically.
+		EOF
+		find "$localDir" -not -path '*/\.*' -type l | sed -r "s|$localDirEsc||" >> \
+			"$configDir/exclude"
+
+		IFS=$'\n'
+		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
+		unset IFS
+
+		# run if --exclude option was given
+		if [[ -n "$optExcludeFile" ]]; then
+			for i in "${excludeInputFiles[@]}"; do
+				[[ "$i" =~ ^$ ]] && continue	# skip empty line
+				[[ "$i" =~ ^# ]] && continue	# skip commented line
+
+				# add leading slash if it doesn't exist
+				[[ "$i" =~ ^/ ]] || i="/$i"
+
+				# if it exists in the local sync directory, copy file path from input file
+				# to exclude file
+				i="${i/"$localDirEsc"/}"
+				if grep -Fxqf <(printf "%s\n" "${localFiles[@]}") <<< "${i%/}"; then
+					echo "$i" >> "$configDir/exclude"
+				fi
+			done
+		fi
+
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
 	else
@@ -463,44 +499,6 @@ initializeDir() {
 		exit 1
 	else
 		echo "done"
-	fi
-
-	# add all local symlinks to the exclude file so they don't get clobbered (this
-	# does not include symlinks to directories)
-	cat <<-EOF > "$configDir/exclude"
-		# This file contains paths to files/directories to exclude from syncing.
-		#
-		# The root of each file/directory path is anchored to the local initialized
-		# directory (see rsync(1) for details).
-		#
-		# All user-created symbolic links in the local initialized directory are added
-		# to this file automatically.
-	EOF
-	find "$localDir" -not -path '*/\.*' -type l | sed -r "s|$localDirEsc||" >> \
-		"$configDir/exclude"
-
-	IFS=$'\n'
-	localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
-	unset IFS
-
-	# run if --exclude option was given
-	if [[ -n "$optExcludeFile" ]]; then
-		for i in "${excludeInputFiles[@]}"; do
-			[[ "$i" =~ ^$ ]] && continue	# skip empty line
-			[[ "$i" =~ ^# ]] && continue	# skip commented line
-
-			# add leading slash if it doesn't exist
-			if ! [[ "$i" =~ ^/ ]]; then
-				i="/$i"
-			fi
-
-			# if it exists in the local sync directory, copy file path from input file
-			# to exclude file
-			i="${i/"$localDirEsc"/}"
-			if grep -Fxqf <(printf "%s\n" "${localFiles[@]}") <<< "${i%/}"; then
-				echo "$i" >> "$configDir/exclude"
-			fi
-		done
 	fi
 
 	# copy local files to the server
