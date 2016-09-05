@@ -54,7 +54,8 @@ while read -r i; do
 	fi
 
 	# parse option, removing leading/trailing whitespace
-	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
+	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e \
+		's/[ \t]*$//')In"
 	varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 
 	# check if option is recognized
@@ -93,16 +94,17 @@ while read -r i; do
 done <"$configDir/config"
 
 # exit if there were errors in config file
-[[ ! "$configError" -ne 0 ]] || exit 1
+[[ "$configError" -ne 0 ]] && exit 1
 
 # set defaults
-sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
+sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 
 # format variables
-localDir="${localDir%/}"
-remoteDir="${remoteDir%/}"
-remoteUser="${remoteUser:+$remoteUser@}"
-sshfsOptions=(-o "$sshfsOptions" -p "$port")
+localDir="${localDirIn%/}"
+remoteUser="${remoteUserIn:+$remoteUserIn@}"
+remoteHost="$remoteHostIn"
+remoteDir="${remoteDirIn%/}"
+sshfsOptions=(-o "$sshfsOptions" -p "$portIn")
 
 # escape paths for use in sed substitutions
 localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"

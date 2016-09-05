@@ -89,7 +89,8 @@ readConfig() {
 		fi
 
 		# parse option, removing leading/trailing whitespace
-		varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
+		varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
+			's/[ \t]*$//')In"
 		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
@@ -129,22 +130,23 @@ readConfig() {
 	done <"$configDir/config"
 
 	# exit if there were errors in config file
-	[[ ! $configError -ne 0 ]] || exit 1
+	[[ $configError -ne 0 ]] && exit 1
 
 	# set defaults
-	sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
-	deleteAlways="${deleteAlways:-no}"
-	syncExtraFiles="${syncExtraFiles:-yes}"
-	inflatePriority="${inflatePriority:-yes}"
-	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$port")
+	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
+	deleteAlways="${deleteAlwaysIn:-no}"
+	syncExtraFiles="${syncExtraFilesIn:-yes}"
+	inflatePriority="${inflatePriorityIn:-yes}"
+	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
 
 	# format variables
-	localDir="${localDir%/}"
-	remoteDir="${remoteDir%/}"
-	remoteUser="${remoteUser:+$remoteUser@}"
-	sshfsOptions=(-o "$sshfsOptions" -p "$port")
-	storageLimit="$(sed -e 's/K/\*1024/' -e 's/M/\*1048576/' \
-		-e 's/G/\*1073741824/' <<< "$storageLimit" | bc)"
+	localDir="${localDirIn%/}"
+	remoteUser="${remoteUserIn:+$remoteUserIn@}"
+	remoteHost="$remoteHostIn"
+	remoteDir="${remoteDirIn%/}"
+	storageLimit="$(sed -r -e 's/KB?/\*1024/' -e 's/MB?/\*1048576/' \
+		-e 's/GB?/\*1073741824/' <<< "$storageLimitIn" | bc)"
+	sshfsOptions=(-o "$sshfsOptions" -p "$portIn")
 	deleteAlways="${deleteAlways,,}"
 	syncExtraFiles="${syncExtraFiles,,}"
 	inflatePriority="${inflatePriority,,}"
@@ -197,9 +199,9 @@ genConfig() {
 
 	# prompt user for user name on remote machine
 	while true; do
-		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUser </dev/tty
-		remoteUser="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUser")"
-		if [[ "$remoteUser" =~ [\ ]+ ]]; then
+		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUserIn </dev/tty
+		remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
+		if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
 			>&2 echo "Error: user name may not contain spaces"
 		else
 			break
@@ -208,11 +210,11 @@ genConfig() {
 
 	# prompt user for hostname of remote machine
 	while true; do
-		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHost </dev/tty
-		remoteHost="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHost")"
-		if [[ -z "$remoteHost" ]]; then
+		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHostIn </dev/tty
+		remoteHostIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHostIn")"
+		if [[ -z "$remoteHostIn" ]]; then
 			>&2 echo "Error: this value may not be blank"
-		elif [[ "$remoteHost" =~ [\ ]+ ]]; then
+		elif [[ "$remoteHostIn" =~ [\ ]+ ]]; then
 			>&2 echo "Error: hostname may not contain spaces"
 		else
 			break
@@ -221,13 +223,13 @@ genConfig() {
 
 	# prompt user for port number
 	while true; do
-		read -erp "Enter the port number to connect to on the remote machine (defaults to port 22): " port </dev/tty
-		if [[ -z "$port" ]]; then
-			port=22
+		read -erp "Enter the port number to connect to on the remote machine (defaults to port 22): " portIn </dev/tty
+		if [[ -z "$portIn" ]]; then
+			portIn=22
 			break
-		elif ! [[ "$port" =~ ^[0-9]+$ ]]; then
+		elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
 			>&2 echo "Error: value must be a number in the range 0-65535"
-		elif [[ "$port" -lt 1 || "$port" -gt 65535 ]]; then
+		elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
 			>&2 echo "Error: value must be a number in the range 0-65535"
 		else
 			break
@@ -236,11 +238,11 @@ genConfig() {
 
 	# prompt user for directory to sync to on remote machine
 	while true; do
-		read -erp "Enter the directory to sync to on the remote machine: " remoteDir </dev/tty
-		remoteDir="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDir")"
-		if [[ -z "$remoteDir" ]]; then
+		read -erp "Enter the directory to sync to on the remote machine: " remoteDirIn </dev/tty
+		remoteDirIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDirIn")"
+		if [[ -z "$remoteDirIn" ]]; then
 			>&2 >&2 echo "Error: this value may not be blank"
-		elif [[ ! "$remoteDir" =~ ^/ ]]; then
+		elif [[ ! "$remoteDirIn" =~ ^/ ]]; then
 			>&2 echo "Error: must be an absolute path"
 		else
 			break
@@ -249,8 +251,8 @@ genConfig() {
 
 	# prompt user for storage limit
 	while true; do
-		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimit </dev/tty
-		if [[ ! "$storageLimit" =~ ^[0-9]+[KMG]$ ]]; then
+		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimitIn </dev/tty
+		if [[ ! "$storageLimitIn" =~ ^[0-9]+(K|M|G|KB|MB|GB)$ ]]; then
 			>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 		else
 			break
@@ -277,19 +279,19 @@ genConfig() {
 		localDir=$localDir
 
 		# user name on remote machine (optional)
-		remoteUser=$remoteUser
+		remoteUser=$remoteUserIn
 
 		# hostname, ip address or domain name of remote machine
-		remoteHost=$remoteHost
+		remoteHost=$remoteHostIn
 
 		# port number to connect to on remote machine
-		port=$port
+		port=$portIn
 
 		# directory to sync to on remote machine
-		remoteDir=$remoteDir
+		remoteDir=$remoteDirIn
 
 		# amount of data to keep on local machine (accepts K, M or G)
-		storageLimit=$storageLimit
+		storageLimit=$storageLimitIn
 
 
 		# mount options to pass to sshfs
@@ -380,16 +382,19 @@ initializeDir() {
 
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
-		while read -r i; do
-			localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
-			localTreeTest=($(find "$localDirTest" -type d))
-			localTree=($(find "$localDir" -type d))
-			if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
-				>&2 echo "Error: the specified directory overlaps with the configuration '$(basename "$i")'"
-				exit 1
-			fi
-		done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" -mindepth 1 \
-			-maxdepth 1 -type d)
+		configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" \
+			-mindepth 1 -maxdepth 1 -type d))
+		if [[ "${#configDirs[@]}" -gt 0 ]]; then
+			while read -r i; do
+				localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
+				localTreeTest=($(find "$localDirTest" -type d))
+				localTree=($(find "$localDir" -type d))
+				if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
+					>&2 echo "Error: the specified directory overlaps with the configuration '$(basename "$i")'"
+					exit 1
+				fi
+			done < <(printf "%s\n" "${configDirs[@]}")
+		fi
 		unset IFS
 
 		# generate config and source variables from it
@@ -397,13 +402,13 @@ initializeDir() {
 
 		# set defaults
 		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
-		sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$port")
+		sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
 
 		# format variables
-		localDir="${localDir%/}"
-		remoteDir="${remoteDir%/}"
-		remoteUser="${remoteUser:+$remoteUser@}"
-		sshfsOptions=(-o "$sshfsOptions" -p "$port")
+		remoteUser="${remoteUserIn:+$remoteUserIn@}"
+		remoteHost="$remoteHostIn"
+		remoteDir="${remoteDirIn%/}"
+		sshfsOptions=(-o "$sshfsOptions" -p "$portIn")
 
 		# escape paths for use in sed substitutions
 		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
