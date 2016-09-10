@@ -2,7 +2,7 @@
 .SH NAME
 retain-sync \- distribute files between machines based on how frequently they are accessed
 .SH SYNOPSIS
-\fBretain-sync\fR [\fIGLOBAL_OPTIONS\fR] \fICOMMAND\fR [\fICOMMAND_OPTIONS\fR] [\fICOMMAND_ARG\fR]
+\fBretain-sync\fR [\fIglobal_options\fR] \fIcommand\fR [\fIcommand_options\fR] [\fIcommand_arg\fR]
 .SH DESCRIPTION
 \fBretain-sync\fR is a program that distributes files between a local and remote
 directory based on how frequently they're accessed with the intent of conserving disk
@@ -39,25 +39,25 @@ Print version number and exit.
 .RS 4
 Suppress all non-error output.
 .SH COMMANDS
-\fBinitialize\fR [\fIOPTIONS\fR] \fIPATH\fR
+\fBinitialize\fR [\fIoptions\fR] \fIpath\fR
 .RS 4
-Prepare the local directory \fIPATH\fR for syncing by moving it to the server and
+Prepare the local directory \fIpath\fR for syncing by moving it to the server and
 generating a configuration for it. The user will be prompted to give a name for the
 configuration, information about the server and the storage limit. At the input prompts,
 all characters are taken literally except single quotes, double quotes and backslashes,
 which must be escaped. Backslash control sequences are not interpreted.
 .sp
-\fB-e\fR, \fB--exclude\fR \fIFILE\fR
+\fB-e\fR, \fB--exclude\fR \fIfile\fR
 .RS 4
-Get a list of file/directory paths from \fIFILE\fR (one per line) that will be excluded
+Get a list of file/directory paths from \fIfile\fR (one per line) that will be excluded
 from syncing, meaning that they will never leave the local machine (see
-\fBEXCLUDING\fR). If \fIFILE\fR is '-', then a newline-separated list of file paths will
+\fBEXCLUDING\fR). If \fIfile\fR is '-', then a newline-separated list of file paths will
 be accepted from stdin. File paths specified here can be relative or absolute, and will
 be converted to the proper format and added to the 'exclude' file automatically once it
 is generated.
 .RE 1
 .PP
-\fBsync\fR \fICONFIG\fR|\fIPATH\fR
+\fBsync\fR \fIconfig\fR|\fIpath\fR
 .RS 4
 Redistribute files between the local and remote directories based on their priority and
 update the server with any new or deleted files. This command accepts the absolute path
@@ -65,7 +65,7 @@ of a local initialized directory or the name of its configuration. This command 
 automatically once an hour by the daemon (see \fBSYNCING\fR).
 .RE
 .PP
-\fBretrieve\fR \fICONFIG\fR|\fIPATH\fR
+\fBretrieve\fR \fIconfig\fR|\fIpath\fR
 .RS 4
 Retrieve all files from the server and de-initialize the local directory. This command
 accepts the absolute path of a local initialized directory or the name of its
@@ -78,7 +78,7 @@ Print a table of all initialized directories and the names of their
 configurations.
 .RE
 .PP
-\fBempty-trash\fR \fICONFIG\fR|\fIPATH\fR
+\fBempty-trash\fR \fIconfig\fR|\fIpath\fR
 .RS 4
 Permanently delete all files on the server that are marked for deletion
 (see \fBTRASH\fR). This command accepts the absolute path of a local initialized
@@ -99,7 +99,13 @@ synced recursively, meaning that all subdirectories are included when a
 directory is synced. Once no more whole directories can fit within the
 user-defined storage limit, \fBretain-sync\fR will try to sync individual files
 until the storage limit is reached. This behavior can be overridden by setting
-\fBsyncExtraFiles\fR to \'no' in the \fBretain-sync\fR config.
+\fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config. Any files that
+have been added since the last sync are uploaded to the server and have their
+priority artifically inflated so that they're more likely to stay on the local
+machine for a while. This behavior can be overridden by setting
+\fBinflatePriority\fR to 'no' in the \fBretain-sync\fR config. Any files that
+have been deleted since the last sync are either removed from or marked for
+deletion on the server (see \fBTRASH\fR).
 .sp
 \fBretain-sync\fR uses \fBrsync\fR for copying files between the local and remote machines,
 and should preserve symbolic links, permissions, modification times, ownership, hard

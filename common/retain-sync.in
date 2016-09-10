@@ -3,42 +3,50 @@
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
+# disable colored output if stdout is being redirected
+if [[ -t 1 ]]; then
+	# set colors for colored output
+	cBG="$(tput bold)$(tput setaf 2)"	# bold green
+	cBR="$(tput bold)$(tput setaf 1)"	# bold red
+	cN="$(tput sgr0)"					# normal
+fi
+
 usage() {
 	cat <<-EOF
-		Usage: retain-sync [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS] [COMMAND_ARG]
+		Usage: ${cBR}retain-sync${cN} [${cBG}global_options${cN}] ${cBG}command${cN} [${cBG}command_options${cN}] [${cBG}command_arg${cN}]
 
 		Global options:
-		        --help		Display this usage message and exit.
-		        --version	Print version number and exit.
-		    -q, --quiet		Suppress all non-error output.
+		        ${cBR}--help${cN}		Display this usage message and exit.
+		        ${cBR}--version${cN}	Print version number and exit.
+		    ${cBR}-q${cN}, ${cBR}--quiet${cN}		Suppress all non-error output.
 
 		Commands:
-		    initialize [OPTIONS] PATH
-		        Prepare the local directory PATH for syncing by moving it to the server and
+		    ${cBR}initialize${cN} [${cBG}options${cN}] ${cBG}path${cN}
+		        Prepare the local directory ${cBG}path${cN} for syncing by moving it to the server and
 		        generating a configuration for it.
 
-		        -e, --exclude FILE
-		            Get a list of file/directory paths from FILE (one per line) that will be
+		        ${cBR}-e${cN}, ${cBR}--exclude${cN} ${cBG}file${cN}
+		            Get a list of file/directory paths from ${cBG}file${cN} (one per line) that will be
 		            excluded from syncing, meaning that they will never leave the local
-		            machine. If FILE is '-', then a newline-separated list of file paths will
+		            machine. If ${cBG}file${cN} is '-', then a newline-separated list of file paths will
 		            be accepted from stdin.
 
-		    sync CONFIG|PATH
+		    ${cBR}sync${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Redistribute files between the local and remote directories based on their
 		        priority and update the server with any new or deleted files. This command
 		        accepts the absolute path of a local initialized directory or the name of its
 		        configuration.
 
-		    retrieve CONFIG|PATH
+		    ${cBR}retrieve${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Retrieve all files from the server and de-initialize the local directory. This
 		        command accepts the absolute path of a local initialized directory or the name
 		        of its configuration.
 
-		    list-configs
+		    ${cBR}list-configs${cN}
 		        Print a table of all initialized directories and the names of their
 		        configurations.
 
-		    empty-trash CONFIG|PATH
+		    ${cBR}empty-trash${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Permanently delete all files on the server that are marked for deletion. This
 		        command accepts the absolute path of a local initialized directory or the name
 		        of its configuration.
