@@ -5,12 +5,12 @@ version="@VERSION@"
 
 usage() {
 	cat <<-EOF
-		usage: retain-sync [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS] [COMMAND_ARG]
+		Usage: retain-sync [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS] [COMMAND_ARG]
 
 		Global options:
 		        --help		Display this usage message and exit.
 		        --version	Print version number and exit.
-		    -q, --quiet		Suppress all normal output (errors are still printed).
+		    -q, --quiet		Suppress all non-error output.
 
 		Commands:
 		    initialize [OPTIONS] PATH
@@ -443,7 +443,7 @@ initializeDir() {
 			# This file contains paths to files/directories to exclude from syncing.
 			#
 			# The root of each file/directory path is anchored to the local initialized
-			# directory (see rsync(1) for details).
+			# directory (see retain-sync(1) for details).
 			#
 			# All user-created symbolic links in the local initialized directory are added
 			# to this file automatically.
@@ -545,9 +545,6 @@ initializeDir() {
 
 syncDir() {
 	cleanup() {
-		# stop ssh master connection
-		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
-
 		# drop the lock on this configuration (necessary becuase of sshfs)
 		flock -u 200
 
@@ -572,9 +569,6 @@ syncDir() {
 		-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
 	export SSH_AGENT_PID
 	export SSH_AUTH_SOCK
-
-	# start ssh master connection
-	sshMaster
 
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -701,8 +695,8 @@ syncDir() {
 	fi
 
 	# check if there's enough space on the server for the new files
-	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}') || exit 1
+	remoteSpace=$(df -B 1 "$configDir/mnt/.dest/.." | tail -n 1 | awk '{print $4}') || \
+		exit 1
 	if [[ "$newFilesSize" -gt "$remoteSpace" ]]; then
 		>&2 printf "\n%s\n" "Error: not enough free space on the server"
 		exit 1

@@ -1,6 +1,6 @@
-.TH RETAIN-SYNC 1 "2016-08-19" "" ""
+.TH RETAIN-SYNC 1 "2016-09-10" "" ""
 .SH NAME
-retain-sync \- distribute files based on how frequently they're accessed
+retain-sync \- distribute files between machines based on how frequently they are accessed
 .SH SYNOPSIS
 \fBretain-sync\fR [\fIGLOBAL_OPTIONS\fR] \fICOMMAND\fR [\fICOMMAND_OPTIONS\fR] [\fICOMMAND_ARG\fR]
 .SH DESCRIPTION
@@ -21,7 +21,7 @@ your files, as files aren't removed from the server when they're copied to the l
 machine. \fBretain-sync\fR will exit with an error if it detects that the server does
 not have enough free disk space. \fBretain-sync\fR deliberately ignores hidden files and
 directories, meaning that they never leave the local machine. The program currently does
-not support file names containing newlines, but other ascii characters should work fine.
+not support file names containing newlines, but other characters should work fine.
 \fBretain-sync\fR does not require root access, and is meant to run as an unprivileged
 user on both the server and client.
 .SH GLOBAL OPTIONS
@@ -37,7 +37,7 @@ Print version number and exit.
 .PP
 \fB-q\fR, \fB--quiet\fR
 .RS 4
-Suppress all normal output (errors are still printed).
+Suppress all non-error output.
 .SH COMMANDS
 \fBinitialize\fR [\fIOPTIONS\fR] \fIPATH\fR
 .RS 4
@@ -84,32 +84,38 @@ Permanently delete all files on the server that are marked for deletion
 (see \fBTRASH\fR). This command accepts the absolute path of a local initialized
 directory or the name of its configuration.
 .SH SYNCING
-Whenever a directory is initialized, \fBretain-sync\fR will direct the user to start the
-daemon for that directory. This daemon keeps track of file access within the initialized
-directory tree, adjusts file priority for time and runs the \fBsync\fR command hourly by
-default, although this can be configured in the systemd unit file
-\'retain-sync-resync@.timer'. To make this change without root privileges and only for a
-specific user, copy the unit file into ~/.config/systemd/user/ before editing it.
+Whenever a directory is initialized, \fBretain-sync\fR will direct the user to
+start the daemon for that directory. This daemon keeps track of file access
+within the initialized directory tree, adjusts file priority for time, keeps
+the remote directory mounted over sshfs and runs the \fBsync\fR command hourly
+by default, although this frequency can be configured in the systemd unit file
+\'retain-sync-resync@.timer'. To make this change without root privileges and
+only for a specific user, copy the unit file into ~/.config/systemd/user/
+before editing it.
 .sp
-Whenever the \fBsync\fR command is run, \fBretain-sync\fR first tries to sync whole
-directories. Directories are synced recursively, meaning that when a directory is
-synced, all subdirectories are included. Once no more whole directories can fit within
-the user-defined storage limit, \fBretain-sync\fR will try to sync individual files
+Whenever the \fBsync\fR command is run, \fBretain-sync\fR first tries to sync
+the highest-priority whole directories to the local machine. Directories are
+synced recursively, meaning that all subdirectories are included when a
+directory is synced. Once no more whole directories can fit within the
+user-defined storage limit, \fBretain-sync\fR will try to sync individual files
 until the storage limit is reached. This behavior can be overridden by setting
-\fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config.
+\fBsyncExtraFiles\fR to \'no' in the \fBretain-sync\fR config.
 .sp
-\fBretain-sync\fR uses rsync for copying files between the local and remote machines,
+\fBretain-sync\fR uses \fBrsync\fR for copying files between the local and remote machines,
 and should preserve symbolic links, permissions, modification times, ownership, hard
 links, ACLs, extended attributes and sparse files as long as the remote filesystem
 supports them. It can also work with special files such as devices and sockets.
 .SH EXCLUDING
-\fBretain-sync\fR allows the user to define certain files or directories to be excluded
-from syncing, meaning that they will never leave the local machine. This is done in the
-\'exclude' file for that configuration (see \fBFILES\fR).  To keep user-created symbolic
-links from being clobbered, all symbolic links found in the local initialized directory
-that \fBretain-sync\fR didn't put there are added to the exclude file automatically.
-The root of each file/directory path in the exclude file is anchored to the local
-initialized directory.
+\fBretain-sync\fR allows the user to define certain files or directories to be
+excluded from syncing, meaning that they will never leave the local machine.
+This is done in the \'exclude' file for that configuration (see \fBFILES\fR).
+To keep user-created symbolic links from being clobbered, all symbolic links
+found in the local initialized directory that \fBretain-sync\fR didn't put
+there are added to the exclude file automatically.  The root of each
+file/directory path in the exclude file is anchored to the local initialized
+directory. Another way to think of it: each file/directory path in the exclude
+file is relative to the initialized directory, but must include a leading
+slash.
 .SH TRASH
 Files that exist only on the server are represented locally as symbolic links. Whenever
 the \fBsync\fR command is run, local files (including these symbolic links) that were
