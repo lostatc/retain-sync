@@ -1003,10 +1003,13 @@ retrieveDir() {
 
 	printf "%s" "Cleaning up... "
 
-	# unmount sshfs, remove init file, lock file and config directory
+	# unmount sshfs
+	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
 	if mountpoint -q "$configDir/mnt" || [[ ! -d "$configDir/mnt" ]]; then
 		fusermount -u "$configDir/mnt" || exit 1
 	fi
+
+	# remove init file, lock file and config directory
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part" \
 		"$localDir/.retain-sync_lock"
 	chmod 700 "$configDir/mnt/.dest"

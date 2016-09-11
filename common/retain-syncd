@@ -117,25 +117,25 @@ if [[ -f "$localDir/.retain-sync_part" ]]; then
 	exit 1
 fi
 
-# get environment variables for ssh-agent that aren't available when retain-sync is
-# run as a systemd service (there has to be a better way to do this)
-[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
-	head -n 1)"
-[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
-	-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
-export SSH_AGENT_PID
-export SSH_AUTH_SOCK
-
 while true; do
 	# systemd user services can't reference system targets like network-online.target,
 	# so we need to have an endless loop here
+
+	# get environment variables for ssh-agent that aren't available when retain-sync is
+	# run as a systemd service (there has to be a better way to do this)
+	[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
+		head -n 1)"
+	[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+		-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+	export SSH_AGENT_PID
+	export SSH_AUTH_SOCK
 
 	# umount sshfs if mountpoint is broken
 	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
 	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
+	# mount sshfs if not already mounted
 	if ! mountpoint -q "$configDir/mnt"; then
-		# mount sshfs
 		sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
 			"$configDir/mnt" 2> /dev/null
 	else
