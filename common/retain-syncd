@@ -55,11 +55,11 @@ while read -r i; do
 
 	# parse option, removing leading/trailing whitespace
 	varName="$(echo "$i" | cut -d '=' -f 1 | sed -e 's/^[ \t]*//' -e \
-		's/[ \t]*$//')In"
+		's/[ \t]*$//')"
 	varValue="$(echo "$i" | cut -d '=' -f 2- | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')"
 
 	# check if option is recognized
-	if ! echo "$varName" | grep -qFf <(cat <<-EOF
+	if ! echo "$varName" | grep -Fxqf <(cat <<-EOF
 		localDir
 		remoteUser
 		remoteHost
@@ -77,7 +77,7 @@ while read -r i; do
 	fi
 
 	# check if value of boolean options is "yes" or "no"
-	if echo "$varName" | grep -Fqf <(cat <<-EOF
+	if echo "$varName" | grep -Fxqf <(cat <<-EOF
 		deleteAlways
 		syncExtraFiles
 		inflatePriority
@@ -90,7 +90,7 @@ while read -r i; do
 	fi
 
 	# declare variable
-	declare -g "$varName"="$varValue"
+	declare -g "${varName}In"="$varValue"
 done <"$configDir/config"
 
 # exit if there were errors in config file
@@ -99,7 +99,7 @@ done <"$configDir/config"
 # set defaults
 sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 
-# format variables
+# format variables, preserving original input
 localDir="${localDirIn%/}"
 remoteUser="${remoteUserIn:+$remoteUserIn@}"
 remoteHost="$remoteHostIn"

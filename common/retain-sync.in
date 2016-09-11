@@ -98,12 +98,12 @@ readConfig() {
 
 		# parse option, removing leading/trailing whitespace
 		varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
-			's/[ \t]*$//')In"
+			's/[ \t]*$//')"
 		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
 		# check if option is recognized
-		if ! echo "$varName" | grep -Fqf <(cat <<-EOF
+		if ! echo "$varName" | grep -Fxqf <(cat <<-EOF
 			localDir
 			remoteUser
 			remoteHost
@@ -121,7 +121,7 @@ readConfig() {
 		fi
 
 		# check if value of boolean options is "yes" or "no"
-		if echo "$varName" | grep -qFf <(cat <<-EOF
+		if echo "$varName" | grep -Fxqf <(cat <<-EOF
 			deleteAlways
 			syncExtraFiles
 			inflatePriority
@@ -134,7 +134,7 @@ readConfig() {
 		fi
 
 		# declare variable
-		declare -g "$varName"="$varValue"
+		declare -g "${varName}In"="$varValue"
 	done <"$configDir/config"
 
 	# exit if there were errors in config file
@@ -147,7 +147,7 @@ readConfig() {
 	inflatePriority="${inflatePriorityIn:-yes}"
 	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
 
-	# format variables
+	# format variables, preserving original input
 	localDir="${localDirIn%/}"
 	remoteUser="${remoteUserIn:+$remoteUserIn@}"
 	remoteHost="$remoteHostIn"
