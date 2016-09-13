@@ -4,15 +4,15 @@ retain-sync \- distribute files between machines based on how frequently they ar
 .SH SYNOPSIS
 \fBretain-sync\fR [\fIglobal_options\fR] \fIcommand\fR [\fIcommand_options\fR] [\fIcommand_arg\fR]
 .SH DESCRIPTION
-\fBretain-sync\fR is a program that distributes files between a local and remote
-directory based on how frequently they're accessed with the intent of conserving disk
-space. All files are assigned a "priority" value based on how frequently and recently
-they've been accessed as well as the file size. The highest-priority files are kept on
-the local machine for quick access, while lower priority files are moved to the server
-to conserve disk space. It uses sshfs and symbolic links to allow local and remote files
-to be accessible from the same directory. The user can specify how much data they want
-to remain on the local machine at any given point in time (hereafter referred to as
-the "storage limit").
+\fBretain-sync\fR is a program that distributes files between a local and
+remote directory based on how frequently they're accessed with the intent of
+conserving disk space. Files are prioritized based on how frequently and
+recently they've been accessed as well as the file size. The highest-priority
+files are kept on the local machine for quick access, while lower priority
+files are moved to the server to conserve disk space. It uses sshfs and
+symbolic links to allow local and remote files to be accessible from the same
+directory. The user can specify how much data they want to remain on the local
+machine at any given point in time (referred to as the "storage limit").
 .sp
 \fBretain-sync\fR does not need to be installed on the remote machine to work, although
 you do need to have passwordless ssh access to it (i.e. via public key authentication
