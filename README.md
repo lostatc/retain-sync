@@ -19,8 +19,7 @@ that's kept on the local machine is configurable by the user.
   server
 
 # Installation
-
-## Dependencies
+#### Dependencies
 * bash >=4.0
 * bc
 * inotify-tools
@@ -28,7 +27,7 @@ that's kept on the local machine is configurable by the user.
 * sshfs
 * systemd
 
-## Compiling from source
+#### Compiling from source
 ```
 git clone https://github.com/lostatc/retain-sync.git
 cd retain-sync
