@@ -87,6 +87,7 @@ while read -r i; do
 		deleteAlways
 		syncExtraFiles
 		inflatePriority
+		accountForSize
 	EOF
 	); then
 		>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
@@ -98,6 +99,7 @@ while read -r i; do
 		deleteAlways
 		syncExtraFiles
 		inflatePriority
+		accountForSize
 	EOF
 	); then
 		if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then

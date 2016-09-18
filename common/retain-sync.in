@@ -131,6 +131,7 @@ readConfig() {
 			deleteAlways
 			syncExtraFiles
 			inflatePriority
+			accountForSize
 		EOF
 		); then
 			>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
@@ -142,6 +143,7 @@ readConfig() {
 			deleteAlways
 			syncExtraFiles
 			inflatePriority
+			accountForSize
 		EOF
 		); then
 			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
@@ -162,6 +164,7 @@ readConfig() {
 	deleteAlways="${deleteAlwaysIn:-no}"
 	syncExtraFiles="${syncExtraFilesIn:-yes}"
 	inflatePriority="${inflatePriorityIn:-yes}"
+	accountForSize="${accountForSizeIn:-yes}"
 	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
 
 	# format variables, preserving original input
@@ -175,6 +178,7 @@ readConfig() {
 	deleteAlways="${deleteAlways,,}"
 	syncExtraFiles="${syncExtraFiles,,}"
 	inflatePriority="${inflatePriority,,}"
+	accountForSize="${accountForSize,,}"
 
 	# escape paths for use in sed substitutions
 	localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
@@ -331,18 +335,21 @@ genConfig() {
 
 
 		# mount options to pass to sshfs
-		#sshfsOptions=$sshfsOptions
+		#sshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
 		# always delete files from the server when their local counterparts are
 		# deleted, even if copies aren't found in the local user's trash
-		#deleteAlways=$deleteAlways
+		#deleteAlways=no
 
 		# start syncing individual files once no more whole directories can fit within
 		# the storage limit
-		#syncExtraFiles=$syncExtraFiles
+		#syncExtraFiles=yes
 
 		# inflate the priority of new local files so that they stick around longer
-		#inflatePriority=$inflatePriority
+		#inflatePriority=yes
+
+		# take file size into account when prioritizing files
+		#accountForSize=yes
 	EOF
 }
 
@@ -762,7 +769,11 @@ syncDir() {
 		# directory
 		# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
 		# numbers easier to work with
-		dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
+		if [[ "$accountForSize" == "no" ]]; then
+			dirPriority="${dirPriority:-0}"
+		else
+			dirPriority=$(echo "scale=6; ${dirPriority:-0}/($dirSize/10485760)" | bc)
+		fi
 
 		# write directory priority to file
 		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$|$i,$dirPriority|" \
@@ -855,24 +866,26 @@ syncDir() {
 		done
 
 		# adjust priority for file size
-		for i in "${!noSyncSorted[@]}"; do
-			currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
-			currentFileSize=$(du -sb "$configDir/mnt/.dest/..$currentFile" | \
-				awk '{print $1}') || exit 1
+		if ! [[ "$accountForSize" == "no" ]]; then
+			for i in "${!noSyncSorted[@]}"; do
+				currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
+				currentFileSize=$(du -sb "$configDir/mnt/.dest/..$currentFile" | \
+					awk '{print $1}') || exit 1
 
-			# set minimum file size of 16 bytes to perclude a "divide by zero"
-			# error with bc
-			if [[ "$currentFileSize" -lt 16 ]]; then
-				currentFileSize=16
-			fi
+				# set minimum file size of 16 bytes to perclude a "divide by zero"
+				# error with bc
+				if [[ "$currentFileSize" -lt 16 ]]; then
+					currentFileSize=16
+				fi
 
-			# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
-			# numbers easier to work with
-			adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
-				cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
-			noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< \
-				"${noSyncSorted[$i]}")"
-		done
+				# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
+				# numbers easier to work with
+				adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
+					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
+				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< \
+					"${noSyncSorted[$i]}")"
+			done
+		fi
 
 		# sort files by priority
 		noSyncSorted=($(printf "%s\n" "${noSyncSorted[@]}" | awk -F ',' '{print $NF,$0}' | \
@@ -1131,7 +1144,7 @@ agePriority() {
 	# divide the priority of every file by 1.1
 	while read -r i; do
 		fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
-		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.1" | bc) 2> /dev/null
+		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.05" | bc) 2> /dev/null
 		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
 			"$configDir/priority.csv"
 	done <"$configDir/priority.csv"
