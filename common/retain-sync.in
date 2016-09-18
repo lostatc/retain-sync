@@ -218,8 +218,8 @@ readConfig() {
 
 fileLock() {
 	# open lock file
-	exec 200>"$localDir/.retain-sync_lock"
-	flock -n 200
+	exec 9>"$localDir/.retain-sync_lock"
+	flock -n 9
 
 	# run if lock file was already open
 	if [[ "$?" -ne 0 ]]; then
@@ -391,7 +391,7 @@ initializeDir() {
 		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
 
 		# drop the lock on this configuration (necessary becuase of sshfs)
-		flock -u 200
+		flock -u 9
 
 		# inform user if initialization is interrupted
 		if [[ "$uniqueConfigName" != "no" ]]; then
@@ -610,7 +610,7 @@ initializeDir() {
 syncDir() {
 	cleanup() {
 		# drop the lock on this configuration (necessary becuase of sshfs)
-		flock -u 200
+		flock -u 9
 
 		# delete temp file
 		rm -f "$dirPriorityFile"
