@@ -96,6 +96,36 @@ readConfig() {
 	fi
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
+	# required options
+	mapfile -t reqVars <<-EOF
+		localDir
+		remoteUser
+		remoteHost
+		port
+		remoteDir
+		storageLimit
+	EOF
+
+	# optional options
+	mapfile -t optVars <<-EOF
+		sshfsOptions
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
+
+	# boolean options
+	mapfile -t boolVars <<-EOF
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
+
+	# possible values for boolean options (case insensitive)
+	boolValues=("yes" "no")
+
 	# source variables from config
 	configError=0
 	while read -r i; do
@@ -119,42 +149,42 @@ readConfig() {
 		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
+		# if option is required, add it to an array to be cross-referenced with the list
+		# of all required options
+		if echo "$varName" | grep -Fxqf <(printf "%s\n" "${reqVars[@]}"); then
+			reqVarsTest+=("$varName")
+		fi
+
 		# check if option is recognized
-		if ! echo "$varName" | grep -Fxqf <(cat <<-EOF
-			localDir
-			remoteUser
-			remoteHost
-			port
-			remoteDir
-			storageLimit
-			sshfsOptions
-			deleteAlways
-			syncExtraFiles
-			inflatePriority
-			accountForSize
-		EOF
-		); then
+		if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
 			>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
 			((configError++))
 		fi
 
-		# check if value of boolean options is "yes" or "no"
-		if echo "$varName" | grep -Fxqf <(cat <<-EOF
-			deleteAlways
-			syncExtraFiles
-			inflatePriority
-			accountForSize
-		EOF
-		); then
-			if [[ "${varValue,,}" != "yes" && "${varValue,,}" != "no" ]]; then
+		# check if value of boolean option is recognized
+		if grep -Fxqf <(printf "%s\n" "${boolVars[@]}") <<< "$varName"; then
+			if ! grep -Fxqf <(printf "%s\n" "${boolValues[@]}") <<< "${varValue,,}"; then
 				>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
 				((configError++))
+				continue
 			fi
 		fi
 
 		# declare variable
 		declare -g "${varName}In"="$varValue"
 	done <"$configDir/config"
+
+	# check if all required options were included in config file
+	IFS=$'\n'
+	reqVarsTest=($(printf "%s\n" "${reqVarsTest[@]}" | sort | uniq))
+	reqVarsMissing=($(printf "%s\n" "${reqVarsTest[@]}" "${reqVars[@]}" | sort | uniq -u))
+	unset IFS
+	if [[ "${#reqVarsMissing[@]}" -gt 0 ]]; then
+		for i in "${reqVarsMissing[@]}"; do
+			>&2 echo "Error: missing required option '$i' in config file"
+			((configError++))
+		done
+	fi
 
 	# exit if there were errors in config file
 	[[ $configError -ne 0 ]] && exit 1
