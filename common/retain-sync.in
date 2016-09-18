@@ -207,6 +207,9 @@ sshMaster() {
 }
 
 genConfig() {
+	# the point of the input redirection with /dev/tty is to prevent read from trying
+	# to read stdin
+
 	# prompt user for name of config
 	while true; do
 		read -erp "Enter a name for this configuration: " configName </dev/tty
@@ -248,10 +251,9 @@ genConfig() {
 
 	# prompt user for port number
 	while true; do
-		read -erp "Enter the port number to connect to on the remote machine (defaults to port 22): " portIn </dev/tty
+		read -erp "Enter the port number to connect to on the remote machine: " -i "22" portIn </dev/tty
 		if [[ -z "$portIn" ]]; then
-			portIn=22
-			break
+			>&2 echo "Error: this value may not be blank"
 		elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
 			>&2 echo "Error: value must be a number in the range 0-65535"
 		elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
@@ -1195,7 +1197,7 @@ case "$1" in
 		>&2 echo "Error: missing argument"
 		>&2 echo "Try 'retain-sync --help' for more information."
 		exit 1 ;;
-	initialize)
+	init|initialize)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
 			>&2 echo "Try 'retain-sync --help' for more information."
