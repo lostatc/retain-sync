@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-09-10" "" ""
+.TH RETAIN-SYNC 1 "2016-09-18" "" ""
 .SH NAME
 retain-sync \- distribute files between machines based on how frequently they are accessed
 .SH SYNOPSIS
@@ -139,7 +139,7 @@ setting \fBdeleteAlways\fR to 'yes' in the \fBretain-sync\fR config. The command
 marked for deletion. Note that when a file is marked for deletion, it will override any
 previously marked file with the same name.
 .SH FILES
-~/.config/retain-sync/<config_name>/
+~/.config/retain-sync/configs/<config_name>/
 .RS 4
 This directory exists for each directory that has been initialized by the user, where
 <config_name> is the user-specified name of the configuration. \fBretain-sync\fR will

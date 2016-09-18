@@ -45,7 +45,7 @@ fileParse() {
 }
 
 configName="$1"
-configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName"
+configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
 # check if specified config exists
 if ! [[ -d "$configDir" ]]; then

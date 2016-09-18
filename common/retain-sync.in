@@ -73,7 +73,7 @@ usage() {
 readConfig() {
 	# accepts either the name of a configuration or the absolute path of a local
 	# sync directory
-	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$1" ]]; then
+	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$1" ]]; then
 			# parameter is a valid config
 			configName="$1"
 	elif [[ "$1" =~ ^~?/ ]]; then
@@ -94,7 +94,7 @@ readConfig() {
 		>&2 echo "Error: '$1' is not a valid configuration or an absolute path"
 		exit 1
 	fi
-	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
+	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
 	# source variables from config
 	configError=0
@@ -302,7 +302,7 @@ genConfig() {
 	unset IFS
 
 	# create config directory
-	configDir=${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/$configName
+	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 	mkdir "$configDir"
 
 	# create config file
@@ -420,7 +420,7 @@ initializeDir() {
 
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
-		configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" \
+		configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
 			-mindepth 1 -maxdepth 1 -type d))
 		if [[ "${#configDirs[@]}" -gt 0 ]]; then
 			while read -r i; do
@@ -1043,7 +1043,7 @@ listConfigs() {
 	while read -r i; do
 		configName+=($(basename "$i"))
 		localDir+=($(grep "localDir=" "$i/config" | cut -d '=' -f 2-))
-	done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync" \
+	done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
 		-mindepth 1 -maxdepth 1 -type d)
 	unset IFS
 
