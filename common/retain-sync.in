@@ -141,6 +141,7 @@ readConfig() {
 		if ! [[ "$i" =~ = ]]; then
 			>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
 			((configError++))
+			continue
 		fi
 
 		# parse option, removing leading/trailing whitespace
@@ -159,6 +160,7 @@ readConfig() {
 		if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
 			>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
 			((configError++))
+			continue
 		fi
 
 		# check if value of boolean option is recognized
@@ -777,14 +779,22 @@ syncDir() {
 	# create directory priority file containing a list of all directories in the
 	# tree
 	dirPriorityFile="$(mktemp)"
-	find "$configDir/mnt/.dest/.." -mindepth 1 -type d | sed -r \
+	find "$configDir/mnt/.dest/.." -mindepth 1 -not -name ".*" -type d | sed -r \
 		"s|$configDirEsc/mnt/\.dest/\.\.||" > "$dirPriorityFile" || exit 1
 
 	# read directory priority file line-by-line
 	while read -r i; do
+		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")"
+
+		# remove directories from directory priority file if they're not found in
+		# priority.csv
+		if ! grep -Eq "^$iEsc" "$configDir/priority.csv"; then
+			sed -i -r -e "s|^$iEsc$||" -e "/^$/d" "$dirPriorityFile"
+		fi
+
 		# total the priorities of all the files in each directory to get the
 		# directory priority
-		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -F "$i/" | rev | \
+		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -E "^$iEsc/" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
@@ -795,8 +805,7 @@ syncDir() {
 		# error with bc
 		[[ "$dirSize" -lt 16 ]] && dirSize=16
 
-		# adjust directory priority for the number of files and the size of the
-		# directory
+		# adjust directory priority for the size of the directory
 		# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
 		# numbers easier to work with
 		if [[ "$accountForSize" == "no" ]]; then
@@ -806,7 +815,7 @@ syncDir() {
 		fi
 
 		# write directory priority to file
-		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")$|$i,$dirPriority|" \
+		sed -i -r "s|^$iEsc$|$i,$dirPriority|" \
 			"$dirPriorityFile"
 	done <"$dirPriorityFile"
 
@@ -941,22 +950,24 @@ syncDir() {
 	fi
 
 	# get list of individual files to remove and change their path context
+	IFS=$'\n'
 	if [[ "$syncExtraFiles" == "yes" ]]; then
-		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
 			sed "s|^|$localDir|"))
-		unset IFS
-		echo "done"
 	else
-		IFS=$'\n'
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed "s|^|$localDir|"))
-		unset IFS
-		echo "done"
 	fi
+	unset IFS
+	echo "done"
 
 	# remove files that aren't in the directory priority file or the extra files list
 	printf "%s" "Removing unused files... "
 	printf "%s\n" "${rmFiles[@]}" | xargs -d '\n' rm -f
+
+	# get a list of empty directories in the local file tree (see below)
+	IFS=$'\n'
+	emptyDirs=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || exit 1
+	unset IFS
 
 	# replace missing files with symlinks
 	cp -asn "$configDir"/mnt/* "$localDir" &> /dev/null
@@ -964,10 +975,15 @@ syncDir() {
 	# remove symlinks to files marked for deletion
 	find "$configDir/mnt/.dest/.." -not -type d -name '.*.trash' | \
 		sed -r "s|$configDirEsc/mnt/\.dest/\.\.|$localDir|" | xargs -d '\n' rm -f || \
-			exit 1
+		exit 1
 
-	# remove empty directories
-	find "$localDir" -not -path '*/\.*' -type d -empty -delete
+	# remove any empty directories that weren't already in the local file tree
+	IFS=$'\n'
+	emptyDirs+=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || \
+		exit 1
+	unset IFS
+	printf "%s\n" "${emptyDirs[@]}" | sort | uniq -u | xargs -d '\n' rmdir 2> /dev/null
+
 	echo "done"
 
 	printf "%s" "Downloading new files... "
@@ -978,6 +994,17 @@ syncDir() {
 		"${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | rsync -asHAXS \
 		--files-from=- --remove-source-files "$configDir/mnt/.dest/../" \
 		"$localDir" || exit 1
+
+	# remove any empty directories on the server that aren't also local
+	IFS=$'\n'
+	emptyDirs=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -type d -empty | \
+		sed -r "s|$localDirEsc||" | grep -Fvxf "$configDir/exclude")" \
+		"$(find "$configDir/mnt/.dest/.." -not -name '.*' -type d -empty | sed -r \
+		"s|$configDirEsc/mnt/\.dest/\.\.||")" | sort | uniq -u))
+	unset IFS
+	for i in "${emptyDirs[@]}"; do
+		rmdir "$configDir/mnt/.dest/..$i" 2> /dev/null
+	done
 
 	# find file paths in directory priority file
 	IFS=$'\n'

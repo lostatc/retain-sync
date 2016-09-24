@@ -98,6 +98,7 @@ while read -r i; do
 	if ! [[ "$i" =~ = ]]; then
 		>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
 		((configError++))
+		continue
 	fi
 
 	# parse option, removing leading/trailing whitespace
@@ -116,6 +117,7 @@ while read -r i; do
 	if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
 		>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
 		((configError++))
+		continue
 	fi
 
 	# check if value of boolean option is recognized
