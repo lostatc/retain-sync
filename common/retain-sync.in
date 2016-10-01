@@ -20,14 +20,6 @@
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
-# disable colored output if stdout is being redirected
-if [[ -t 1 ]]; then
-	# set colors for colored output
-	cBG="$(tput bold)$(tput setaf 2)"	# bold green
-	cBR="$(tput bold)$(tput setaf 1)"	# bold red
-	cN="$(tput sgr0)"					# normal
-fi
-
 usage() {
 	cat <<-EOF
 		Usage: ${cBR}retain-sync${cN} [${cBG}global_options${cN}] ${cBG}command${cN} [${cBG}command_options${cN}] [${cBG}command_arg${cN}]
@@ -47,6 +39,12 @@ usage() {
 		            excluded from syncing, meaning that they will never leave the local
 		            machine. If ${cBG}file${cN} is '-', then a newline-separated list of file paths will
 		            be accepted from stdin.
+
+		        ${cBR}-t${cN}, ${cBR}--template${cN} ${cBG}file${cN}
+		            Get settings for the configuration from the template ${cBG}file${cN} instead of
+		            prompting the user interactively. The user will still be prompted for the
+		            name of the configuration and any mandatory information that is missing
+		            from the template.
 
 		    ${cBR}sync${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Redistribute files between the local and remote directories based on their
@@ -70,58 +68,8 @@ usage() {
 	EOF
 }
 
-readConfig() {
-	# accepts either the name of a configuration or the absolute path of a local
-	# sync directory
-	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$1" ]]; then
-			# parameter is a valid config
-			configName="$1"
-	elif [[ "$1" =~ ^~?/ ]]; then
-		# parameter is an absolute path
-		if [[ -f "$1/.retain-sync_init" ]]; then
-			# parameter is an initialized directory
-			localDir="${1%/}"
-			configName=$(cat "$localDir/.retain-sync_init")
-		elif [[ -f "$1/.retain-sync_part" ]]; then
-			# directory initialization was interrupted
-			localDir="${1%/}"
-			configName=$(cat "$localDir/.retain-sync_part")
-		else
-			>&2 echo "Error: '$1' is not an initialized directory"
-			exit 1
-		fi
-	else
-		>&2 echo "Error: '$1' is not a valid configuration or an absolute path"
-		exit 1
-	fi
-	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
-
-	# required options
-	mapfile -t reqVars <<-EOF
-		localDir
-		remoteUser
-		remoteHost
-		port
-		remoteDir
-		storageLimit
-	EOF
-
-	# optional options
-	mapfile -t optVars <<-EOF
-		sshfsOptions
-		deleteAlways
-		syncExtraFiles
-		inflatePriority
-		accountForSize
-	EOF
-
-	# boolean options
-	mapfile -t boolVars <<-EOF
-		deleteAlways
-		syncExtraFiles
-		inflatePriority
-		accountForSize
-	EOF
+parseConfig() {
+	configFile="$1"
 
 	# possible values for boolean options (case insensitive)
 	boolValues=("yes" "no")
@@ -172,9 +120,11 @@ readConfig() {
 			fi
 		fi
 
-		# declare variable
-		declare -g "${varName}In"="$varValue"
-	done <"$configDir/config"
+		# declare variable unless value is null
+		if [[ -n "$varValue" ]]; then
+			declare -g "${varName}In"="$varValue"
+		fi
+	done <"$configFile"
 
 	# check if all required options were included in config file
 	IFS=$'\n'
@@ -218,6 +168,35 @@ readConfig() {
 	configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
 }
 
+readInput() {
+	# accepts either the name of a configuration or the absolute path of a local
+	# sync directory
+	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$1" ]]; then
+			# parameter is a valid config
+			configName="$1"
+	elif [[ "$1" =~ ^~?/ ]]; then
+		# parameter is an absolute path
+		if [[ -f "$1/.retain-sync_init" ]]; then
+			# parameter is an initialized directory
+			localDir="${1%/}"
+			configName=$(cat "$localDir/.retain-sync_init")
+		elif [[ -f "$1/.retain-sync_part" ]]; then
+			# directory initialization was interrupted
+			localDir="${1%/}"
+			configName=$(cat "$localDir/.retain-sync_part")
+		else
+			>&2 echo "Error: '$1' is not an initialized directory"
+			exit 1
+		fi
+	else
+		>&2 echo "Error: '$1' is not a valid configuration or an absolute path"
+		exit 1
+	fi
+	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
+
+	parseConfig "$configDir/config"
+}
+
 fileLock() {
 	# open lock file
 	exec 9>"$localDir/.retain-sync_lock"
@@ -247,95 +226,96 @@ genConfig() {
 	# to read stdin
 
 	# prompt user for name of config
-	while true; do
-		read -erp "Enter a name for this configuration: " configName </dev/tty
-		configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
-		if [[ -z "$configName" ]]; then
-			>&2 echo "Error: this value may not be blank"
-		elif [[ "$configName" =~ [\ ]+ ]]; then
-			>&2 echo "Error: this value may not contain spaces"
-		elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
-			>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
-		else
-			break
-		fi
-	done
+	if [[ -z "${configName:+x}" ]]; then
+		IFS=$'\n'
+		while true; do
+			read -erp "Enter a name for this configuration: " configName </dev/tty
+			configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
+			if [[ -z "$configName" ]]; then
+				>&2 echo "Error: this value may not be blank"
+			elif [[ "$configName" =~ [\ ]+ ]]; then
+				>&2 echo "Error: this value may not contain spaces"
+			elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
+				>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
+			elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 2> /dev/null)); then
+				>&2 echo "Error: the name '$configName' is already in use"
+			else
+				break
+			fi
+		done
+		unset IFS
+	fi
 
 	# prompt user for user name on remote machine
-	while true; do
-		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUserIn </dev/tty
-		remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
-		if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
-			>&2 echo "Error: user name may not contain spaces"
-		else
-			break
-		fi
-	done
+	if [[ -z "${remoteUserIn:+x}" ]]; then
+		while true; do
+			read -erp "Enter your user name on the remote machine ($USER): " remoteUserIn </dev/tty
+			remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
+			if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
+				>&2 echo "Error: user name may not contain spaces"
+			else
+				break
+			fi
+		done
+	fi
 
 	# prompt user for hostname of remote machine
-	while true; do
-		read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHostIn </dev/tty
-		remoteHostIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHostIn")"
-		if [[ -z "$remoteHostIn" ]]; then
-			>&2 echo "Error: this value may not be blank"
-		elif [[ "$remoteHostIn" =~ [\ ]+ ]]; then
-			>&2 echo "Error: hostname may not contain spaces"
-		else
-			break
-		fi
-	done
+	if [[ -z "${remoteHostIn:+x}" ]]; then
+		while true; do
+			read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHostIn </dev/tty
+			remoteHostIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHostIn")"
+			if [[ -z "$remoteHostIn" ]]; then
+				>&2 echo "Error: this value may not be blank"
+			elif [[ "$remoteHostIn" =~ [\ ]+ ]]; then
+				>&2 echo "Error: hostname may not contain spaces"
+			else
+				break
+			fi
+		done
+	fi
 
 	# prompt user for port number
-	while true; do
-		read -erp "Enter the port number to connect to on the remote machine: " -i "22" portIn </dev/tty
-		if [[ -z "$portIn" ]]; then
-			>&2 echo "Error: this value may not be blank"
-		elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
-			>&2 echo "Error: value must be a number in the range 0-65535"
-		elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
-			>&2 echo "Error: value must be a number in the range 0-65535"
-		else
-			break
-		fi
-	done
+	if [[ -z "${portIn:+x}" ]]; then
+		while true; do
+			read -erp "Enter the port number to connect to on the remote machine: " -i "22" portIn </dev/tty
+			if [[ -z "$portIn" ]]; then
+				>&2 echo "Error: this value may not be blank"
+			elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
+				>&2 echo "Error: value must be a number in the range 0-65535"
+			elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
+				>&2 echo "Error: value must be a number in the range 0-65535"
+			else
+				break
+			fi
+		done
+	fi
 
 	# prompt user for directory to sync to on remote machine
-	while true; do
-		read -erp "Enter the directory to sync to on the remote machine: " remoteDirIn </dev/tty
-		remoteDirIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDirIn")"
-		if [[ -z "$remoteDirIn" ]]; then
-			>&2 >&2 echo "Error: this value may not be blank"
-		elif [[ ! "$remoteDirIn" =~ ^/ ]]; then
-			>&2 echo "Error: must be an absolute path"
-		else
-			break
-		fi
-	done
+	if [[ -z "${remoteDirIn:+x}" ]]; then
+		while true; do
+			read -erp "Enter the directory to sync to on the remote machine: " remoteDirIn </dev/tty
+			remoteDirIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDirIn")"
+			if [[ -z "$remoteDirIn" ]]; then
+				>&2 >&2 echo "Error: this value may not be blank"
+			elif [[ ! "$remoteDirIn" =~ ^/ ]]; then
+				>&2 echo "Error: must be an absolute path"
+			else
+				break
+			fi
+		done
+	fi
 
 	# prompt user for storage limit
-	while true; do
-		read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimitIn </dev/tty
-		if [[ ! "$storageLimitIn" =~ ^[0-9]+(K|M|G|KB|MB|GB)$ ]]; then
-			>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
-		else
-			break
-		fi
-	done
-
-	# set default options
-	sshfsOptions="reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"
-	deleteAlways="no"
-	syncExtraFiles="yes"
-	inflatePriority="yes"
-
-	# check if config name is unique
-	IFS=$'\n'
-	if grep -Fxq "$configName" <(basename -a $(printf "%s\n" "${configDirs[@]}") 2> /dev/null); then
-		uniqueConfigName="no"
-		>&2 echo "Error: the name '$configName' is already in use"
-		exit 1
+	if [[ -z "${storageLimitIn:+x}" ]]; then
+		while true; do
+			read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimitIn </dev/tty
+			if [[ ! "$storageLimitIn" =~ ^[0-9]+(K|M|G|KB|MB|GB)$ ]]; then
+				>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
+			else
+				break
+			fi
+		done
 	fi
-	unset IFS
 
 	# create config directory
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
@@ -367,22 +347,32 @@ genConfig() {
 
 
 		# mount options to pass to sshfs
-		#sshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
+		#sshfsOptions=${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}
 
 		# always delete files from the server when their local counterparts are
 		# deleted, even if copies aren't found in the local user's trash
-		#deleteAlways=no
+		#deleteAlways=${deleteAlwaysIn:-no}
 
 		# start syncing individual files once no more whole directories can fit within
 		# the storage limit
-		#syncExtraFiles=yes
+		#syncExtraFiles=${syncExtraFilesIn:-yes}
 
 		# inflate the priority of new local files so that they stick around longer
-		#inflatePriority=yes
+		#inflatePriority=${inflatePriorityIn:-yes}
 
 		# take file size into account when prioritizing files
-		#accountForSize=yes
+		#accountForSize=${accountForSizeIn:-yes}
 	EOF
+
+	# run if --template option was given
+	if [[ -n "$optConfigFile" ]]; then
+		for i in "${optVars[@]}"; do
+			# uncomment option if it is uncommented in template file
+			if grep -Eq "^[ \t]*$i[ \t]*=" "$optConfigFile"; then
+				sed -i "s/^#$i=/$i=/" "$configDir/config"
+			fi
+		done
+	fi
 }
 
 initializeDir() {
@@ -396,13 +386,11 @@ initializeDir() {
 		flock -u 9
 
 		# inform user if initialization is interrupted
-		if [[ "$uniqueConfigName" != "no" ]]; then
-			if [[ -f "$localDir/.retain-sync_part" ]]; then
-				printf "\n%s\n" "Initialization was interrupted."
-				echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
-			elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
-				rm -rf "$configDir"
-			fi
+		if [[ -f "$localDir/.retain-sync_part" ]]; then
+			printf "\n%s\n" "Initialization was interrupted."
+			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
+			rm -rf "$configDir"
 		fi
 	}
 
@@ -432,7 +420,16 @@ initializeDir() {
 			mapfile -t excludeInputFiles < "$optExcludeFile"
 		else
 			# argument is invalid
-			>&2 echo "Error: input file is invalid"
+			>&2 echo "Error: input file for '--exclude' is invalid"
+			exit 1
+		fi
+	fi
+
+	# check argument for --template option
+	if [[ -n "$optConfigFile" ]]; then
+		if ! [[ -f "$optConfigFile" ]]; then
+			# argument is invalid
+			>&2 echo "Error: input file for '--template' is invalid"
 			exit 1
 		fi
 	fi
@@ -474,22 +471,22 @@ initializeDir() {
 		fi
 		unset IFS
 
-		# generate config and source variables from it
+		# run if --template option was given
+		if [[ -n "$optConfigFile" ]]; then
+			# store value of $localDir so that it isn't overridden by the value in
+			# the template file
+			localDirTemp="$localDir"
+			parseConfig "$optConfigFile"
+			localDir="$localDirTemp"
+		fi
+
+		# generate config file
 		genConfig
 
-		# set defaults
-		sshfsOptions="${sshfsOptions:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
-		sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
-
-		# format variables
-		remoteUser="${remoteUserIn:+$remoteUserIn@}"
-		remoteHost="$remoteHostIn"
-		remoteDir="${remoteDirIn%/}"
-		sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
-
-		# escape paths for use in sed substitutions
-		localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
-		configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
+		# This is required becuase genConfig() doesn't set the variables for the
+		# non-mandatory config file options. It's necessary so that user-set options
+		# aren't overridden when initializing from a template.
+		parseConfig "$configDir/config"
 
 		# start ssh master connection
 		sshMaster
@@ -542,10 +539,10 @@ initializeDir() {
 		# generate file indicating that the initialization process is in progress
 		echo "$configName" > "$localDir/.retain-sync_part"
 	else
-		echo "Resuming initialization..."
+		echo "Resuming initialization"
 
 		# read config file
-		readConfig "$1"
+		readInput "$1"
 
 		# start ssh master connection
 		sshMaster
@@ -573,7 +570,7 @@ initializeDir() {
 		--exclude-from="$configDir/exclude" "$localDir/" \
 		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
 
-	# Note: the purpose of this directory is to ensure that any commands that interact
+	# the purpose of this directory is to ensure that any commands that interact
 	# with it (e.g. find $configDir/mnt/.dest/..) fail when sshfs isn't mounted
 	mkdir -p "$configDir/mnt/.dest"
 	chmod 000 "$configDir/mnt/.dest"
@@ -581,12 +578,12 @@ initializeDir() {
 	# mount sshfs
 	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
 		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
-	if [[ $? -ne 0 ]]; then
+	if [[ "$?" -ne 0 ]]; then
 		>&2 echo "Error: unable to mount remote directory over sshfs"
 		exit 1
 	fi
 
-	mkdir "$configDir/mnt/.dest"
+	mkdir -p "$configDir/mnt/.dest"
 
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "${localFiles[@]}" ]]; then
@@ -619,7 +616,7 @@ syncDir() {
 	}
 
 	# read config file
-	readConfig "$1"
+	readInput "$1"
 
 	# lock this configuration
 	fileLock
@@ -1036,7 +1033,7 @@ retrieveDir() {
 	}
 
 	# read config file
-	readConfig "$1"
+	readInput "$1"
 
 	# lock this configuration
 	fileLock
@@ -1151,7 +1148,7 @@ emptyTrash() {
 	}
 
 	# read config file
-	readConfig "$1"
+	readInput "$1"
 
 	# lock this configuration
 	fileLock
@@ -1189,7 +1186,7 @@ emptyTrash() {
 
 agePriority() {
 	# read config file
-	readConfig "$1"
+	readInput "$1"
 
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -1209,15 +1206,55 @@ agePriority() {
 
 # check for dependencies
 [[ ! -x "$(which rsync 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'rsync'" && exit 1
+	echo "Error: missing dependency 'rsync'" && exit 1
 [[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'sshfs'" && exit 1
+	echo "Error: missing dependency 'sshfs'" && exit 1
 [[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'inotify-tools'" && exit 1
+	echo "Error: missing dependency 'inotify-tools'" && exit 1
 [[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'systemd'" && exit 1
+	echo "Error: missing dependency 'systemd'" && exit 1
 [[ ! -x "$(which bc 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'bc'" && exit 1
+	echo "Error: missing dependency 'bc'" && exit 1
+
+# This is where you define options that are recognized in the config file. When
+# the config file is parsed, option values they are declared as variables that
+# have the same name with 'In' appended to the end of them. The option
+# "localDir" is declared as "localDirIn".
+
+# mandatory options
+mapfile -t reqVars <<-EOF
+	localDir
+	remoteUser
+	remoteHost
+	port
+	remoteDir
+	storageLimit
+EOF
+
+# non-mandatory options
+mapfile -t optVars <<-EOF
+	sshfsOptions
+	deleteAlways
+	syncExtraFiles
+	inflatePriority
+	accountForSize
+EOF
+
+# boolean options
+mapfile -t boolVars <<-EOF
+	deleteAlways
+	syncExtraFiles
+	inflatePriority
+	accountForSize
+EOF
+
+# enable colored output unless stdout is being redirected
+if [[ -t 1 ]]; then
+	# set colors for colored output
+	cBG="$(tput bold)$(tput setaf 2)"	# bold green
+	cBR="$(tput bold)$(tput setaf 1)"	# bold red
+	cN="$(tput sgr0)"					# normal
+fi
 
 # parse options
 for ((i=1; i<=$#; i++)); do
@@ -1225,8 +1262,8 @@ for ((i=1; i<=$#; i++)); do
 	# parameters to have their own options
 
 	# if parameter is a double dash, stop parsing options
-    if [[ "${@:$i:1}" == "--" ]]; then
-        break
+	if [[ "${@:$i:1}" == "--" ]]; then
+		break
 
 	# if parameter is multiple short options sharing a hyphen, separate them
 	elif [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
@@ -1279,6 +1316,9 @@ case "$1" in
 			case "$2" in
 				-e|--exclude)
 					optExcludeFile="$3"
+					shift 2 ;;
+				-t|--template)
+					optConfigFile="$3"
 					shift 2 ;;
 				--)
 					shift

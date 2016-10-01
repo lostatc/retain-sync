@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-09-18" "" ""
+.TH RETAIN-SYNC 1 "2016-09-29" "" ""
 .SH NAME
 retain-sync \- distribute files between machines based on how frequently they are accessed
 .SH SYNOPSIS
@@ -55,6 +55,15 @@ from syncing, meaning that they will never leave the local machine (see
 be accepted from stdin. File paths specified here can be relative or absolute, and will
 be converted to the proper format and added to the 'exclude' file automatically once it
 is generated.
+.RE 2
+.PP
+\fB-t\fR, \fB--template\fR \fIfile\fR
+.RS 4
+Get settings for the configuration from the template \fIfile\fR instead of
+prompting the user interactively. The user will still be prompted for the name
+of the configuration and any mandatory information that is missing from the
+template. A blank template can usually be found at
+/usr/local/share/retain-sync/config-template.
 .RE 1
 .PP
 \fBsync\fR \fIconfig\fR|\fIpath\fR
@@ -139,29 +148,33 @@ setting \fBdeleteAlways\fR to 'yes' in the \fBretain-sync\fR config. The command
 marked for deletion. Note that when a file is marked for deletion, it will override any
 previously marked file with the same name.
 .SH FILES
-~/.config/retain-sync/configs/<config_name>/
+~/.config/retain-sync/
+.RS 4
+This is the \fBretain-sync\fR config directory. \fBretain-sync\fR will respect
+XDG_CONFIG_HOME, and if it is set, put the directory there instead.
+.sp
+configs/<config_name>/
 .RS 4
 This directory exists for each directory that has been initialized by the user, where
-<config_name> is the user-specified name of the configuration. \fBretain-sync\fR will
-respect XDG_CONFIG_HOME, and if it is set, put the directory there instead.
+<config_name> is the user-specified name of the configuration.
 .sp
 mnt/
 .RS 4
 This is the sshfs mountpoint for the remote directory. Symbolic links in the local
 initialized directory point to files in this directory.
-.RE 2
+.RE 3
 .PP
 config
 .RS 4
 This is the main configuration file for the initialized directory. It contains required
 information that the user is prompted for when the \fBinitialize\fR command is run as
 well as additional settings that can be configured.
-.RE 2
+.RE 3
 .PP
 exclude
 .RS 4
 This file contains a list of file/directory paths to be excluded from syncing (see \fBEXCLUDING\fR).
-.RE 2
+.RE 3
 .PP
 priority.csv
 .RS 4

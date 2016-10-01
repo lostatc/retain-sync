@@ -21,6 +21,8 @@ back up your data before testing it.
   same directory tree
 * searches for deleted files in the user's local trash before deleting them on
   the server
+* provides options for configuring syncing behavior
+* supports configuration file templates
 
 ## Installation
 #### Dependencies
