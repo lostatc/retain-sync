@@ -20,14 +20,6 @@
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
-# disable colored output if stdout is being redirected
-if [[ -t 1 ]]; then
-	# set colors for colored output
-	cBG="$(tput bold)$(tput setaf 2)"	# bold green
-	cBR="$(tput bold)$(tput setaf 1)"	# bold red
-	cN="$(tput sgr0)"					# normal
-fi
-
 usage() {
 	cat <<-EOF
 		Usage: ${cBR}retain-sync${cN} [${cBG}global_options${cN}] ${cBG}command${cN} [${cBG}command_options${cN}] [${cBG}command_arg${cN}]
@@ -256,6 +248,8 @@ genConfig() {
 			>&2 echo "Error: this value may not contain spaces"
 		elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
 			>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
+		elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 2> /dev/null)); then
+			>&2 echo "Error: the name '$configName' is already in use"
 		else
 			break
 		fi
@@ -263,7 +257,7 @@ genConfig() {
 
 	# prompt user for user name on remote machine
 	while true; do
-		read -erp "Enter your user name on the remote machine (empty to use local user name): " remoteUserIn </dev/tty
+		read -erp "Enter your user name on the remote machine ($USER): " remoteUserIn </dev/tty
 		remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
 		if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
 			>&2 echo "Error: user name may not contain spaces"
@@ -328,15 +322,6 @@ genConfig() {
 	syncExtraFiles="yes"
 	inflatePriority="yes"
 
-	# check if config name is unique
-	IFS=$'\n'
-	if grep -Fxq "$configName" <(basename -a $(printf "%s\n" "${configDirs[@]}") 2> /dev/null); then
-		uniqueConfigName="no"
-		>&2 echo "Error: the name '$configName' is already in use"
-		exit 1
-	fi
-	unset IFS
-
 	# create config directory
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 	mkdir "$configDir"
@@ -396,13 +381,11 @@ initializeDir() {
 		flock -u 9
 
 		# inform user if initialization is interrupted
-		if [[ "$uniqueConfigName" != "no" ]]; then
-			if [[ -f "$localDir/.retain-sync_part" ]]; then
-				printf "\n%s\n" "Initialization was interrupted."
-				echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
-			elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
-				rm -rf "$configDir"
-			fi
+		if [[ -f "$localDir/.retain-sync_part" ]]; then
+			printf "\n%s\n" "Initialization was interrupted."
+			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
+			rm -rf "$configDir"
 		fi
 	}
 
@@ -553,6 +536,10 @@ initializeDir() {
 		# create remote directory if it doesn't already exist
 		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || \
 			exit 1
+
+		IFS=$'\n'
+		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
+		unset IFS
 	fi
 
 	# check if there is enough space on the server
@@ -1209,15 +1196,23 @@ agePriority() {
 
 # check for dependencies
 [[ ! -x "$(which rsync 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'rsync'" && exit 1
+	echo "Error: missing dependency 'rsync'" && exit 1
 [[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'sshfs'" && exit 1
+	echo "Error: missing dependency 'sshfs'" && exit 1
 [[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'inotify-tools'" && exit 1
+	echo "Error: missing dependency 'inotify-tools'" && exit 1
 [[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'systemd'" && exit 1
+	echo "Error: missing dependency 'systemd'" && exit 1
 [[ ! -x "$(which bc 2> /dev/null)" ]] && \
-    echo "Error: missing dependency 'bc'" && exit 1
+	echo "Error: missing dependency 'bc'" && exit 1
+
+# disable colored output if stdout is being redirected
+if [[ -t 1 ]]; then
+	# set colors for colored output
+	cBG="$(tput bold)$(tput setaf 2)"	# bold green
+	cBR="$(tput bold)$(tput setaf 1)"	# bold red
+	cN="$(tput sgr0)"					# normal
+fi
 
 # parse options
 for ((i=1; i<=$#; i++)); do
@@ -1225,8 +1220,8 @@ for ((i=1; i<=$#; i++)); do
 	# parameters to have their own options
 
 	# if parameter is a double dash, stop parsing options
-    if [[ "${@:$i:1}" == "--" ]]; then
-        break
+	if [[ "${@:$i:1}" == "--" ]]; then
+		break
 
 	# if parameter is multiple short options sharing a hyphen, separate them
 	elif [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
