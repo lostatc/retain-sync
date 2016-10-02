@@ -2,27 +2,27 @@
 # retain-sync config
 #
 
-# user name on remote machine (optional)
-remoteUser=
-
-# hostname, ip address or domain name of remote machine
+# hostname, ip address or domain name of the server (optional)
 remoteHost=
 
-# port number to connect to on remote machine
+# user name on the server (optional)
+remoteUser=
+
+# port number for the connection (optional)
 port=
 
-# directory to sync to on remote machine
+# remote directory to sync to
 remoteDir=
 
-# amount of data to keep on local machine (accepts K, M or G)
+# amount of data to keep in local directory (accepts K, M or G)
 storageLimit=
 
 
 # mount options to pass to sshfs
 #sshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
-# always delete files from the server when their local counterparts are
-# deleted, even if copies aren't found in the local user's trash
+# always delete files from the remote directory when their local counterparts
+# are deleted, even if copies aren't found in the local user's trash
 #deleteAlways=no
 
 # start syncing individual files once no more whole directories can fit within

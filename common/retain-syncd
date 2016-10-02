@@ -157,10 +157,16 @@ remoteUser="${remoteUserIn:+$remoteUserIn@}"
 remoteHost="$remoteHostIn"
 remoteDir="${remoteDirIn%/}"
 sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
+if [[ -n "$remoteHost" ]]; then
+	destDir="$configDir/mnt/.dest/.."
+else
+	destDir="$remoteDir"
+fi
 
 # escape paths for use in sed substitutions
 localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
 configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
+destDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$destDir")"
 
 # check if initialization was interrupted
 if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -169,32 +175,34 @@ if [[ -f "$localDir/.retain-sync_part" ]]; then
 	exit 1
 fi
 
-while true; do
-	# systemd user services can't reference system targets like network-online.target,
-	# so we need to have an endless loop here
+if [[ -n "$remoteHost" ]]; then
+	while true; do
+		# systemd user services can't reference system targets like network-online.target,
+		# so we need to have an endless loop here
 
-	# get environment variables for ssh-agent that aren't available when retain-sync is
-	# run as a systemd service (there has to be a better way to do this)
-	[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
-		head -n 1)"
-	[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
-		-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
-	export SSH_AGENT_PID
-	export SSH_AUTH_SOCK
+		# get environment variables for ssh-agent that aren't available when retain-sync is
+		# run as a systemd service (there has to be a better way to do this)
+		[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
+			head -n 1)"
+		[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+			-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+		export SSH_AGENT_PID
+		export SSH_AUTH_SOCK
 
-	# umount sshfs if mountpoint is broken
-	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
-	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+		# umount sshfs if mountpoint is broken
+		mkdir -p "$configDir/mnt/.dest" 2> /dev/null
+		[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
-	# mount sshfs if not already mounted
-	if ! mountpoint -q "$configDir/mnt"; then
-		sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
-			"$configDir/mnt" 2> /dev/null
-	else
-		sleep 10
-	fi
-done &
-sshfsPID="$!"
+		# mount sshfs if not already mounted
+		if ! mountpoint -q "$configDir/mnt"; then
+			sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
+				"$configDir/mnt" 2> /dev/null
+		else
+			sleep 10
+		fi
+	done &
+	sshfsPID="$!"
+fi
 
 while true; do
 	# wait for a file to be opened in local dir
@@ -210,8 +218,8 @@ trap cleanup EXIT
 
 while true; do
 	# wait for a file to be opened in remote dir
-	fileName="$(inotifywait -qre open --format '%w%f' "$configDir/mnt" 2> /dev/null)"
+	fileName="$(inotifywait -qre open --format '%w%f' "$destDir" 2> /dev/null)"
 
 	# make sure file is not a directory
-	[[ -d "$fileName" ]] || fileParse "$(sed "s|$configDirEsc/mnt||" <<< "$fileName")"
+	[[ -d "$fileName" ]] || fileParse "$(sed "s|$destDirEsc||" <<< "$fileName")"
 done

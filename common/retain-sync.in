@@ -31,13 +31,13 @@ usage() {
 
 		Commands:
 		    ${cBR}initialize${cN} [${cBG}options${cN}] ${cBG}path${cN}
-		        Prepare the local directory ${cBG}path${cN} for syncing by moving it to the server and
-		        generating a configuration for it.
+		        Prepare the local directory ${cBG}path${cN} for syncing by moving its contents
+		        to the remote directory and generating a configuration for it.
 
 		        ${cBR}-e${cN}, ${cBR}--exclude${cN} ${cBG}file${cN}
 		            Get a list of file/directory paths from ${cBG}file${cN} (one per line) that will be
 		            excluded from syncing, meaning that they will never leave the local
-		            machine. If ${cBG}file${cN} is '-', then a newline-separated list of file paths will
+		            directory. If ${cBG}file${cN} is '-', then a newline-separated list of file paths will
 		            be accepted from stdin.
 
 		        ${cBR}-t${cN}, ${cBR}--template${cN} ${cBG}file${cN}
@@ -47,24 +47,24 @@ usage() {
 		            from the template.
 
 		    ${cBR}sync${cN} ${cBG}config${cN}|${cBG}path${cN}
-		        Redistribute files between the local and remote directories based on their
-		        priority and update the server with any new or deleted files. This command
-		        accepts the absolute path of a local initialized directory or the name of its
-		        configuration.
+		        Redistribute files between the local and remote directories based on
+		        their priority and update the remote directory with any new or deleted
+		        files. This command accepts the absolute path of a local initialized
+		        directory or the name of its configuration.
 
 		    ${cBR}retrieve${cN} ${cBG}config${cN}|${cBG}path${cN}
-		        Retrieve all files from the server and de-initialize the local directory. This
-		        command accepts the absolute path of a local initialized directory or the name
-		        of its configuration.
+		        Retrieve all files from the remote directory and de-initialize the local
+		        directory. This command accepts the absolute path of a local initialized
+		        directory or the name of its configuration.
 
 		    ${cBR}list-configs${cN}
 		        Print a table of all initialized directories and the names of their
 		        configurations.
 
 		    ${cBR}empty-trash${cN} ${cBG}config${cN}|${cBG}path${cN}
-		        Permanently delete all files on the server that are marked for deletion. This
-		        command accepts the absolute path of a local initialized directory or the name
-		        of its configuration.
+		        Permanently delete all files in the remote directory that are marked for
+		        deletion. This command accepts the absolute path of a local initialized
+		        directory or the name of its configuration.
 	EOF
 }
 
@@ -153,6 +153,7 @@ parseConfig() {
 	localDir="${localDirIn%/}"
 	remoteUser="${remoteUserIn:+$remoteUserIn@}"
 	remoteHost="$remoteHostIn"
+	[[ "$remoteHost" == "localhost" || "$remoteHost" == "127.0.0.1" ]] && remoteHost=""
 	remoteDir="${remoteDirIn%/}"
 	storageLimit="$(sed -r -e 's/KB?/\*1024/' -e 's/MB?/\*1048576/' \
 		-e 's/GB?/\*1073741824/' <<< "$storageLimitIn" | bc)"
@@ -161,11 +162,23 @@ parseConfig() {
 	syncExtraFiles="${syncExtraFiles,,}"
 	inflatePriority="${inflatePriority,,}"
 	accountForSize="${accountForSize,,}"
+	if [[ -n "$remoteHost" ]]; then
+		destDir="$configDir/mnt/.dest/.."
+	else
+		destDir="$remoteDir"
+	fi
 
 	# escape paths for use in sed substitutions
 	localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
 	remoteDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$remoteDir")"
 	configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
+	destDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$destDir")"
+
+	# check for additional dependencies
+	if [[ -n "$remoteHost" ]]; then
+		[[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
+			echo "Error: 'sshfs' is required for syncing across machines" && exit 1
+	fi
 }
 
 readInput() {
@@ -237,7 +250,7 @@ genConfig() {
 				>&2 echo "Error: this value may not contain spaces"
 			elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
 				>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
-			elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 2> /dev/null)); then
+			elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d 2> /dev/null)); then
 				>&2 echo "Error: the name '$configName' is already in use"
 			else
 				break
@@ -246,54 +259,56 @@ genConfig() {
 		unset IFS
 	fi
 
-	# prompt user for user name on remote machine
-	if [[ -z "${remoteUserIn:+x}" ]]; then
-		while true; do
-			read -erp "Enter your user name on the remote machine ($USER): " remoteUserIn </dev/tty
-			remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
-			if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
-				>&2 echo "Error: user name may not contain spaces"
-			else
-				break
-			fi
-		done
-	fi
-
 	# prompt user for hostname of remote machine
 	if [[ -z "${remoteHostIn:+x}" ]]; then
 		while true; do
-			read -erp "Enter the hostname, ip address or domain name of the remote machine: " remoteHostIn </dev/tty
+			read -erp "Enter the hostname, ip address or domain name of the server (optional): " remoteHostIn </dev/tty
 			remoteHostIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHostIn")"
-			if [[ -z "$remoteHostIn" ]]; then
-				>&2 echo "Error: this value may not be blank"
-			elif [[ "$remoteHostIn" =~ [\ ]+ ]]; then
-				>&2 echo "Error: hostname may not contain spaces"
+			if [[ "$remoteHostIn" =~ [\ ]+ ]]; then
+				>&2 echo "Error: this value may not contain spaces"
 			else
 				break
 			fi
 		done
 	fi
 
-	# prompt user for port number
-	if [[ -z "${portIn:+x}" ]]; then
-		while true; do
-			read -erp "Enter the port number to connect to on the remote machine: " -i "22" portIn </dev/tty
-			if [[ -z "$portIn" ]]; then
-				>&2 echo "Error: this value may not be blank"
-			elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
-				>&2 echo "Error: value must be a number in the range 0-65535"
-			elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
-				>&2 echo "Error: value must be a number in the range 0-65535"
-			else
-				break
-			fi
-		done
+	[[ "$remoteHostIn" == "localhost" || "$remoteHostIn" == "127.0.0.1" ]] && remoteHostIn=""
+
+	if [[ -n "$remoteHostIn" ]]; then
+		# prompt user for user name on remote machine
+		if [[ -z "${remoteUserIn:+x}" ]]; then
+			while true; do
+				read -erp "Enter your user name on the server ($USER): " remoteUserIn </dev/tty
+				remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
+				if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
+					>&2 echo "Error: user name may not contain spaces"
+				else
+					break
+				fi
+			done
+		fi
+
+		# prompt user for port number
+		if [[ -z "${portIn:+x}" ]]; then
+			while true; do
+				read -erp "Enter the port number for the connection: " -i "22" portIn </dev/tty
+				if [[ -z "$portIn" ]]; then
+					>&2 echo "Error: this value may not be blank"
+				elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
+					>&2 echo "Error: value must be a number in the range 0-65535"
+				elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
+					>&2 echo "Error: value must be a number in the range 0-65535"
+				else
+					break
+				fi
+			done
+		fi
 	fi
 
-	# prompt user for directory to sync to on remote machine
+	# prompt user for remote directory path
 	if [[ -z "${remoteDirIn:+x}" ]]; then
 		while true; do
-			read -erp "Enter the directory to sync to on the remote machine: " remoteDirIn </dev/tty
+			read -erp "Enter the remote directory path: " remoteDirIn </dev/tty
 			remoteDirIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDirIn")"
 			if [[ -z "$remoteDirIn" ]]; then
 				>&2 >&2 echo "Error: this value may not be blank"
@@ -308,7 +323,7 @@ genConfig() {
 	# prompt user for storage limit
 	if [[ -z "${storageLimitIn:+x}" ]]; then
 		while true; do
-			read -erp "Enter the amount of data to keep synced locally to this machine (accepts K, M or G): " storageLimitIn </dev/tty
+			read -erp "Enter the amount of data to keep synced in the local directory (accepts K, M or G): " storageLimitIn </dev/tty
 			if [[ ! "$storageLimitIn" =~ ^[0-9]+(K|M|G|KB|MB|GB)$ ]]; then
 				>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
 			else
@@ -327,30 +342,30 @@ genConfig() {
 		# retain-sync config
 		#
 
-		# directory to sync on local machine
+		# local directory to sync
 		localDir=$localDir
 
-		# user name on remote machine (optional)
-		remoteUser=$remoteUserIn
-
-		# hostname, ip address or domain name of remote machine
+		# hostname, ip address or domain name of the server (optional)
 		remoteHost=$remoteHostIn
 
-		# port number to connect to on remote machine
+		# user name on the server (optional)
+		remoteUser=$remoteUserIn
+
+		# port number for the connection (optional)
 		port=$portIn
 
-		# directory to sync to on remote machine
+		# remote directory to sync to
 		remoteDir=$remoteDirIn
 
-		# amount of data to keep on local machine (accepts K, M or G)
+		# amount of data to keep in local directory (accepts K, M or G)
 		storageLimit=$storageLimitIn
 
 
 		# mount options to pass to sshfs
 		#sshfsOptions=${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}
 
-		# always delete files from the server when their local counterparts are
-		# deleted, even if copies aren't found in the local user's trash
+		# always delete files from the remote directory when their local counterparts
+		# are deleted, even if copies aren't found in the local user's trash
 		#deleteAlways=${deleteAlwaysIn:-no}
 
 		# start syncing individual files once no more whole directories can fit within
@@ -380,7 +395,8 @@ initializeDir() {
 
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
+		[[ -n "$remoteHost" ]] && ssh -O exit -S \
+			"$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
 
 		# drop the lock on this configuration (necessary becuase of sshfs)
 		flock -u 9
@@ -471,7 +487,7 @@ initializeDir() {
 		fi
 		unset IFS
 
-		# run if --template option was given
+		# read template if one was specified
 		if [[ -n "$optConfigFile" ]]; then
 			# store value of $localDir so that it isn't overridden by the value in
 			# the template file
@@ -484,20 +500,31 @@ initializeDir() {
 		genConfig
 
 		# This is required becuase genConfig() doesn't set the variables for the
-		# non-mandatory config file options. It's necessary so that user-set options
+		# non-mandatory config file options, which is necessary so that user-set options
 		# aren't overridden when initializing from a template.
 		parseConfig "$configDir/config"
 
 		# start ssh master connection
-		sshMaster
+		[[ -n "$remoteHost" ]] && sshMaster
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || exit 1
+		if [[ -n "$remoteHost" ]]; then
+			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || exit 1
+		else
+			mkdir -p "$remoteDir"
+		fi
 
 		# check if remote directory is empty
-		if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
-			>&2 printf "\n%s\n" "Error: remote directory is not empty"
-			exit 1
+		if [[ -n "$remoteHost" ]]; then
+			if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
+				>&2 printf "\n%s\n" "Error: remote directory is not empty"
+				exit 1
+			fi
+		else
+			if [[ -n "$(find "$remoteDir" -mindepth 1)" ]]; then
+				>&2 printf "\n%s\n" "Error: remote directory is not empty"
+				exit 1
+			fi
 		fi
 
 		# add all local symlinks to the exclude file so they don't get clobbered (this
@@ -545,11 +572,14 @@ initializeDir() {
 		readInput "$1"
 
 		# start ssh master connection
-		sshMaster
+		[[ -n "$remoteHost" ]] && sshMaster
 
 		# create remote directory if it doesn't already exist
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || \
-			exit 1
+		if [[ -n "$remoteHost" ]]; then
+			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || exit 1
+		else
+			mkdir -p "$remoteDir"
+		fi
 
 		IFS=$'\n'
 		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
@@ -558,8 +588,12 @@ initializeDir() {
 
 	# check if there is enough space on the server
 	printf "\n%s" "Checking space requirement... "
-	remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
+	if [[ -n "$remoteHost" ]]; then
+		remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+			"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
+	else
+		remoteSpace=$(df -B 1 "$remoteDir" | tail -n 1 | awk '{print $4}')
+	fi
 	localSize=$(du -sb "$localDir" | awk '{print $1}')
 	if [[ "$localSize" -gt "$remoteSpace" ]]; then
 		>&2 printf "\n%s\n" "Error: not enough free space on the server"
@@ -569,37 +603,48 @@ initializeDir() {
 	fi
 
 	# copy local files to the server
-	printf "%s" "Copying local files to server... "
-	rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
-		--exclude-from="$configDir/exclude" "$localDir/" \
-		"$remoteUser$remoteHost:$remoteDir" && echo "done" || exit 1
+	printf "%s" "Copying local files to remote directory... "
+	if [[ -n "$remoteHost" ]]; then
+		rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
+			--exclude-from="$configDir/exclude" "$localDir/" \
+			"$remoteUser$remoteHost:$remoteDir" || exit 1
+	else
+		rsync -asHAXS --exclude=".*" --exclude-from="$configDir/exclude" "$localDir/" \
+			"$remoteDir" || exit 1
+	fi
+	echo "done"
 
-	# the purpose of this directory is to ensure that any commands that interact
-	# with it (e.g. find $configDir/mnt/.dest/..) fail when sshfs isn't mounted
-	mkdir -p "$configDir/mnt/.dest"
-	chmod 000 "$configDir/mnt/.dest"
-
-	# mount sshfs
-	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
-	if [[ "$?" -ne 0 ]]; then
-		>&2 echo "Error: unable to mount remote directory over sshfs"
-		exit 1
+	if [[ -n "$remoteHost" ]]; then
+		# the purpose of this directory is to ensure that any commands that interact
+		# with it (e.g. find $configDir/mnt/.dest/..) fail when sshfs isn't mounted
+		mkdir -p "$configDir/mnt/.dest"
+		chmod 000 "$configDir/mnt/.dest"
 	fi
 
-	mkdir -p "$configDir/mnt/.dest"
+	# mount sshfs
+	if [[ -n "$remoteHost" ]]; then
+		mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
+			"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
+		if [[ "$?" -ne 0 ]]; then
+			>&2 echo "Error: unable to mount remote directory over sshfs"
+			exit 1
+		fi
+	fi
+
+	[[ -n "$remoteHost" ]] && mkdir -p "$configDir/mnt/.dest"
 
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "${localFiles[@]}" ]]; then
 		printf "%s" "Replacing local files with symbolic links... "
-		cp -asf "$configDir"/mnt/* "$localDir" && echo "done"
+		cp -asf "$destDir"/* "$localDir"
+		echo "done"
 	fi
 
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
 	echo "# Editing this file by hand is not recommended." > "$configDir/priority.csv"
-	find "$configDir/mnt/.dest/.." -not -type d -exec echo '{},0' \; | \
-		sed -r "s|$configDirEsc/mnt/\.dest/\.\.||" >> "$configDir/priority.csv" || exit 1
+	find "$destDir" -not -type d -exec echo '{},0' \; | \
+		sed -r "s|$destDirEsc||" >> "$configDir/priority.csv" || exit 1
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
@@ -644,16 +689,18 @@ syncDir() {
 		exit 1
 	fi
 
-	# umount sshfs if mountpoint is broken
-	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
-	[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+	if [[ -n "$remoteHost" ]]; then
+		# umount sshfs if mountpoint is broken
+		mkdir -p "$configDir/mnt/.dest" 2> /dev/null
+		[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
-	# mount sshfs if not already mounted
-	mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
-		"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
-	if [[ $? -ne 0 ]]; then
-		>&2 echo "Error: unable to mount remote directory over sshfs"
-		exit 1
+		# mount sshfs if not already mounted
+		mountpoint -q "$configDir/mnt" || sshfs "${sshfsOptions[@]}" \
+			"$remoteUser$remoteHost:$remoteDir" "$configDir/mnt"
+		if [[ $? -ne 0 ]]; then
+			>&2 echo "Error: unable to mount remote directory over sshfs"
+			exit 1
+		fi
 	fi
 
 	printf "%s" "Checking for new files... "
@@ -716,20 +763,20 @@ syncDir() {
 				unset IFS
 
 				# compute checksum of current file
-				fileSum="$(md5sum "$configDir/mnt/.dest/..$i")"
+				fileSum="$(md5sum "$destDir$i")"
 
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
 					# file is in trash, delete corresponding file on the server
-					rm "$configDir/mnt/.dest/..$i" || exit 1
+					rm "$destDir$i" || exit 1
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
-					mv "$configDir/mnt/.dest/..$i" \
-						"$configDir/mnt/.dest/..$(dirname "$i")/.$(basename "$i").trash" || exit 1
+					mv "$destDir$i" \
+						"$destDir$(dirname "$i")/.$(basename "$i").trash" || exit 1
 				fi
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
-				rm "$configDir/mnt/.dest/..$i" || exit 1
+				rm "$destDir$i" || exit 1
 			fi
 		else
 			# new file
@@ -762,7 +809,7 @@ syncDir() {
 	fi
 
 	# check if there's enough space on the server for the new files
-	remoteSpace=$(df -B 1 "$configDir/mnt/.dest/.." | tail -n 1 | awk '{print $4}') || \
+	remoteSpace=$(df -B 1 "$destDir" | tail -n 1 | awk '{print $4}') || \
 		exit 1
 	if [[ "$newFilesSize" -gt "$remoteSpace" ]]; then
 		>&2 printf "\n%s\n" "Error: not enough free space on the server"
@@ -771,7 +818,7 @@ syncDir() {
 
 	# upload new files and files that have changed since the last sync
 	rsync -aHAXSu --exclude-from="$configDir/exclude" --exclude=".*" --safe-links \
-		"$localDir/" "$configDir/mnt/.dest/.." || exit 1
+		"$localDir/" "$destDir" || exit 1
 
 	echo "done"
 
@@ -780,8 +827,8 @@ syncDir() {
 	# create directory priority file containing a list of all directories in the
 	# tree
 	dirPriorityFile="$(mktemp)"
-	find "$configDir/mnt/.dest/.." -mindepth 1 -not -name ".*" -type d | sed -r \
-		"s|$configDirEsc/mnt/\.dest/\.\.||" > "$dirPriorityFile" || exit 1
+	find "$destDir" -mindepth 1 -not -name ".*" -type d | sed -r \
+		"s|$destDirEsc||" > "$dirPriorityFile" || exit 1
 
 	# read directory priority file line-by-line
 	while read -r i; do
@@ -800,7 +847,7 @@ syncDir() {
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
 		# get the size of the directory in bytes
-		dirSize="$(du -sb "$configDir/mnt/.dest/..$i" | awk '{print $1}')" || exit 1
+		dirSize="$(du -sb "$destDir$i" | awk '{print $1}')" || exit 1
 
 		# set minimum dir size of 16 bytes to perclude a "divide by zero"
 		# error with bc
@@ -832,7 +879,7 @@ syncDir() {
 		syncSize=0
 
 		while read -r i; do
-			dirSize="$(du -sb "$configDir/mnt/.dest/..$i" | awk '{print $1}')" || exit 1
+			dirSize="$(du -sb "$destDir$i" | awk '{print $1}')" || exit 1
 
 			if [[ "$dirSize" -gt $storageLimit ]]; then
 				# current directory alone is larger than the storage limit, remove from
@@ -861,8 +908,8 @@ syncDir() {
 				else
 					# total list size is still within the storage limit
 
-					dirPriorityTree+=($(find "$configDir/mnt/.dest/..$i" -mindepth 1 -type d | \
-						sed -r "s|$configDirEsc/mnt/\.dest/\.\.||")) || exit 1
+					dirPriorityTree+=($(find "$destDir$i" -mindepth 1 -type d | \
+						sed -r "s|$destDirEsc||")) || exit 1
 
 					# check if the while loop has reached the last line of the directory
 					# priority file
@@ -887,11 +934,11 @@ syncDir() {
 	# get list of individual files that aren't included in the directory priority file
 	printf "%s" "Sorting remaining files by priority... "
 	IFS=$'\n'
-	noSyncFiles=($(find "$configDir/mnt/.dest/.." -not -name '.*.trash' -not -type d | \
-		sed -r "s|$configDirEsc/mnt/\.dest/\.\.||")) || exit 1
+	noSyncFiles=($(find "$destDir" -not -name '.*.trash' -not -type d | \
+		sed -r "s|$destDirEsc||")) || exit 1
 	while read -r i; do
-		noSyncFiles+=($(find "$configDir/mnt/.dest/..$i" -not -name '.*.trash' -not \
-			-type d | sed -r "s|$configDirEsc/mnt/\.dest/\.\.||")) || exit 1
+		noSyncFiles+=($(find "$destDir$i" -not -name '.*.trash' -not \
+			-type d | sed -r "s|$destDirEsc||")) || exit 1
 	done <"$dirPriorityFile"
 	noSyncFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sort | uniq -u))
 
@@ -909,7 +956,7 @@ syncDir() {
 		if ! [[ "$accountForSize" == "no" ]]; then
 			for i in "${!noSyncSorted[@]}"; do
 				currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
-				currentFileSize=$(du -sb "$configDir/mnt/.dest/..$currentFile" | \
+				currentFileSize=$(du -sb "$destDir$currentFile" | \
 					awk '{print $1}') || exit 1
 
 				# set minimum file size of 16 bytes to perclude a "divide by zero"
@@ -933,7 +980,7 @@ syncDir() {
 		unset IFS
 
 		for i in "${noSyncSorted[@]}"; do
-			currentFileSize=$(du -sb "$configDir/mnt/.dest/..$i" | \
+			currentFileSize=$(du -sb "$destDir$i" | \
 				awk '{print $1}') || exit 1
 
 			# get size of current file in bytes and add it to the total size
@@ -971,11 +1018,11 @@ syncDir() {
 	unset IFS
 
 	# replace missing files with symlinks
-	cp -asn "$configDir"/mnt/* "$localDir" &> /dev/null
+	cp -asn "$destDir"/* "$localDir" &> /dev/null
 
 	# remove symlinks to files marked for deletion
-	find "$configDir/mnt/.dest/.." -not -type d -name '.*.trash' | \
-		sed -r "s|$configDirEsc/mnt/\.dest/\.\.|$localDir|" | xargs -d '\n' rm -f || \
+	find "$destDir" -not -type d -name '.*.trash' | \
+		sed -r "s|$destDirEsc|$localDir|" | xargs -d '\n' rm -f || \
 		exit 1
 
 	# remove any empty directories that weren't already in the local file tree
@@ -987,45 +1034,48 @@ syncDir() {
 
 	echo "done"
 
-	printf "%s" "Downloading new files... "
+	if [[ -n "$remoteHost" ]]; then
+		printf "%s" "Downloading new files... "
+	else
+		printf "%s" "Importing new files... "
+	fi
 
 	# download (and remove from the server) excluded files that are still on the server
-	find "$configDir/mnt/.dest/.." -not -type d | sed -r \
-		"s|$configDirEsc/mnt/\.dest/\.\.||" | grep -Fxf <(printf "%s\n" \
-		"${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | rsync -asHAXS \
-		--files-from=- --remove-source-files "$configDir/mnt/.dest/../" \
-		"$localDir" || exit 1
+	find "$destDir" -not -type d | sed -r "s|$destDirEsc||" | grep -Fxf \
+		<(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | \
+		rsync -asHAXS --files-from=- --remove-source-files "$destDir/" "$localDir" \
+		|| exit 1
 
 	# remove any empty directories on the server that aren't also local
 	IFS=$'\n'
 	emptyDirs=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -type d -empty | \
 		sed -r "s|$localDirEsc||" | grep -Fvxf "$configDir/exclude")" \
-		"$(find "$configDir/mnt/.dest/.." -not -name '.*' -type d -empty | sed -r \
-		"s|$configDirEsc/mnt/\.dest/\.\.||")" | sort | uniq -u))
+		"$(find "$destDir" -not -name '.*' -type d -empty | sed -r \
+		"s|$destDirEsc||")" | sort | uniq -u))
 	unset IFS
 	for i in "${emptyDirs[@]}"; do
-		rmdir "$configDir/mnt/.dest/..$i" 2> /dev/null
+		rmdir "$destDir$i" 2> /dev/null
 	done
 
 	# find file paths in directory priority file
 	IFS=$'\n'
 	while read -r i; do
-		downloadFiles+=($(find "$configDir/mnt/.dest/..$i" -not -type d -not -name \
-			'.*.trash' | sed -r "s|$configDirEsc/mnt||")) || exit 1
+		downloadFiles+=($(find "$destDir$i" -not -type d -not -name \
+			'.*.trash' | sed -r "s|$destDirEsc||")) || exit 1
 	done <"$dirPriorityFile"
 	unset IFS
 
 	# download directories that are in the directory priority file but not stored
 	# locally
 	printf "%s\n" "${downloadFiles[@]}" | rsync -asHAXS --files-from=- \
-		--exclude-from="$configDir/exclude" "$configDir/mnt/.dest/../" "$localDir" || \
+		--exclude-from="$configDir/exclude" "$destDir/" "$localDir" || \
 		exit 1
 
 	if [[ "$syncExtraFiles" == "yes" ]]; then
 		# fill the remaining space with the highest-priority individual files that
 		# haven't already been downloaded
 		printf "%s\n" "${extraFiles[@]}" | rsync -asHAXS --files-from=- \
-			"$configDir/mnt/.dest/../" "$localDir" || exit 1
+			"$destDir/" "$localDir" || exit 1
 	fi
 	echo "done"
 }
@@ -1033,7 +1083,8 @@ syncDir() {
 retrieveDir() {
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
+		[[ -n "$remoteHost" ]] && ssh -O exit -S \
+			"$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
 	}
 
 	# read config file
@@ -1054,12 +1105,16 @@ retrieveDir() {
 	trap cleanup EXIT
 
 	# start ssh master connection
-	sshMaster
+	[[ -n "$remoteHost" ]] && sshMaster
 
 	# check if there is enough free space on the local machine
 	printf "%s" "Checking space requirement... "
-	remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		"du -sb '$remoteDir'" | awk '{print $1}') || exit 1
+	if [[ -n "$remoteHost" ]]; then
+		remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+			"du -sb '$remoteDir'" | awk '{print $1}') || exit 1
+	else
+		remoteSize=$(du -sb "$remoteDir" | awk '{print $1}')
+	fi
 	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
@@ -1083,26 +1138,38 @@ retrieveDir() {
 		xargs -d '\n' rm -f && echo "done"
 
 	# move files from remote directory back to local directory
-	printf "%s" "Moving remote files to local machine... "
-	rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
-		"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+	printf "%s" "Moving remote files to local directory... "
+	if [[ -n "$remoteHost" ]]; then
+		rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
+			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+	else
+		rsync -asHAXS --remove-source-files "$remoteDir/" "$localDir" || exit 1
+	fi
 
 	# remove empty directories
-	ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -type d -empty -delete" && \
-		echo "done" || exit 1
+	if [[ -n "$remoteHost" ]]; then
+		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+			"find '$remoteDir' -type d -empty -delete" || exit 1
+	else
+		find "$remoteDir" -type d -empty -delete
+	fi
+	echo "done"
 
 	printf "%s" "Cleaning up... "
 
-	# unmount sshfs
-	mkdir -p "$configDir/mnt/.dest" 2> /dev/null
-	if mountpoint -q "$configDir/mnt" || [[ ! -d "$configDir/mnt" ]]; then
-		fusermount -u "$configDir/mnt" || exit 1
+	if [[ -n "$remoteHost" ]]; then
+		# unmount sshfs
+		mkdir -p "$configDir/mnt/.dest" 2> /dev/null
+		if mountpoint -q "$configDir/mnt" || [[ ! -d "$configDir/mnt" ]]; then
+			fusermount -u "$configDir/mnt" || exit 1
+		fi
+
+		chmod 700 "$configDir/mnt/.dest"
 	fi
 
 	# remove init file, lock file and config directory
 	rm -f "$localDir/.retain-sync_init" "$localDir/.retain-sync_part" \
 		"$localDir/.retain-sync_lock"
-	chmod 700 "$configDir/mnt/.dest"
 	rm -r "$configDir"
 	echo "done"
 }
@@ -1148,7 +1215,8 @@ listConfigs() {
 emptyTrash() {
 	cleanup() {
 		# stop ssh master connection
-		ssh -O exit -S "$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
+		[[ -n "$remoteHost" ]] && ssh -O exit -S \
+			"$XDG_RUNTIME_DIR"/retain-sync/%C.sock "$remoteUser$remoteHost" &> /dev/null
 	}
 
 	# read config file
@@ -1161,7 +1229,7 @@ emptyTrash() {
 	trap cleanup EXIT
 
 	# start ssh master connection
-	sshMaster
+	[[ -n "$remoteHost" ]] && sshMaster
 
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
@@ -1172,15 +1240,23 @@ emptyTrash() {
 
 	# get list of files marked for deletion
 	IFS=$'\n'
-	trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-		"find '$remoteDir' -not -type d -name '.*.trash'")) || exit 1
+	if [[ -n "$remoteHost" ]]; then
+		trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+			"find '$remoteDir' -not -type d -name '.*.trash'")) || exit 1
+	else
+		trashFiles=($(find "$remoteDir" -not -type d -name '.*.trash'))
+	fi
 	unset IFS
 
 	# delete files if there are any
 	if [[ "${#trashFiles[@]}" -gt 0 ]]; then
 		printf "%s" "Emptying trash... "
-		printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
-			"$remoteUser$remoteHost" "xargs -d '\n' rm"
+		if [[ -n "$remoteHost" ]]; then
+			printf "%s\n" "${trashFiles[@]}" | ssh "${sshOptions[@]}" \
+				"$remoteUser$remoteHost" "xargs -d '\n' rm"
+		else
+			printf "%s\n" "${trashFiles[@]}" | xargs -d '\n' rm
+		fi
 		echo "done"
 		echo "${#trashFiles[@]} files deleted"
 	else
@@ -1211,8 +1287,6 @@ agePriority() {
 # check for dependencies
 [[ ! -x "$(which rsync 2> /dev/null)" ]] && \
 	echo "Error: missing dependency 'rsync'" && exit 1
-[[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
-	echo "Error: missing dependency 'sshfs'" && exit 1
 [[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
 	echo "Error: missing dependency 'inotify-tools'" && exit 1
 [[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
@@ -1302,7 +1376,7 @@ while [[ "$1" =~ ^- ]]; do
 	esac
 done
 
-# read subcommand
+# read command
 case "$1" in
 	'')
 		>&2 echo "Error: missing argument"
