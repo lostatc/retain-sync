@@ -550,6 +550,10 @@ initializeDir() {
 		# create remote directory if it doesn't already exist
 		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || \
 			exit 1
+
+		IFS=$'\n'
+		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
+		unset IFS
 	fi
 
 	# check if there is enough space on the server
