@@ -391,7 +391,7 @@ genConfig() {
 }
 
 initializeDir() {
-	# function accepts the absolute path of a local directory as a parameter
+	# This function accepts the absolute path of a local directory.
 
 	cleanup() {
 		# stop ssh master connection
@@ -407,22 +407,35 @@ initializeDir() {
 			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
 		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
 			rm -rf "$configDir"
+			rm -f "$localDir/.retain-sync_lock"
+
+			if [[ "$addRemote" == "true" ]]; then
+				rmdir "$localDir"
+			fi
 		fi
 	}
 
 	# test if parameter is an absolute path
 	if [[ "$1" =~ ^~?/ ]]; then
-		# is an absolute path
-		localDir="${1%/}" # remove trailing slash
+		localDir="${1%/}"
 	else
-		# not an absolute path
 		>&2 echo "Error: must be an absolute path"
 		exit 1
 	fi
 
 	# check if local directory exists
-	if ! [[ -d "$1" ]]; then
-		>&2 echo "Error: no such directory '$localDir'"
+	if ! [[ -d "$localDir" ]]; then
+		if [[ "$addRemote" == "true" ]]; then
+			mkdir -p "$localDir"
+		else
+			>&2 echo "Error: the local directory '$localDir' does not exist"
+			exit 1
+		fi
+	fi
+
+	# if --remote option is given, make sure that the local directory is empty
+	if [[ "$addRemote" == "true" && -n "$(find "$localDir" -mindepth 1)" ]]; then
+		>&2 echo "Error: local directory is not empty"
 		exit 1
 	fi
 
@@ -465,7 +478,7 @@ initializeDir() {
 		fi
 
 		# check if directory includes the retain-sync config
-		if find "$localDir" -type d | grep -Fq "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
+		if find "$localDir" -type d | grep -Fxq "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync"; then
 			>&2 echo "Error: the specified directory contains retain-sync config files"
 			exit 1
 		fi
@@ -504,26 +517,45 @@ initializeDir() {
 		# aren't overridden when initializing from a template.
 		parseConfig "$configDir/config"
 
+		printf "\n"
+
 		# start ssh master connection
 		[[ -n "$remoteHost" ]] && sshMaster
 
-		# create remote directory if it doesn't already exist
+		# check if remote directory exists
 		if [[ -n "$remoteHost" ]]; then
-			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" || exit 1
-		else
-			mkdir -p "$remoteDir"
-		fi
-
-		# check if remote directory is empty
-		if [[ -n "$remoteHost" ]]; then
-			if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
-				>&2 printf "\n%s\n" "Error: remote directory is not empty"
-				exit 1
+			if [[ "$addRemote" == "true" ]]; then
+				if ! ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "[[ -d '$remoteDir' ]]"; then
+					>&2 echo "Error: the remote directory '$remoteDir' does not exist"
+					exit 1
+				fi
+			else
+				ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "mkdir -p '$remoteDir'" \
+					|| exit 1
 			fi
 		else
-			if [[ -n "$(find "$remoteDir" -mindepth 1)" ]]; then
-				>&2 printf "\n%s\n" "Error: remote directory is not empty"
-				exit 1
+			if [[ "$addRemote" == "true" ]]; then
+				if ! [[ -d "$remoteDir" ]]; then
+					>&2 echo "Error: the remote directory '$remoteDir' does not exist"
+					exit 1
+				fi
+			else
+				mkdir -p "$remoteDir"
+			fi
+		fi
+
+		if ! [[ "$addRemote" == "true" ]]; then
+			# check if remote directory is empty
+			if [[ -n "$remoteHost" ]]; then
+				if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
+					>&2 printf "\n%s\n" "Error: remote directory is not empty"
+					exit 1
+				fi
+			else
+				if [[ -n "$(find "$remoteDir" -mindepth 1)" ]]; then
+					>&2 printf "\n%s\n" "Error: remote directory is not empty"
+					exit 1
+				fi
 			fi
 		fi
 
@@ -563,8 +595,10 @@ initializeDir() {
 			done
 		fi
 
-		# generate file indicating that the initialization process is in progress
-		echo "$configName" > "$localDir/.retain-sync_part"
+		if ! [[ "$addRemote" == "true" ]]; then
+			# generate file indicating that the initialization process is in progress
+			echo "$configName" > "$localDir/.retain-sync_part"
+		fi
 	else
 		echo "Resuming initialization"
 
@@ -580,39 +614,37 @@ initializeDir() {
 		else
 			mkdir -p "$remoteDir"
 		fi
-
-		IFS=$'\n'
-		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
-		unset IFS
 	fi
 
-	# check if there is enough space on the server
-	printf "\n%s" "Checking space requirement... "
-	if [[ -n "$remoteHost" ]]; then
-		remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-			"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
-	else
-		remoteSpace=$(df -B 1 "$remoteDir" | tail -n 1 | awk '{print $4}')
-	fi
-	localSize=$(du -sb "$localDir" | awk '{print $1}')
-	if [[ "$localSize" -gt "$remoteSpace" ]]; then
-		>&2 printf "\n%s\n" "Error: not enough free space on the server"
-		exit 1
-	else
+	if ! [[ "$addRemote" == "true" ]]; then
+		# check if there is enough space on the server
+		printf "%s" "Checking space requirement... "
+		if [[ -n "$remoteHost" ]]; then
+			remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+				"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
+		else
+			remoteSpace=$(df -B 1 "$remoteDir" | tail -n 1 | awk '{print $4}')
+		fi
+		localSize=$(du -sb "$localDir" | awk '{print $1}')
+		if [[ "$localSize" -gt "$remoteSpace" ]]; then
+			>&2 printf "\n%s\n" "Error: not enough free space on the server"
+			exit 1
+		else
+			echo "done"
+		fi
+
+		# copy local files to the server
+		printf "%s" "Copying local files to remote directory... "
+		if [[ -n "$remoteHost" ]]; then
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
+				--exclude-from="$configDir/exclude" "$localDir/" \
+				"$remoteUser$remoteHost:$remoteDir" || exit 1
+		else
+			rsync -asHAXS --exclude=".*" --exclude-from="$configDir/exclude" "$localDir/" \
+				"$remoteDir" || exit 1
+		fi
 		echo "done"
 	fi
-
-	# copy local files to the server
-	printf "%s" "Copying local files to remote directory... "
-	if [[ -n "$remoteHost" ]]; then
-		rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
-			--exclude-from="$configDir/exclude" "$localDir/" \
-			"$remoteUser$remoteHost:$remoteDir" || exit 1
-	else
-		rsync -asHAXS --exclude=".*" --exclude-from="$configDir/exclude" "$localDir/" \
-			"$remoteDir" || exit 1
-	fi
-	echo "done"
 
 	if [[ -n "$remoteHost" ]]; then
 		# the purpose of this directory is to ensure that any commands that interact
@@ -629,16 +661,15 @@ initializeDir() {
 			>&2 echo "Error: unable to mount remote directory over sshfs"
 			exit 1
 		fi
+
+		mkdir -p "$configDir/mnt/.dest"
 	fi
 
-	[[ -n "$remoteHost" ]] && mkdir -p "$configDir/mnt/.dest"
 
 	# replace local files with symlinks unless local directory is empty
-	if [[ -n "${localFiles[@]}" ]]; then
-		printf "%s" "Replacing local files with symbolic links... "
-		cp -asf "$destDir"/* "$localDir"
-		echo "done"
-	fi
+	printf "%s" "Replacing local files with symbolic links... "
+	cp -asf "$destDir"/* "$localDir" 2> /dev/null
+	echo "done"
 
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
@@ -648,7 +679,11 @@ initializeDir() {
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
-	mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
+	if [[ "$addRemote" == "true" ]]; then
+		echo "$configName" > "$localDir/.retain-sync_init"
+	else
+		mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
+	fi
 
 	# advise user to start/enable the daemon
 	printf "\n%s\n" "Run 'systemctl --user start retain-sync@$configName.service' to start the daemon."
@@ -827,8 +862,8 @@ syncDir() {
 	# create directory priority file containing a list of all directories in the
 	# tree
 	dirPriorityFile="$(mktemp)"
-	find "$destDir" -mindepth 1 -not -name ".*" -type d | sed -r \
-		"s|$destDirEsc||" > "$dirPriorityFile" || exit 1
+	find "$destDir" -mindepth 1 -not -name ".*" -type d | sed -r "s|$destDirEsc||" | \
+		grep -Fxvf "$configDir/exclude" > "$dirPriorityFile" || exit 1
 
 	# read directory priority file line-by-line
 	while read -r i; do
@@ -1294,8 +1329,8 @@ agePriority() {
 [[ ! -x "$(which bc 2> /dev/null)" ]] && \
 	echo "Error: missing dependency 'bc'" && exit 1
 
-# This is where you define options that are recognized in the config file. When
-# the config file is parsed, option values they are declared as variables that
+# This is where options are defined that are recognized in the config file.
+# When the config file is parsed, option values are declared as variables that
 # have the same name with 'In' appended to the end of them. The option
 # "localDir" is declared as "localDirIn".
 
@@ -1381,7 +1416,8 @@ case "$1" in
 	'')
 		>&2 echo "Error: missing argument"
 		>&2 echo "Try 'retain-sync --help' for more information."
-		exit 1 ;;
+		exit 1
+		;;
 	init|initialize)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
@@ -1394,53 +1430,68 @@ case "$1" in
 			case "$2" in
 				-e|--exclude)
 					optExcludeFile="$3"
-					shift 2 ;;
+					shift 2
+					;;
 				-t|--template)
 					optConfigFile="$3"
-					shift 2 ;;
+					shift 2
+					;;
+				-r|--remote)
+					addRemote="true"
+					shift
+					;;
 				--)
 					shift
-					break ;;
+					break
+					;;
 				*)
-					>&2 echo "Error: unknown option"
+					>&2 echo "Error: unknown option '$2'"
 					>&2 echo "Try 'retain-sync --help' for more information."
-					exit 1 ;;
+					exit 1
+					;;
 			esac
 		done
 
-		initializeDir "$2" ;;
+		initializeDir "$2"
+		;;
 	sync)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
 			>&2 echo "Try 'retain-sync --help' for more information."
 			exit 1
 		fi
-		syncDir "$2" ;;
+		syncDir "$2"
+		;;
 	retrieve)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
 			>&2 echo "Try 'retain-sync --help' for more information."
 			exit 1
 		fi
-		retrieveDir "$2" ;;
+		retrieveDir "$2"
+		;;
 	list-configs)
-		listConfigs ;;
+		listConfigs
+		;;
 	empty-trash)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
 			>&2 echo "Try 'retain-sync --help' for more information."
 			exit 1
 		fi
-		emptyTrash "$2" ;;
+		emptyTrash "$2"
+		;;
 	age)
 		if [[ -z "$2" ]]; then
 			>&2 echo "Error: missing argument"
 			>&2 echo "Try 'retain-sync --help' for more information."
 			exit 1
 		fi
-		agePriority "$2" ;;
+		agePriority "$2"
+		;;
 	*)
 		>&2 echo "Error: '$1' is not a valid command"
 		>&2 echo "Try 'retain-sync --help' for more information."
-		exit 1 ;;
+		exit 1
+		;;
 esac
