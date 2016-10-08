@@ -17,6 +17,9 @@
 # You should have received a copy of the GNU General Public License
 # along with retain-sync. If not, see <http://www.gnu.org/licenses/>.
 
+# enable extended globbing
+shopt -s extglob
+
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
@@ -647,7 +650,7 @@ initializeDir() {
 	# replace local files with symlinks unless local directory is empty
 	if [[ -n "${localFiles[@]}" ]]; then
 		printf "%s" "Replacing local files with symbolic links... "
-		cp -asf "$destDir"/* "$localDir"
+		cp -asf "$destDir"/!(.*) "$localDir"
 		echo "done"
 	fi
 
@@ -1035,12 +1038,7 @@ syncDir() {
 	unset IFS
 
 	# replace missing files with symlinks
-	cp -asn "$destDir"/* "$localDir" &> /dev/null
-
-	# remove symlinks to files marked for deletion
-	find "$destDir" -not -type d -name '.*.trash' | \
-		sed -r "s|$destDirEsc|$localDir|" | xargs -d '\n' rm -f || \
-		exit 1
+	cp -asn "$destDir"/!(.*) "$localDir" &> /dev/null
 
 	# remove any empty directories that weren't already in the local file tree
 	IFS=$'\n'
