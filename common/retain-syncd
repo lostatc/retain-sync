@@ -23,18 +23,18 @@ cleanup() {
 }
 
 fileParse() {
-	fileName="$1"
-	fileNameEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName")"
+	local fileName="$1"
+	local fileNameEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName")"
 
 	# make sure file is not hidden or under a hidden directory
 	[[ "$fileName" =~ /\. ]] && return
 
 	# test if file exists in priority.csv
-	fileLine=$(grep -Ex "$fileNameEsc,[0-9\.]*$" "$configDir/priority.csv")
+	local fileLine=$(grep -Ex "$fileNameEsc,[0-9\.]*$" "$configDir/priority.csv")
 
 	if [ "$?" -eq 0 ]; then
 		# file exists, increase file priority by one
-		newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
+		local newPriority=$(echo "scale=6; $(echo "$fileLine" | rev | \
 			cut -d ',' -f 1 | rev)+1" | bc)
 		sed -i -r "s|^$fileNameEsc,[0-9\.]*$|$fileName,$newPriority|" \
 			"$configDir/priority.csv"
@@ -44,182 +44,192 @@ fileParse() {
 	fi
 }
 
-configName="$1"
-configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
+parseConfig() {
+	local configFile="$1"
 
-# check if specified config exists
-if ! [[ -d "$configDir" ]]; then
-	>&2 echo "Error: '$configName' is not a valid configuration"
-	exit 1
-fi
+	# mandatory options
+	mapfile -t reqVars <<-EOF
+		localDir
+		remoteUser
+		remoteHost
+		port
+		remoteDir
+		storageLimit
+	EOF
 
-# required options
-mapfile -t reqVars <<-EOF
-	localDir
-	remoteUser
-	remoteHost
-	port
-	remoteDir
-	storageLimit
-EOF
+	# non-mandatory options
+	mapfile -t optVars <<-EOF
+		sshfsOptions
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
 
-# optional options
-mapfile -t optVars <<-EOF
-	sshfsOptions
-	deleteAlways
-	syncExtraFiles
-	inflatePriority
-	accountForSize
-EOF
+	# boolean options
+	mapfile -t boolVars <<-EOF
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
 
-# boolean options
-mapfile -t boolVars <<-EOF
-	deleteAlways
-	syncExtraFiles
-	inflatePriority
-	accountForSize
-EOF
+	# possible values for boolean options (case insensitive)
+	local boolValues=("yes" "no")
 
-# possible values for boolean options (case insensitive)
-boolValues=("yes" "no")
+	# source variables from config
+	local configError=0
+	while read -r i; do
+		((lineNumber++))
 
-# source variables from config
-configError=0
-while read -r i; do
-	((lineNumber++))
+		# line is blank, skip
+		[[ "$i" =~ ^$ ]] && continue
 
-	# line is blank, skip
-	[[ "$i" =~ ^$ ]] && continue
+		# line is a comment, skip
+		[[ "$i" =~ ^# ]] && continue
 
-	# line is a comment, skip
-	[[ "$i" =~ ^# ]] && continue
-
-	# run if line is missing an equals sign
-	if ! [[ "$i" =~ = ]]; then
-		>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
-		((configError++))
-		continue
-	fi
-
-	# parse option, removing leading/trailing whitespace
-	varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
-		's/[ \t]*$//')"
-	varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
-		's/[ \t]*$//')"
-
-	# if option is required, add it to an array to be cross-referenced with the list
-	# of all required options
-	if echo "$varName" | grep -Fxqf <(printf "%s\n" "${reqVars[@]}"); then
-		reqVarsTest+=("$varName")
-	fi
-
-	# check if option is recognized
-	if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
-		>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
-		((configError++))
-		continue
-	fi
-
-	# check if value of boolean option is recognized
-	if grep -Fxqf <(printf "%s\n" "${boolVars[@]}") <<< "$varName"; then
-		if ! grep -Fxqf <(printf "%s\n" "${boolValues[@]}") <<< "${varValue,,}"; then
-			>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
+		# run if line is missing an equals sign
+		if ! [[ "$i" =~ = ]]; then
+			>&2 echo "Error: line $lineNumber of config file: unrecognized syntax"
 			((configError++))
 			continue
 		fi
+
+		# parse option, removing leading/trailing whitespace
+		local varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
+			's/[ \t]*$//')"
+		local varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
+			's/[ \t]*$//')"
+
+		# if option is required, add it to an array to be cross-referenced with the list
+		# of all required options
+		if echo "$varName" | grep -Fxqf <(printf "%s\n" "${reqVars[@]}"); then
+			local reqVarsTest+=("$varName")
+		fi
+
+		# check if option is recognized
+		if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
+			>&2 echo "Error: line $lineNumber of config file: unrecognized option '$varName'"
+			((configError++))
+			continue
+		fi
+
+		# check if value of boolean option is recognized
+		if grep -Fxqf <(printf "%s\n" "${boolVars[@]}") <<< "$varName"; then
+			if ! grep -Fxqf <(printf "%s\n" "${boolValues[@]}") <<< "${varValue,,}"; then
+				>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
+				((configError++))
+				continue
+			fi
+		fi
+
+		# declare variable
+		declare -g "${varName}In"="$varValue"
+	done <"$configFile"
+
+	# check if all required options were included in config file
+	IFS=$'\n'
+	reqVarsTest=($(printf "%s\n" "${reqVarsTest[@]}" | sort | uniq))
+	local reqVarsMissing=($(printf "%s\n" "${reqVarsTest[@]}" "${reqVars[@]}" | sort | uniq -u))
+	unset IFS
+	if [[ "${#reqVarsMissing[@]}" -gt 0 ]]; then
+		for i in "${reqVarsMissing[@]}"; do
+			>&2 echo "Error: missing required option '$i' in config file"
+			((configError++))
+		done
 	fi
 
-	# declare variable
-	declare -g "${varName}In"="$varValue"
-done <"$configDir/config"
+	# exit if there were errors in config file
+	[[ $configError -ne 0 ]] && exit 1
 
-# check if all required options were included in config file
-IFS=$'\n'
-reqVarsTest=($(printf "%s\n" "${reqVarsTest[@]}" | sort | uniq))
-reqVarsMissing=($(printf "%s\n" "${reqVarsTest[@]}" "${reqVars[@]}" | sort | uniq -u))
-unset IFS
-if [[ "${#reqVarsMissing[@]}" -gt 0 ]]; then
-	for i in "${reqVarsMissing[@]}"; do
-		>&2 echo "Error: missing required option '$i' in config file"
-		((configError++))
-	done
-fi
+	# set defaults
+	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 
-# exit if there were errors in config file
-[[ $configError -ne 0 ]] && exit 1
+	# format variables, preserving original input
+	localDir="${localDirIn%/}"
+	remoteUser="${remoteUserIn:+$remoteUserIn@}"
+	remoteHost="$remoteHostIn"
+	remoteDir="${remoteDirIn%/}"
+	sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
+	if [[ -n "$remoteHost" ]]; then
+		destDir="$configDir/mnt/.dest/.."
+	else
+		destDir="$remoteDir"
+	fi
 
-# set defaults
-sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
+	# escape paths for use in sed substitutions
+	localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
+	configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
+	destDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$destDir")"
+}
 
-# format variables, preserving original input
-localDir="${localDirIn%/}"
-remoteUser="${remoteUserIn:+$remoteUserIn@}"
-remoteHost="$remoteHostIn"
-remoteDir="${remoteDirIn%/}"
-sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
-if [[ -n "$remoteHost" ]]; then
-	destDir="$configDir/mnt/.dest/.."
-else
-	destDir="$remoteDir"
-fi
+main() {
+	configName="$1"
+	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
-# escape paths for use in sed substitutions
-localDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$localDir")"
-configDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$configDir")"
-destDirEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$destDir")"
+	# check if specified config exists
+	if ! [[ -d "$configDir" ]]; then
+		>&2 echo "Error: '$configName' is not a valid configuration"
+		exit 1
+	fi
 
-# check if initialization was interrupted
-if [[ -f "$localDir/.retain-sync_part" ]]; then
-	>&2 echo "Initialization of this directory was interrupted."
-	>&2 echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
-	exit 1
-fi
+	parseConfig "$configDir/config"
 
-if [[ -n "$remoteHost" ]]; then
+	# check if initialization was interrupted
+	if [[ -f "$localDir/.retain-sync_part" ]]; then
+		>&2 echo "Initialization of this directory was interrupted."
+		>&2 echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		exit 1
+	fi
+
+	if [[ -n "$remoteHost" ]]; then
+		while true; do
+			# systemd user services can't reference system targets like network-online.target,
+			# so we need to have an endless loop here
+
+			# get environment variables for ssh-agent that aren't available when retain-sync is
+			# run as a systemd service (there has to be a better way to do this)
+			[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
+				head -n 1)"
+			[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
+				-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
+			export SSH_AGENT_PID
+			export SSH_AUTH_SOCK
+
+			# umount sshfs if mountpoint is broken
+			mkdir -p "$configDir/mnt/.dest" 2> /dev/null
+			[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
+
+			# mount sshfs if not already mounted
+			if ! mountpoint -q "$configDir/mnt"; then
+				sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
+					"$configDir/mnt" 2> /dev/null
+			else
+				sleep 10
+			fi
+		done &
+		sshfsPID="$!"
+	fi
+
 	while true; do
-		# systemd user services can't reference system targets like network-online.target,
-		# so we need to have an endless loop here
+		# wait for a file to be opened in local dir
+		local fileName="$(inotifywait -qre open --format '%w%f' "$localDir")"
 
-		# get environment variables for ssh-agent that aren't available when retain-sync is
-		# run as a systemd service (there has to be a better way to do this)
-		[[ -z ${SSH_AGENT_PID+x} ]] && SSH_AGENT_PID="$(pgrep "ssh-agent" | sort -n | \
-			head -n 1)"
-		[[ -z ${SSH_AUTH_SOCK+x} ]] && SSH_AUTH_SOCK="$(find /tmp -user "$USER" -type s \
-			-path "/tmp/ssh-*" -name "agent.*" 2> /dev/null | sort -n | head -n 1)"
-		export SSH_AGENT_PID
-		export SSH_AUTH_SOCK
-
-		# umount sshfs if mountpoint is broken
-		mkdir -p "$configDir/mnt/.dest" 2> /dev/null
-		[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
-
-		# mount sshfs if not already mounted
-		if ! mountpoint -q "$configDir/mnt"; then
-			sshfs "${sshfsOptions[@]}" "$remoteUser$remoteHost:$remoteDir" \
-				"$configDir/mnt" 2> /dev/null
-		else
-			sleep 10
-		fi
+		# make sure file is not a directory
+		[[ -d "$fileName" ]] || fileParse "$(sed "s|$localDirEsc||" <<< "$fileName")"
 	done &
-	sshfsPID="$!"
-fi
+	localPID="$!"
 
-while true; do
-	# wait for a file to be opened in local dir
-	fileName="$(inotifywait -qre open --format '%w%f' "$localDir")"
+	# run cleanup function on script exit
+	trap cleanup EXIT
 
-	# make sure file is not a directory
-	[[ -d "$fileName" ]] || fileParse "$(sed "s|$localDirEsc||" <<< "$fileName")"
-done &
-localPID="$!"
+	while true; do
+		# wait for a file to be opened in remote dir
+		fileName="$(inotifywait -qre open --format '%w%f' "$destDir" 2> /dev/null)"
 
-# run cleanup function on script exit
-trap cleanup EXIT
+		# make sure file is not a directory
+		[[ -d "$fileName" ]] || fileParse "$(sed "s|$destDirEsc||" <<< "$fileName")"
+	done
+}
 
-while true; do
-	# wait for a file to be opened in remote dir
-	fileName="$(inotifywait -qre open --format '%w%f' "$destDir" 2> /dev/null)"
-
-	# make sure file is not a directory
-	[[ -d "$fileName" ]] || fileParse "$(sed "s|$destDirEsc||" <<< "$fileName")"
-done
+main "$@"

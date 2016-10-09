@@ -17,10 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with retain-sync. If not, see <http://www.gnu.org/licenses/>.
 
+# enable extended globbing
+shopt -s extglob
+
 # the current version of the program; this is set by the Makefile
 version="@VERSION@"
 
 usage() {
+	# print a brief usage message; called by the '--help' flag
+
 	cat <<-EOF
 		Usage: ${cBR}retain-sync${cN} [${cBG}global_options${cN}] ${cBG}command${cN} [${cBG}command_options${cN}] [${cBG}command_arg${cN}]
 
@@ -69,13 +74,16 @@ usage() {
 }
 
 parseConfig() {
+	# parse a configuration file and read its contents into variables
+
 	configFile="$1"
 
 	# possible values for boolean options (case insensitive)
-	boolValues=("yes" "no")
+	local boolValues=("yes" "no")
 
 	# source variables from config
-	configError=0
+	local configError=0
+	local reqVarsTest
 	while read -r i; do
 		((lineNumber++))
 
@@ -93,9 +101,9 @@ parseConfig() {
 		fi
 
 		# parse option, removing leading/trailing whitespace
-		varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
+		local varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
-		varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
+		local varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
 			's/[ \t]*$//')"
 
 		# if option is required, add it to an array to be cross-referenced with the list
@@ -129,7 +137,8 @@ parseConfig() {
 	# check if all required options were included in config file
 	IFS=$'\n'
 	reqVarsTest=($(printf "%s\n" "${reqVarsTest[@]}" | sort | uniq))
-	reqVarsMissing=($(printf "%s\n" "${reqVarsTest[@]}" "${reqVars[@]}" | sort | uniq -u))
+	local reqVarsMissing=($(printf "%s\n" "${reqVarsTest[@]}" "${reqVars[@]}" | sort | \
+		uniq -u))
 	unset IFS
 	if [[ "${#reqVarsMissing[@]}" -gt 0 ]]; then
 		for i in "${reqVarsMissing[@]}"; do
@@ -182,8 +191,9 @@ parseConfig() {
 }
 
 readInput() {
-	# accepts either the name of a configuration or the absolute path of a local
-	# sync directory
+	# accept either the name of a valid configuration or the absolute path of a
+	# local initialized directory
+
 	if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$1" ]]; then
 			# parameter is a valid config
 			configName="$1"
@@ -223,6 +233,8 @@ fileLock() {
 }
 
 sshMaster() {
+	# initiate a master ssh connection
+
 	# add ControlPath to ssh defaults
 	sshOptions+=(-S "$XDG_RUNTIME_DIR/retain-sync/%C.sock")
 
@@ -235,6 +247,8 @@ sshMaster() {
 }
 
 genConfig() {
+	# generate a configuration file, prompting the user for unset values
+
 	# the point of the input redirection with /dev/tty is to prevent read from trying
 	# to read stdin
 
@@ -391,7 +405,7 @@ genConfig() {
 }
 
 initializeDir() {
-	# This function accepts the absolute path of a local directory.
+	# called by the 'initialize' command; see man page for details
 
 	cleanup() {
 		# stop ssh master connection
@@ -485,13 +499,13 @@ initializeDir() {
 
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
-		configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
+		local configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
 			-mindepth 1 -maxdepth 1 -type d))
 		if [[ "${#configDirs[@]}" -gt 0 ]]; then
 			while read -r i; do
-				localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
-				localTreeTest=($(find "$localDirTest" -type d))
-				localTree=($(find "$localDir" -type d))
+				local localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
+				local localTreeTest=($(find "$localDirTest" -type d))
+				local localTree=($(find "$localDir" -type d))
 				if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
 					>&2 echo "Error: the specified directory overlaps with the configuration '$(basename "$i")'"
 					exit 1
@@ -504,7 +518,7 @@ initializeDir() {
 		if [[ -n "$optConfigFile" ]]; then
 			# store value of $localDir so that it isn't overridden by the value in
 			# the template file
-			localDirTemp="$localDir"
+			local localDirTemp="$localDir"
 			parseConfig "$optConfigFile"
 			localDir="$localDirTemp"
 		fi
@@ -574,7 +588,7 @@ initializeDir() {
 			"$configDir/exclude"
 
 		IFS=$'\n'
-		localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
+		local localFiles=($(find "$localDir" -mindepth 1 -not -path '*/\.*' | sed -r "s|$localDirEsc||"))
 		unset IFS
 
 		# run if --exclude option was given
@@ -620,12 +634,12 @@ initializeDir() {
 		# check if there is enough space on the server
 		printf "%s" "Checking space requirement... "
 		if [[ -n "$remoteHost" ]]; then
-			remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+			local remoteSpace=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 				"df -B 1 '$remoteDir'" | tail -n 1 | awk '{print $4}')
 		else
-			remoteSpace=$(df -B 1 "$remoteDir" | tail -n 1 | awk '{print $4}')
+			local remoteSpace=$(df -B 1 "$remoteDir" | tail -n 1 | awk '{print $4}')
 		fi
-		localSize=$(du -sb "$localDir" | awk '{print $1}')
+		local localSize=$(du -sb "$localDir" | awk '{print $1}')
 		if [[ "$localSize" -gt "$remoteSpace" ]]; then
 			>&2 printf "\n%s\n" "Error: not enough free space on the server"
 			exit 1
@@ -667,9 +681,11 @@ initializeDir() {
 
 
 	# replace local files with symlinks unless local directory is empty
-	printf "%s" "Replacing local files with symbolic links... "
-	cp -asf "$destDir"/* "$localDir" 2> /dev/null
-	echo "done"
+	if [[ -n "${localFiles[@]}" ]]; then
+		printf "%s" "Replacing local files with symbolic links... "
+		cp -asf "$destDir"/!(.*) "$localDir"
+		echo "done"
+	fi
 
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
@@ -691,6 +707,8 @@ initializeDir() {
 }
 
 syncDir() {
+	# called by the 'sync' command; see man page for details
+
 	cleanup() {
 		# drop the lock on this configuration (necessary becuase of sshfs)
 		flock -u 9
@@ -767,20 +785,20 @@ syncDir() {
 	#	 file (making paths relative)
 	# 2) concatenate list of files in priority.csv (making paths relative)
 	# 3) remove all repeated entries in the list
-	diffFiles=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -not -type d | \
+	local diffFiles=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -not -type d | \
 		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
 		sed -r "s|$localDirEsc||")" "$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 2- | rev)" | sort | uniq -u))
 	unset IFS
 
 	# find highest priority in the file priority file and add 1 to it
-	newPriority="$(grep -v '^#' "$configDir/priority.csv" | rev | \
+	local newPriority="$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 1 | rev | sort -nr | head -n 1 | \
 		awk '{print "scale=6; " $0 "+1"}' | bc)" 2> /dev/null
 
 	# go through files that have chaged since the last sync one at a time
 	for i in "${diffFiles[@]}"; do
-		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< $i)"
+		local iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< $i)"
 
 		if grep -Exq "$iEsc,[0-9\.]*" "$configDir/priority.csv"; then
 			# file is no longer present in local directory, remove from priority file
@@ -791,14 +809,14 @@ syncDir() {
 				# been done
 				IFS=$'\n'
 				if [[ -z "${trashSums+x}" ]]; then
-					trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
+					local trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
 						-not -type d -not -type l -print0 | xargs -0 md5sum | sort | \
 						uniq -w 32))
 				fi
 				unset IFS
 
 				# compute checksum of current file
-				fileSum="$(md5sum "$destDir$i")"
+				local fileSum="$(md5sum "$destDir$i")"
 
 				# test if file exists in the user's local trash directory by comparing checksums
 				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
@@ -844,7 +862,7 @@ syncDir() {
 	fi
 
 	# check if there's enough space on the server for the new files
-	remoteSpace=$(df -B 1 "$destDir" | tail -n 1 | awk '{print $4}') || \
+	local remoteSpace=$(df -B 1 "$destDir" | tail -n 1 | awk '{print $4}') || \
 		exit 1
 	if [[ "$newFilesSize" -gt "$remoteSpace" ]]; then
 		>&2 printf "\n%s\n" "Error: not enough free space on the server"
@@ -861,13 +879,13 @@ syncDir() {
 
 	# create directory priority file containing a list of all directories in the
 	# tree
-	dirPriorityFile="$(mktemp)"
+	local dirPriorityFile="$(mktemp)"
 	find "$destDir" -mindepth 1 -not -name ".*" -type d | sed -r "s|$destDirEsc||" | \
 		grep -Fxvf "$configDir/exclude" > "$dirPriorityFile" || exit 1
 
 	# read directory priority file line-by-line
 	while read -r i; do
-		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")"
+		local iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")"
 
 		# remove directories from directory priority file if they're not found in
 		# priority.csv
@@ -877,12 +895,12 @@ syncDir() {
 
 		# total the priorities of all the files in each directory to get the
 		# directory priority
-		dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -E "^$iEsc/" | rev | \
+		local dirPriority=$(grep -v '^#' "$configDir/priority.csv" | grep -E "^$iEsc/" | rev | \
 			cut -d ',' -f 1 | rev | tr '\n' '+' | sed 's/\+$/\n/' | \
 			awk '{print "scale=6; " $0}'| bc) 2> /dev/null
 
 		# get the size of the directory in bytes
-		dirSize="$(du -sb "$destDir$i" | awk '{print $1}')" || exit 1
+		local dirSize="$(du -sb "$destDir$i" | awk '{print $1}')" || exit 1
 
 		# set minimum dir size of 16 bytes to perclude a "divide by zero"
 		# error with bc
@@ -910,8 +928,9 @@ syncDir() {
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
+	local dirPriorityTree
 	while true; do
-		syncSize=0
+		local syncSize=0
 
 		while read -r i; do
 			dirSize="$(du -sb "$destDir$i" | awk '{print $1}')" || exit 1
@@ -969,6 +988,7 @@ syncDir() {
 	# get list of individual files that aren't included in the directory priority file
 	printf "%s" "Sorting remaining files by priority... "
 	IFS=$'\n'
+	local noSyncFiles
 	noSyncFiles=($(find "$destDir" -not -name '.*.trash' -not -type d | \
 		sed -r "s|$destDirEsc||")) || exit 1
 	while read -r i; do
@@ -981,6 +1001,7 @@ syncDir() {
 		# from that list, get list of individual files that can fill the remaining space
 		# until the storage limit is reached
 
+		local noSyncSorted
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
 			noSyncSorted+=($(grep -Ex "^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
@@ -990,8 +1011,8 @@ syncDir() {
 		# adjust priority for file size
 		if ! [[ "$accountForSize" == "no" ]]; then
 			for i in "${!noSyncSorted[@]}"; do
-				currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
-				currentFileSize=$(du -sb "$destDir$currentFile" | \
+				local currentFile="$(rev <<< "${noSyncSorted[$i]}" | cut -d ',' -f 2- | rev)"
+				local currentFileSize=$(du -sb "$destDir$currentFile" | \
 					awk '{print $1}') || exit 1
 
 				# set minimum file size of 16 bytes to perclude a "divide by zero"
@@ -1002,7 +1023,7 @@ syncDir() {
 
 				# Note: '10485760' (10MiB) was arbitrarily picked to make the resulting
 				# numbers easier to work with
-				adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
+				local adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
 					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
 				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< \
 					"${noSyncSorted[$i]}")"
@@ -1014,6 +1035,7 @@ syncDir() {
 			sort -rn | cut -d ' ' -f 2- | rev | cut -d ',' -f 2- | rev))
 		unset IFS
 
+		local extraFiles
 		for i in "${noSyncSorted[@]}"; do
 			currentFileSize=$(du -sb "$destDir$i" | \
 				awk '{print $1}') || exit 1
@@ -1035,8 +1057,8 @@ syncDir() {
 	# get list of individual files to remove and change their path context
 	IFS=$'\n'
 	if [[ "$syncExtraFiles" == "yes" ]]; then
-		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | sort | uniq -u | \
-			sed "s|^|$localDir|"))
+		local rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" "${extraFiles[@]}" | \
+			sort | uniq -u | sed "s|^|$localDir|"))
 	else
 		rmFiles=($(printf "%s\n" "${noSyncFiles[@]}" | sed "s|^|$localDir|"))
 	fi
@@ -1049,16 +1071,11 @@ syncDir() {
 
 	# get a list of empty directories in the local file tree (see below)
 	IFS=$'\n'
-	emptyDirs=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || exit 1
+	local emptyDirs=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || exit 1
 	unset IFS
 
 	# replace missing files with symlinks
-	cp -asn "$destDir"/* "$localDir" &> /dev/null
-
-	# remove symlinks to files marked for deletion
-	find "$destDir" -not -type d -name '.*.trash' | \
-		sed -r "s|$destDirEsc|$localDir|" | xargs -d '\n' rm -f || \
-		exit 1
+	cp -asn "$destDir"/!(.*) "$localDir" &> /dev/null
 
 	# remove any empty directories that weren't already in the local file tree
 	IFS=$'\n'
@@ -1093,6 +1110,7 @@ syncDir() {
 	done
 
 	# find file paths in directory priority file
+	local downloadFiles
 	IFS=$'\n'
 	while read -r i; do
 		downloadFiles+=($(find "$destDir$i" -not -type d -not -name \
@@ -1116,6 +1134,8 @@ syncDir() {
 }
 
 retrieveDir() {
+	# called by the 'retrieve' command; see man page for details
+
 	cleanup() {
 		# stop ssh master connection
 		[[ -n "$remoteHost" ]] && ssh -O exit -S \
@@ -1145,12 +1165,12 @@ retrieveDir() {
 	# check if there is enough free space on the local machine
 	printf "%s" "Checking space requirement... "
 	if [[ -n "$remoteHost" ]]; then
-		remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+		local remoteSize=$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 			"du -sb '$remoteDir'" | awk '{print $1}') || exit 1
 	else
 		remoteSize=$(du -sb "$remoteDir" | awk '{print $1}')
 	fi
-	localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
+	local localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
 		>&2 printf "\n%s\n" "Error: not enough free space on this machine to retrieve '$configName'"
@@ -1161,6 +1181,7 @@ retrieveDir() {
 
 	# read contents of exclude file into an array of file paths
 	printf "%s" "Removing symbolic links from local directory... "
+	local excludeFiles
 	while read -r i; do
 		i="$localDir$i"
 		[[ -a "$i" ]] && \
@@ -1210,8 +1231,12 @@ retrieveDir() {
 }
 
 listConfigs() {
+	# called by the 'list-configs' command; see man page for details
+
 	# get a list of directory paths that have been initialized and the names of their
 	# configurations
+	local configName
+	local localDir
 	IFS=$'\n'
 	while read -r i; do
 		configName+=($(basename "$i"))
@@ -1226,12 +1251,12 @@ listConfigs() {
 	fi
 
 	# find length of longest configuration name or "Configuration"
-	configLength=$(printf "%s\n" "${configName[@]}" | awk \
+	local configLength=$(printf "%s\n" "${configName[@]}" | awk \
 		'{if (length > x) {x = length}}END{print x}')
 	configLength=$((configLength>13 ? configLength:13))
 
 	# find length of longest local directory path or "Local directory"
-	dirLength=$(printf "%s\n" "${localDir[@]}" | awk \
+	local dirLength=$(printf "%s\n" "${localDir[@]}" | awk \
 		'{if (length > x) {x = length}}END{print x}')
 	dirLength=$((dirLength>15 ? dirLength:15))
 
@@ -1248,6 +1273,8 @@ listConfigs() {
 }
 
 emptyTrash() {
+	# called by the 'empty-trash' command; see man page for details
+
 	cleanup() {
 		# stop ssh master connection
 		[[ -n "$remoteHost" ]] && ssh -O exit -S \
@@ -1276,7 +1303,7 @@ emptyTrash() {
 	# get list of files marked for deletion
 	IFS=$'\n'
 	if [[ -n "$remoteHost" ]]; then
-		trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+		local trashFiles=($(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
 			"find '$remoteDir' -not -type d -name '.*.trash'")) || exit 1
 	else
 		trashFiles=($(find "$remoteDir" -not -type d -name '.*.trash'))
@@ -1300,6 +1327,8 @@ emptyTrash() {
 }
 
 agePriority() {
+	# adjust the priority of all files for time; called by the undocumented 'age' command
+
 	# read config file
 	readInput "$1"
 
@@ -1310,188 +1339,192 @@ agePriority() {
 		exit 1
 	fi
 
-	# divide the priority of every file by 1.1
+	# divide the priority of every file by 1.05
 	while read -r i; do
-		fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
-		newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.05" | bc) 2> /dev/null
+		local fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
+		local newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.05" | bc) 2> /dev/null
 		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
 			"$configDir/priority.csv"
 	done <"$configDir/priority.csv"
 }
 
-# check for dependencies
-[[ ! -x "$(which rsync 2> /dev/null)" ]] && \
-	echo "Error: missing dependency 'rsync'" && exit 1
-[[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
-	echo "Error: missing dependency 'inotify-tools'" && exit 1
-[[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
-	echo "Error: missing dependency 'systemd'" && exit 1
-[[ ! -x "$(which bc 2> /dev/null)" ]] && \
-	echo "Error: missing dependency 'bc'" && exit 1
+main() {
+	# check for dependencies
+	[[ ! -x "$(which rsync 2> /dev/null)" ]] && \
+		echo "Error: missing dependency 'rsync'" && exit 1
+	[[ ! -x "$(which inotifywait 2> /dev/null)" ]] && \
+		echo "Error: missing dependency 'inotify-tools'" && exit 1
+	[[ ! -x "$(which systemctl 2> /dev/null)" ]] && \
+		echo "Error: missing dependency 'systemd'" && exit 1
+	[[ ! -x "$(which bc 2> /dev/null)" ]] && \
+		echo "Error: missing dependency 'bc'" && exit 1
 
-# This is where options are defined that are recognized in the config file.
-# When the config file is parsed, option values are declared as variables that
-# have the same name with 'In' appended to the end of them. The option
-# "localDir" is declared as "localDirIn".
+	# This is where options are defined that are recognized in the config file.
+	# When the config file is parsed, option values are declared as variables that
+	# have the same name with 'In' appended to the end of them. The option
+	# "localDir" is declared as "localDirIn".
 
-# mandatory options
-mapfile -t reqVars <<-EOF
-	localDir
-	remoteUser
-	remoteHost
-	port
-	remoteDir
-	storageLimit
-EOF
+	# mandatory options
+	mapfile -t reqVars <<-EOF
+		localDir
+		remoteUser
+		remoteHost
+		port
+		remoteDir
+		storageLimit
+	EOF
 
-# non-mandatory options
-mapfile -t optVars <<-EOF
-	sshfsOptions
-	deleteAlways
-	syncExtraFiles
-	inflatePriority
-	accountForSize
-EOF
+	# non-mandatory options
+	mapfile -t optVars <<-EOF
+		sshfsOptions
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
 
-# boolean options
-mapfile -t boolVars <<-EOF
-	deleteAlways
-	syncExtraFiles
-	inflatePriority
-	accountForSize
-EOF
+	# boolean options
+	mapfile -t boolVars <<-EOF
+		deleteAlways
+		syncExtraFiles
+		inflatePriority
+		accountForSize
+	EOF
 
-# enable colored output unless stdout is being redirected
-if [[ -t 1 ]]; then
-	# set colors for colored output
-	cBG="$(tput bold)$(tput setaf 2)"	# bold green
-	cBR="$(tput bold)$(tput setaf 1)"	# bold red
-	cN="$(tput sgr0)"					# normal
-fi
-
-# parse options
-for ((i=1; i<=$#; i++)); do
-	# Note: getopt isn't being used here because getopt doesn't allow for
-	# parameters to have their own options
-
-	# if parameter is a double dash, stop parsing options
-	if [[ "${@:$i:1}" == "--" ]]; then
-		break
-
-	# if parameter is multiple short options sharing a hyphen, separate them
-	elif [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
-		set -- "${@:1:$((i-1))}" $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") "${@:$((i+1))}"
-
-	# if parameter is a long option with an argument separated by an equals
-	# sign, replace the equals sign with a space
-	elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
-		set -- "${@:1:$((i-1))}" $(sed -e 's/=/ /' <<< "${@:$i:1}") "${@:$((i+1))}"
+	# enable colored output unless stdout is being redirected
+	if [[ -t 1 ]]; then
+		# set colors for colored output
+		cBG="$(tput bold)$(tput setaf 2)"	# bold green
+		cBR="$(tput bold)$(tput setaf 1)"	# bold red
+		cN="$(tput sgr0)"					# normal
 	fi
-done
 
-# read global options
-while [[ "$1" =~ ^- ]]; do
+	# parse options
+	for ((i=1; i<=$#; i++)); do
+		# Note: getopt isn't being used here because getopt doesn't allow for
+		# parameters to have their own options
+
+		# if parameter is a double dash, stop parsing options
+		if [[ "${@:$i:1}" == "--" ]]; then
+			break
+
+		# if parameter is multiple short options sharing a hyphen, separate them
+		elif [[ "${@:$i:1}" =~ ^-[^-\ ]{2,} ]]; then
+			set -- "${@:1:$((i-1))}" $(sed -e 's/\(\w\)/ -\1/g' -e 's/^- //' <<< "${@:$i:1}") "${@:$((i+1))}"
+
+		# if parameter is a long option with an argument separated by an equals
+		# sign, replace the equals sign with a space
+		elif [[ "${@:$i:1}" =~ ^--[^-\ ] ]]; then
+			set -- "${@:1:$((i-1))}" $(sed -e 's/=/ /' <<< "${@:$i:1}") "${@:$((i+1))}"
+		fi
+	done
+
+	# read global options
+	while [[ "$1" =~ ^- ]]; do
+		case "$1" in
+			--help)
+				usage
+				exit ;;
+			--version)
+				echo "retain-sync $version"
+				exit ;;
+			-q|--quiet)
+				exec > /dev/null
+				shift ;;
+			--)
+				shift
+				break ;;
+			*)
+				>&2 echo "Error: unknown option"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1 ;;
+		esac
+	done
+
+	# read command
 	case "$1" in
-		--help)
-			usage
-			exit ;;
-		--version)
-			echo "retain-sync $version"
-			exit ;;
-		-q|--quiet)
-			exec > /dev/null
-			shift ;;
-		--)
-			shift
-			break ;;
+		'')
+			>&2 echo "Error: missing argument"
+			>&2 echo "Try 'retain-sync --help' for more information."
+			exit 1
+			;;
+		init|initialize)
+			if [[ -z "$2" ]]; then
+				>&2 echo "Error: missing argument"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1
+			fi
+
+			# read options
+			while [[ "$2" =~ ^- ]]; do
+				case "$2" in
+					-e|--exclude)
+						optExcludeFile="$3"
+						shift 2
+						;;
+					-t|--template)
+						optConfigFile="$3"
+						shift 2
+						;;
+					-a|--add-remote)
+						addRemote="true"
+						shift
+						;;
+					--)
+						shift
+						break
+						;;
+					*)
+						>&2 echo "Error: unknown option '$2'"
+						>&2 echo "Try 'retain-sync --help' for more information."
+						exit 1
+						;;
+				esac
+			done
+
+			initializeDir "$2"
+			;;
+		sync)
+			if [[ -z "$2" ]]; then
+				>&2 echo "Error: missing argument"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1
+			fi
+			syncDir "$2"
+			;;
+		retrieve)
+			if [[ -z "$2" ]]; then
+				>&2 echo "Error: missing argument"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1
+			fi
+			retrieveDir "$2"
+			;;
+		list-configs)
+			listConfigs
+			;;
+		empty-trash)
+			if [[ -z "$2" ]]; then
+				>&2 echo "Error: missing argument"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1
+			fi
+			emptyTrash "$2"
+			;;
+		age)
+			if [[ -z "$2" ]]; then
+				>&2 echo "Error: missing argument"
+				>&2 echo "Try 'retain-sync --help' for more information."
+				exit 1
+			fi
+			agePriority "$2"
+			;;
 		*)
-			>&2 echo "Error: unknown option"
+			>&2 echo "Error: '$1' is not a valid command"
 			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1 ;;
+			exit 1
+			;;
 	esac
-done
+}
 
-# read command
-case "$1" in
-	'')
-		>&2 echo "Error: missing argument"
-		>&2 echo "Try 'retain-sync --help' for more information."
-		exit 1
-		;;
-	init|initialize)
-		if [[ -z "$2" ]]; then
-			>&2 echo "Error: missing argument"
-			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1
-		fi
-
-		# read options
-		while [[ "$2" =~ ^- ]]; do
-			case "$2" in
-				-e|--exclude)
-					optExcludeFile="$3"
-					shift 2
-					;;
-				-t|--template)
-					optConfigFile="$3"
-					shift 2
-					;;
-				-r|--remote)
-					addRemote="true"
-					shift
-					;;
-				--)
-					shift
-					break
-					;;
-				*)
-					>&2 echo "Error: unknown option '$2'"
-					>&2 echo "Try 'retain-sync --help' for more information."
-					exit 1
-					;;
-			esac
-		done
-
-		initializeDir "$2"
-		;;
-	sync)
-		if [[ -z "$2" ]]; then
-			>&2 echo "Error: missing argument"
-			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1
-		fi
-		syncDir "$2"
-		;;
-	retrieve)
-		if [[ -z "$2" ]]; then
-			>&2 echo "Error: missing argument"
-			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1
-		fi
-		retrieveDir "$2"
-		;;
-	list-configs)
-		listConfigs
-		;;
-	empty-trash)
-		if [[ -z "$2" ]]; then
-			>&2 echo "Error: missing argument"
-			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1
-		fi
-		emptyTrash "$2"
-		;;
-	age)
-		if [[ -z "$2" ]]; then
-			>&2 echo "Error: missing argument"
-			>&2 echo "Try 'retain-sync --help' for more information."
-			exit 1
-		fi
-		agePriority "$2"
-		;;
-	*)
-		>&2 echo "Error: '$1' is not a valid command"
-		>&2 echo "Try 'retain-sync --help' for more information."
-		exit 1
-		;;
-esac
+main "$@"
