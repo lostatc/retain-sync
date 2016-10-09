@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-10-02" "" ""
+.TH RETAIN-SYNC 1 "2016-10-09" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they are accessed
 .SH SYNOPSIS
@@ -23,7 +23,11 @@ support file names containing newlines, but other characters should work fine.
 unprivileged user. If the remote directory is located on a separate machine,
 \fBretain-sync\fR does not need to be installed on that machine to function,
 although you do need to have passwordless ssh access to it (i.e. via public key
-authentication with an ssh agent).
+authentication with an ssh agent). For the sake of redundancy, files stay in
+the remote directory and are copied, not moved, to the local directory as space
+permits.
+.sp
+For every pair of directories you wish to sync, a configuration must first be generated using the \fBinitialize\fR command.
 .SH GLOBAL OPTIONS
 \fB--help\fR
 .RS 4
@@ -65,6 +69,14 @@ prompting the user interactively. The user will still be prompted for the name
 of the configuration and any mandatory information that is missing from the
 template. A blank template can usually be found at
 /usr/local/share/retain-sync/config-template.
+.RE 2
+.PP
+\fB-a\fR, \fB--add-remote\fR
+.RS 4
+Instead of moving local files to an empty remote directory, start with an
+existing remote directory and an empty local directory. Using this option, it
+is possible for two or more configurations to share a remote directory, which
+means that \fBretain-sync\fR can be used to sync files between machines.
 .RE 1
 .PP
 \fBsync\fR \fIconfig\fR|\fIpath\fR
@@ -142,8 +154,8 @@ the file it points to won't appear in their local trash, making the file
 unrecoverable. For this reason, \fBretain-sync\fR implements a simple trash
 system.
 .sp
-Before \fBretain-sync\fR deletes a file on the in the remote directory, it
-first searches for the file in the user's local trash directory by comparing
+Before \fBretain-sync\fR deletes a file in the remote directory, it first
+searches for the file in the user's local trash directory by comparing
 checksums. If it finds a copy of the file in the user's trash, then it
 permanently deletes the file in the remote directory. Otherwise, it only marks
 the file for deletion.  Files marked for deletion are made hidden and have

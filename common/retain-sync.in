@@ -40,16 +40,17 @@ usage() {
 		        to the remote directory and generating a configuration for it.
 
 		        ${cBR}-e${cN}, ${cBR}--exclude${cN} ${cBG}file${cN}
-		            Get a list of file/directory paths from ${cBG}file${cN} (one per line) that will be
-		            excluded from syncing, meaning that they will never leave the local
-		            directory. If ${cBG}file${cN} is '-', then a newline-separated list of file paths will
-		            be accepted from stdin.
+		            Get a list of file/directory paths from ${cBG}file${cN} (one per line)
+		            that will be excluded from syncing. If ${cBG}file${cN} is '-', then a
+		            newline-separated list of file paths will be accepted from stdin.
 
 		        ${cBR}-t${cN}, ${cBR}--template${cN} ${cBG}file${cN}
 		            Get settings for the configuration from the template ${cBG}file${cN} instead of
-		            prompting the user interactively. The user will still be prompted for the
-		            name of the configuration and any mandatory information that is missing
-		            from the template.
+		            prompting the user interactively.
+
+		        ${cBR}-a${cN}, ${cBR}--add-remote${cN}
+		            Instead of moving local files to an empty remote directory, start
+		            with an existing remote directory and an empty local directory.
 
 		    ${cBR}sync${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Redistribute files between the local and remote directories based on

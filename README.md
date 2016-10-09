@@ -1,6 +1,6 @@
 # retain-sync
 retain-sync is a program that helps you conserve disk space by automatically
-offloading the files you don't use as often to any local or remote destination.
+offloading the files you don't use as often to a local or remote destination.
 This can be a slower, higher-capacity hard drive or a remote file server (using
 sshfs). Files are prioritized based on how frequently and recently they've been
 accessed as well as the file size. The highest-priority files are kept in the
@@ -8,7 +8,9 @@ local directory for quick access, while lower priority files are moved to the
 remote directory to conserve disk space. The program uses symbolic links to
 allow files in the remote directory to be accessible from the local one. The
 user can specify how much data they want to remain in the local directory at
-any given point in time.
+any given point in time. Since multiple local directories can share a single
+remote directory, retain-sync allows you to store your files centrally and sync
+them across multiple clients as storage space permits.
 
 Since this software is still in an immature state, it is recommended that you
 back up your data before testing it.
@@ -16,6 +18,7 @@ back up your data before testing it.
 ## Features
 * uses rsync for file transfers
 * doesn't require root privileges
+* doesn't have a server-side component
 * gives the user the ability to exclude files from syncing
 * handles interruptions and dropped connections
 * implements locking to prevent multiple operations from taking place on the
