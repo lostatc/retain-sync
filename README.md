@@ -43,3 +43,6 @@ git clone https://github.com/lostatc/retain-sync
 cd retain-sync
 sudo make install
 ```
+
+## Documentation
+[retain-sync(1)](https://lostatc.github.io/retain-sync/retain-sync.1.html)
