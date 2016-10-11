@@ -1,3 +1,18 @@
+\# INSTRUCTIONS FOR UPDATING THIS MAN PAGE
+\#
+\# 1) Whenever this man page is changed, update the corresponding html file in
+\#    the 'gh-pages' branch using the following command:
+\#        groff -mandoc -Thtml < retain-sync.1 > retain-sync.1.html
+\#
+\# 2) In the html file, replace the internal style sheet with a link to the
+\#    external style sheet:
+\#        <link rel="stylesheet" type="text/css" href="retain-sync.1.css">
+\#
+\# 3) In the html file, add the following tags around the block of hyperlinks
+\#    at the top of the body:
+\#        <div class="man-navigation" style="display:none">
+\#        </div>
+
 .TH RETAIN-SYNC 1 "2016-10-10" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they are accessed
