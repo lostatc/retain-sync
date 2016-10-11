@@ -1,4 +1,4 @@
-.TH RETAIN-SYNC 1 "2016-10-09" "" ""
+.TH RETAIN-SYNC 1 "2016-10-10" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they are accessed
 .SH SYNOPSIS
@@ -14,7 +14,10 @@ lower priority files are moved to the remote directory to conserve disk space.
 It uses symbolic links to allow files in the remote directory to be accessible
 from the local one. The user can specify how much data they want to remain in
 the local directory at any given point in time (referred to as the "storage
-limit").
+limit"). Multiple local directories can be synced concurrently with either
+different remote directories or the same one. Since local directories on
+different machines can pair with the same remote directory, \fBretain-sync\fR
+can be used to sync files between machines.
 .sp
 \fBretain-sync\fR deliberately ignores hidden files and directories, meaning
 that they never leave the local directory. The program currently does not
@@ -27,7 +30,8 @@ authentication with an ssh agent). For the sake of redundancy, files stay in
 the remote directory and are copied, not moved, to the local directory as space
 permits.
 .sp
-For every pair of directories you wish to sync, a configuration must first be generated using the \fBinitialize\fR command.
+For every pair of directories you wish to sync, a configuration must first be
+generated using the \fBinitialize\fR command.
 .SH GLOBAL OPTIONS
 \fB--help\fR
 .RS 4
@@ -88,12 +92,30 @@ of its configuration. This command is run automatically once an hour by the
 daemon (see \fBSYNCING\fR).
 .RE
 .PP
-\fBretrieve\fR \fIconfig\fR|\fIpath\fR
+\fBreset\fR [\fIoptions\fR] \fIconfig\fR|\fIpath\fR
 .RS 4
 Retrieve all files from the remote directory and de-initialize the local
 directory. This command accepts the absolute path of a local initialized
-directory or the name of its configuration.
-.RE
+directory or the name of its confguration.
+.RE 2
+.PP
+\fB-k\fR, \fB--keep-remote\fR
+.RS 4
+Copy files from the remote directory to the local one instead of moving them.
+This leaves a copy of the files in the remote directory, which is useful when
+that remote directory is shared with other configurations that may also want to
+retrieve the files.
+.RE 2
+.PP
+\fB-n\fR, \fB--no-retrieve\fR
+.RS 4
+Don't retrieve files from the remote directory. This still de-initializes the
+local directory, but leaves it with whatever files are already in it. Remote
+files stay in the remote directory, and symlinks to remote files are removed
+from the local directory. This is useful when you wish to reset the
+configuration, but don't have enough space locally to retrieve all the files or
+otherwise have to need for them.
+.RE 1
 .PP
 \fBlist-configs\fR
 .RS 4

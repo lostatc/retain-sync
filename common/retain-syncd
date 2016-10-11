@@ -197,7 +197,6 @@ main() {
 			export SSH_AUTH_SOCK
 
 			# umount sshfs if mountpoint is broken
-			mkdir -p "$configDir/mnt/.dest" 2> /dev/null
 			[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
 			# mount sshfs if not already mounted

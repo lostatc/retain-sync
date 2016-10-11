@@ -55,13 +55,18 @@ usage() {
 		    ${cBR}sync${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Redistribute files between the local and remote directories based on
 		        their priority and update the remote directory with any new or deleted
-		        files. This command accepts the absolute path of a local initialized
-		        directory or the name of its configuration.
+		        files.
 
-		    ${cBR}retrieve${cN} ${cBG}config${cN}|${cBG}path${cN}
+		    ${cBR}reset${cN} [${cBG}options${cN}] ${cBG}config${cN}|${cBG}path${cN}
 		        Retrieve all files from the remote directory and de-initialize the local
-		        directory. This command accepts the absolute path of a local initialized
-		        directory or the name of its configuration.
+		        directory.
+
+		        ${cBR}-k${cN}, ${cBR}--keep-remote${cN}
+		            Copy files from the remote directory to the local one instead of moving
+		            them.
+
+		        ${cBR}-n${cN}, ${cBR}--no-retrieve${cN}
+		            Don't retrieve files from the remote directory.
 
 		    ${cBR}list-configs${cN}
 		        Print a table of all initialized directories and the names of their
@@ -69,8 +74,7 @@ usage() {
 
 		    ${cBR}empty-trash${cN} ${cBG}config${cN}|${cBG}path${cN}
 		        Permanently delete all files in the remote directory that are marked for
-		        deletion. This command accepts the absolute path of a local initialized
-		        directory or the name of its configuration.
+		        deletion.
 	EOF
 }
 
@@ -419,12 +423,12 @@ initializeDir() {
 		# inform user if initialization is interrupted
 		if [[ -f "$localDir/.retain-sync_part" ]]; then
 			printf "\n%s\n" "Initialization was interrupted."
-			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+			echo "Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to cancel it."
 		elif ! [[ -f "$localDir/.retain-sync_init" ]]; then
 			rm -rf "$configDir"
 			rm -f "$localDir/.retain-sync_lock"
 
-			if [[ "$addRemote" == "true" ]]; then
+			if [[ "$optAddRemote" == "true" ]]; then
 				rmdir "$localDir"
 			fi
 		fi
@@ -440,7 +444,7 @@ initializeDir() {
 
 	# check if local directory exists
 	if ! [[ -d "$localDir" ]]; then
-		if [[ "$addRemote" == "true" ]]; then
+		if [[ "$optAddRemote" == "true" ]]; then
 			mkdir -p "$localDir"
 		else
 			>&2 echo "Error: the local directory '$localDir' does not exist"
@@ -449,7 +453,7 @@ initializeDir() {
 	fi
 
 	# if --remote option is given, make sure that the local directory is empty
-	if [[ "$addRemote" == "true" && -n "$(find "$localDir" -mindepth 1)" ]]; then
+	if [[ "$optAddRemote" == "true" && -n "$(find "$localDir" -mindepth 1)" ]]; then
 		>&2 echo "Error: local directory is not empty"
 		exit 1
 	fi
@@ -539,7 +543,7 @@ initializeDir() {
 
 		# check if remote directory exists
 		if [[ -n "$remoteHost" ]]; then
-			if [[ "$addRemote" == "true" ]]; then
+			if [[ "$optAddRemote" == "true" ]]; then
 				if ! ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "[[ -d '$remoteDir' ]]"; then
 					>&2 echo "Error: the remote directory '$remoteDir' does not exist"
 					exit 1
@@ -549,7 +553,7 @@ initializeDir() {
 					|| exit 1
 			fi
 		else
-			if [[ "$addRemote" == "true" ]]; then
+			if [[ "$optAddRemote" == "true" ]]; then
 				if ! [[ -d "$remoteDir" ]]; then
 					>&2 echo "Error: the remote directory '$remoteDir' does not exist"
 					exit 1
@@ -559,7 +563,7 @@ initializeDir() {
 			fi
 		fi
 
-		if ! [[ "$addRemote" == "true" ]]; then
+		if ! [[ "$optAddRemote" == "true" ]]; then
 			# check if remote directory is empty
 			if [[ -n "$remoteHost" ]]; then
 				if [[ -n "$(ssh "${sshOptions[@]}" "$remoteUser$remoteHost" "find '$remoteDir' -mindepth 1")" ]]; then
@@ -610,7 +614,7 @@ initializeDir() {
 			done
 		fi
 
-		if ! [[ "$addRemote" == "true" ]]; then
+		if ! [[ "$optAddRemote" == "true" ]]; then
 			# generate file indicating that the initialization process is in progress
 			echo "$configName" > "$localDir/.retain-sync_part"
 		fi
@@ -631,7 +635,7 @@ initializeDir() {
 		fi
 	fi
 
-	if ! [[ "$addRemote" == "true" ]]; then
+	if ! [[ "$optAddRemote" == "true" ]]; then
 		# check if there is enough space on the server
 		printf "%s" "Checking space requirement... "
 		if [[ -n "$remoteHost" ]]; then
@@ -682,11 +686,9 @@ initializeDir() {
 
 
 	# replace local files with symlinks unless local directory is empty
-	if [[ -n "${localFiles[@]}" ]]; then
-		printf "%s" "Replacing local files with symbolic links... "
-		cp -asf "$destDir"/!(.*) "$localDir"
-		echo "done"
-	fi
+	printf "%s" "Replacing local files with symbolic links... "
+	cp -asf "$destDir"/!(.*) "$localDir" 2> /dev/null
+	echo "done"
 
 	# create priority.csv file containing a list of all files in the tree followed
 	# by a starting priority of zero
@@ -696,7 +698,7 @@ initializeDir() {
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
-	if [[ "$addRemote" == "true" ]]; then
+	if [[ "$optAddRemote" == "true" ]]; then
 		echo "$configName" > "$localDir/.retain-sync_init"
 	else
 		mv "$localDir/.retain-sync_part" "$localDir/.retain-sync_init"
@@ -739,13 +741,12 @@ syncDir() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to cancel it."
 		exit 1
 	fi
 
 	if [[ -n "$remoteHost" ]]; then
 		# umount sshfs if mountpoint is broken
-		mkdir -p "$configDir/mnt/.dest" 2> /dev/null
 		[[ ! -d "$configDir/mnt" ]] && fusermount -u "$configDir/mnt"
 
 		# mount sshfs if not already mounted
@@ -1134,8 +1135,8 @@ syncDir() {
 	echo "done"
 }
 
-retrieveDir() {
-	# called by the 'retrieve' command; see man page for details
+resetDir() {
+	# called by the 'reset' command; see man page for details
 
 	cleanup() {
 		# stop ssh master connection
@@ -1174,7 +1175,7 @@ retrieveDir() {
 	local localSpace=$(df -B 1 "$localDir" | tail -n 1 | awk '{print $4}')
 	if [[ "$remoteSize" -gt "$localSpace" ]]; then
 		# not enough space
-		>&2 printf "\n%s\n" "Error: not enough free space on this machine to retrieve '$configName'"
+		>&2 printf "\n%s\n" "Error: not enough free space on this machine to reset '$configName'"
 		exit 1
 	else
 		echo "done"
@@ -1194,23 +1195,35 @@ retrieveDir() {
 		grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
 		xargs -d '\n' rm -f && echo "done"
 
-	# move files from remote directory back to local directory
-	printf "%s" "Moving remote files to local directory... "
-	if [[ -n "$remoteHost" ]]; then
-		rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
-			"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
-	else
-		rsync -asHAXS --remove-source-files "$remoteDir/" "$localDir" || exit 1
-	fi
+	if [[ "$optKeepRemote" == "true" && "$optNoRetrieve" != "true" ]]; then
+		# copy files from remote directory back to local directory
+		printf "%s" "Copying remote files to local directory... "
+		if [[ -n "$remoteHost" ]]; then
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS \
+				"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+		else
+			rsync -asHAXS "$remoteDir/" "$localDir" || exit 1
+		fi
+		echo "done"
+	elif [[ "$optNoRetrieve" != "true" ]]; then
+		# move files from remote directory back to local directory
+		printf "%s" "Moving remote files to local directory... "
+		if [[ -n "$remoteHost" ]]; then
+			rsync -e "ssh ${sshOptions[*]}" -asHAXS --remove-source-files \
+				"$remoteUser$remoteHost:$remoteDir/" "$localDir" || exit 1
+		else
+			rsync -asHAXS --remove-source-files "$remoteDir/" "$localDir" || exit 1
+		fi
 
-	# remove empty directories
-	if [[ -n "$remoteHost" ]]; then
-		ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
-			"find '$remoteDir' -type d -empty -delete" || exit 1
-	else
-		find "$remoteDir" -type d -empty -delete
+		# remove empty directories
+		if [[ -n "$remoteHost" ]]; then
+			ssh "${sshOptions[@]}" "$remoteUser$remoteHost" \
+				"find '$remoteDir' -type d -empty -delete" || exit 1
+		else
+			find "$remoteDir" -type d -empty -delete
+		fi
+		echo "done"
 	fi
-	echo "done"
 
 	printf "%s" "Cleaning up... "
 
@@ -1297,7 +1310,7 @@ emptyTrash() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to cancel it."
 		exit 1
 	fi
 
@@ -1336,7 +1349,7 @@ agePriority() {
 	# check if initialization was interrupted
 	if [[ -f "$localDir/.retain-sync_part" ]]; then
 		echo "Initialization of this directory was interrupted."
-		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync retrieve' to cancel it."
+		echo "Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to cancel it."
 		exit 1
 	fi
 
@@ -1468,7 +1481,7 @@ main() {
 						shift 2
 						;;
 					-a|--add-remote)
-						addRemote="true"
+						optAddRemote="true"
 						shift
 						;;
 					--)
@@ -1491,15 +1504,40 @@ main() {
 				>&2 echo "Try 'retain-sync --help' for more information."
 				exit 1
 			fi
+
 			syncDir "$2"
 			;;
-		retrieve)
+		reset)
 			if [[ -z "$2" ]]; then
 				>&2 echo "Error: missing argument"
 				>&2 echo "Try 'retain-sync --help' for more information."
 				exit 1
 			fi
-			retrieveDir "$2"
+
+			# read options
+			while [[ "$2" =~ ^- ]]; do
+				case "$2" in
+					-k|--keep-remote)
+						optKeepRemote="true"
+						shift 1
+						;;
+					-n|--no-retrieve)
+						optNoRetrieve="true"
+						shift 1
+						;;
+					--)
+						shift
+						break
+						;;
+					*)
+						>&2 echo "Error: unknown option '$2'"
+						>&2 echo "Try 'retain-sync --help' for more information."
+						exit 1
+						;;
+				esac
+			done
+
+			resetDir "$2"
 			;;
 		list-configs)
 			listConfigs

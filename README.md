@@ -8,9 +8,9 @@ local directory for quick access, while lower priority files are moved to the
 remote directory to conserve disk space. The program uses symbolic links to
 allow files in the remote directory to be accessible from the local one. The
 user can specify how much data they want to remain in the local directory at
-any given point in time. Since multiple local directories can share a single
-remote directory, retain-sync allows you to store your files centrally and sync
-them across multiple clients as storage space permits.
+any given point in time. Multiple concurrent pairs of directories can be
+synced, and since they can overlap, retain-sync allows you to store your files
+centrally and sync them across multiple clients as storage space permits.
 
 Since this software is still in an immature state, it is recommended that you
 back up your data before testing it.
