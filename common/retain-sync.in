@@ -38,16 +38,13 @@ usage() {
 		    ${cBR}initialize${cN} [${cBG}options${cN}] ${cBG}path${cN}
 		        Prepare the local directory ${cBG}path${cN} for syncing by moving its contents
 		        to the remote directory and generating a configuration for it.
-
 		        ${cBR}-e${cN}, ${cBR}--exclude${cN} ${cBG}file${cN}
 		            Get a list of file/directory paths from ${cBG}file${cN} (one per line)
 		            that will be excluded from syncing. If ${cBG}file${cN} is '-', then a
 		            newline-separated list of file paths will be accepted from stdin.
-
 		        ${cBR}-t${cN}, ${cBR}--template${cN} ${cBG}file${cN}
 		            Get settings for the configuration from the template ${cBG}file${cN} instead of
 		            prompting the user interactively.
-
 		        ${cBR}-a${cN}, ${cBR}--add-remote${cN}
 		            Instead of moving local files to an empty remote directory, start
 		            with an existing remote directory and an empty local directory.
@@ -60,11 +57,9 @@ usage() {
 		    ${cBR}reset${cN} [${cBG}options${cN}] ${cBG}config${cN}|${cBG}path${cN}
 		        Retrieve all files from the remote directory and de-initialize the local
 		        directory.
-
 		        ${cBR}-k${cN}, ${cBR}--keep-remote${cN}
 		            Copy files from the remote directory to the local one instead of moving
 		            them.
-
 		        ${cBR}-n${cN}, ${cBR}--no-retrieve${cN}
 		            Don't retrieve files from the remote directory.
 
