@@ -75,6 +75,7 @@ usage() {
 
 parseConfig() {
 	# parse a configuration file and read its contents into variables
+	# (see genConfig() for config file format)
 
 	configFile="$1"
 
@@ -150,8 +151,9 @@ parseConfig() {
 	# exit if there were errors in config file
 	[[ $configError -ne 0 ]] && exit 1
 
-	# set defaults
+	# set default values for non-mandatory options
 	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
+	trashDirs=${trashDirsIn:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
 	deleteAlways="${deleteAlwaysIn:-no}"
 	syncExtraFiles="${syncExtraFilesIn:-yes}"
 	inflatePriority="${inflatePriorityIn:-yes}"
@@ -159,18 +161,33 @@ parseConfig() {
 	sshOptions=(-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -p "$portIn")
 
 	# format variables, preserving original input
+
+	# remove trailing slash
 	localDir="${localDirIn%/}"
+	# required for ssh command syntax
 	remoteUser="${remoteUserIn:+$remoteUserIn@}"
 	remoteHost="$remoteHostIn"
-	[[ "$remoteHost" == "localhost" || "$remoteHost" == "127.0.0.1" ]] && remoteHost=""
+	# treat 'localhost' or '127.0.0.1' as if the user had left the value blank
+	[[ "$remoteHost" == "localhost" || \
+		"$remoteHost" == "127.0.0.1" ]] && remoteHost=""
+	# remove trailing slash
 	remoteDir="${remoteDirIn%/}"
+	# convert human-readable format to bytes
 	storageLimit="$(sed -r -e 's/KB?/\*1024/' -e 's/MB?/\*1048576/' \
 		-e 's/GB?/\*1073741824/' <<< "$storageLimitIn" | bc)"
+	# 'nonempty' option required because of '.dest' directory in mountpoint
+	# (see bottom of initializeDir())
 	sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
+	IFS=$'\n'
+	# convert to an array of directory paths
+	trashDirs=($(tr ':' '\n' <<< "$trashDirs"))
+	unset IFS
+	# make input lower-case
 	deleteAlways="${deleteAlways,,}"
 	syncExtraFiles="${syncExtraFiles,,}"
 	inflatePriority="${inflatePriority,,}"
 	accountForSize="${accountForSize,,}"
+	# this is where local files will be sent and remote files will be retrieved
 	if [[ -n "$remoteHost" ]]; then
 		destDir="$configDir/mnt/.dest/.."
 	else
@@ -377,6 +394,9 @@ genConfig() {
 
 		# mount options to pass to sshfs
 		#sshfsOptions=${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}
+
+		# colon-separated list of directory paths in which to search for deleted files
+		#trashDirs=${trashDirs:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
 
 		# always delete files from the remote directory when their local counterparts
 		# are deleted, even if copies aren't found in the local user's trash
@@ -806,7 +826,7 @@ syncDir() {
 				# been done
 				IFS=$'\n'
 				if [[ -z "${trashSums+x}" ]]; then
-					local trashSums=($(find "${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files" \
+					local trashSums=($(find "${trashDirs[@]}" \
 						-not -type d -not -type l -print0 | xargs -0 md5sum | sort | \
 						uniq -w 32))
 				fi
@@ -1386,6 +1406,7 @@ main() {
 	# non-mandatory options
 	mapfile -t optVars <<-EOF
 		sshfsOptions
+		trashDirs
 		deleteAlways
 		syncExtraFiles
 		inflatePriority

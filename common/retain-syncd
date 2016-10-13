@@ -60,6 +60,7 @@ parseConfig() {
 	# non-mandatory options
 	mapfile -t optVars <<-EOF
 		sshfsOptions
+		trashDirs
 		deleteAlways
 		syncExtraFiles
 		inflatePriority
