@@ -57,10 +57,10 @@ Suppress all non-error output.
 .RS 4
 Prepare the local directory \fIpath\fR for syncing by moving its contents to
 the remote directory and generating a configuration for it. The user will be
-prompted to give a name for the configuration, information about the server and
-the storage limit. At the input prompts, all characters are taken literally
-except single quotes, double quotes and backslashes, which must be escaped.
-Backslash control sequences are not interpreted.
+prompted for a few pieces of information used to generate the config file. At
+the input prompts, all characters are taken literally except single quotes,
+double quotes and backslashes, which must be escaped.  Backslash control
+sequences are not interpreted.
 .sp
 \fB-e\fR, \fB--exclude\fR \fIfile\fR
 .RS 4
@@ -75,10 +75,9 @@ the 'exclude' file automatically once it is generated.
 \fB-t\fR, \fB--template\fR \fIfile\fR
 .RS 4
 Get settings for the configuration from the template \fIfile\fR instead of
-prompting the user interactively. The user will still be prompted for the name
-of the configuration and any mandatory information that is missing from the
-template. A blank template can usually be found at
-/usr/local/share/retain-sync/config-template.
+prompting the user interactively. The user will still be prompted for any
+mandatory information that is missing from the template. A blank template can
+usually be found at /usr/local/share/retain-sync/config-template.
 .RE 2
 .PP
 \fB-a\fR, \fB--add-remote\fR

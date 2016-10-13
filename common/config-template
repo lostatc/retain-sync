@@ -2,6 +2,9 @@
 # retain-sync config
 #
 
+# name of the configuration
+configName=
+
 # hostname, ip address or domain name of the server (optional)
 remoteHost=
 

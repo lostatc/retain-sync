@@ -162,6 +162,8 @@ parseConfig() {
 
 	# format variables, preserving original input
 
+	configName="$configNameIn"
+	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 	# remove trailing slash
 	localDir="${localDirIn%/}"
 	# required for ssh command syntax
@@ -536,11 +538,18 @@ initializeDir() {
 
 		# read template if one was specified
 		if [[ -n "$optConfigFile" ]]; then
+			# allow for 'configName=' option in template file
+			reqVars+=("configName")
+
 			# store value of $localDir so that it isn't overridden by the value in
 			# the template file
 			local localDirTemp="$localDir"
 			parseConfig "$optConfigFile"
 			localDir="$localDirTemp"
+
+			IFS=$'\n'
+			reqVars=($(printf "%s\n" "${reqVars[@]}" | grep -v "configName"))
+			unset IFS
 		fi
 
 		# generate config file
