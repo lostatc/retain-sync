@@ -162,8 +162,6 @@ parseConfig() {
 
 	# format variables, preserving original input
 
-	configName="$configNameIn"
-	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 	# remove trailing slash
 	localDir="${localDirIn%/}"
 	# required for ssh command syntax
@@ -283,6 +281,8 @@ genConfig() {
 				>&2 echo "Error: this value may not contain spaces"
 			elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
 				>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
+			elif [[ -z "$(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d)" ]]; then
+				break
 			elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d 2> /dev/null)); then
 				>&2 echo "Error: the name '$configName' is already in use"
 			else
@@ -519,6 +519,8 @@ initializeDir() {
 			exit 1
 		fi
 
+		mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs"
+
 		# check if directory overlaps with another retain-sync configuration
 		IFS=$'\n'
 		local configDirs=($(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
@@ -546,6 +548,9 @@ initializeDir() {
 			local localDirTemp="$localDir"
 			parseConfig "$optConfigFile"
 			localDir="$localDirTemp"
+
+			configName="$configNameIn"
+			configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
 			IFS=$'\n'
 			reqVars=($(printf "%s\n" "${reqVars[@]}" | grep -v "configName"))
@@ -831,28 +836,44 @@ syncDir() {
 			sed -i -r -e "s|^$iEsc,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
-				# compute checksums of all files in the user's trash if it hasn't already
+				# find size of all files in the user's trash if it hasn't already
 				# been done
 				IFS=$'\n'
-				if [[ -z "${trashSums+x}" ]]; then
-					local trashSums=($(find "${trashDirs[@]}" \
-						-not -type d -not -type l -print0 | xargs -0 md5sum | sort | \
-						uniq -w 32))
+				if [[ -z "${trashFiles+x}" ]]; then
+					local trashFiles=($(find "${trashDirs[@]}" \
+						-not -type d -not -type l | xargs -d '\n' du -b))
+					local trashSizes=($(printf "%s\n" "${trashFiles[@]}" | cut -f 1 | \
+						sort | uniq))
 				fi
-				unset IFS
 
-				# compute checksum of current file
-				local fileSum="$(md5sum "$destDir$i")"
+				# find size of current file and compare it to files in trash
+				fileSize=$(du -b "$destDir$i" | cut -f 1)
+				local dupSize="$(printf "%s\n" "${trashSizes[@]}" "$fileSize" | sort | uniq -d)"
 
-				# test if file exists in the user's local trash directory by comparing checksums
-				if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -w 32 -D)" ]]; then
-					# file is in trash, delete corresponding file on the server
-					rm "$destDir$i" || exit 1
+				if [[ -n "$dupSize" ]]; then
+					# current file is the same size as at least one file in the trash
+					# directory
+
+					# double-check by comparing checksums
+					local trashSums=($(awk '$1 == "'$dupSize'"' <(printf "%s\n" \
+						"${trashFiles[@]}") | cut -f '2-' | xargs -d '\n' md5sum | \
+						cut -c 1-32 | sort | uniq))
+					local fileSum="$(md5sum "$destDir$i" | cut -c 1-32)"
+
+					if [[ -n "$(printf "%s\n" "${trashSums[@]}" "$fileSum" | sort | uniq -d)" ]]; then
+						# file is in trash, delete corresponding file on the server
+						rm "$destDir$i" || exit 1
+					else
+						# file is not in trash, mark corresponding file on the server for deletion
+						mv "$destDir$i" \
+							"$destDir$(dirname "$i")/.$(basename "$i").trash" || exit 1
+					fi
 				else
 					# file is not in trash, mark corresponding file on the server for deletion
 					mv "$destDir$i" \
 						"$destDir$(dirname "$i")/.$(basename "$i").trash" || exit 1
 				fi
+				unset IFS
 			else
 				# $deleteAlways is set to 'yes', delete corresponding file on the server
 				rm "$destDir$i" || exit 1
@@ -1280,7 +1301,7 @@ listConfigs() {
 		configName+=($(basename "$i"))
 		localDir+=($(grep "localDir=" "$i/config" | cut -d '=' -f 2-))
 	done < <(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" \
-		-mindepth 1 -maxdepth 1 -type d)
+		-mindepth 1 -maxdepth 1 -type d 2> /dev/null)
 	unset IFS
 
 	if [[ "${#configName[@]}" -eq 0 ]]; then
