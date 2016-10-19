@@ -274,7 +274,6 @@ genConfig() {
 		IFS=$'\n'
 		while true; do
 			read -erp "Enter a name for this configuration: " configName </dev/tty
-			configName="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$configName")"
 			if [[ -z "$configName" ]]; then
 				>&2 echo "Error: this value may not be blank"
 			elif [[ "$configName" =~ [\ ]+ ]]; then
@@ -296,7 +295,6 @@ genConfig() {
 	if [[ -z "${remoteHostIn:+x}" ]]; then
 		while true; do
 			read -erp "Enter the hostname, ip address or domain name of the server (optional): " remoteHostIn </dev/tty
-			remoteHostIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteHostIn")"
 			if [[ "$remoteHostIn" =~ [\ ]+ ]]; then
 				>&2 echo "Error: this value may not contain spaces"
 			else
@@ -312,7 +310,6 @@ genConfig() {
 		if [[ -z "${remoteUserIn:+x}" ]]; then
 			while true; do
 				read -erp "Enter your user name on the server ($USER): " remoteUserIn </dev/tty
-				remoteUserIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteUserIn")"
 				if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
 					>&2 echo "Error: user name may not contain spaces"
 				else
@@ -342,7 +339,6 @@ genConfig() {
 	if [[ -z "${remoteDirIn:+x}" ]]; then
 		while true; do
 			read -erp "Enter the remote directory path: " remoteDirIn </dev/tty
-			remoteDirIn="$(sed -r 's/(^|[^\\])[\"'\'']/\1/g' <<< "$remoteDirIn")"
 			if [[ -z "$remoteDirIn" ]]; then
 				>&2 >&2 echo "Error: this value may not be blank"
 			elif [[ ! "$remoteDirIn" =~ ^/ ]]; then
