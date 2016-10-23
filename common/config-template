@@ -24,6 +24,9 @@ storageLimit=
 # mount options to pass to sshfs
 #sshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
+# colon-separated list of directory paths in which to search for deleted files
+#trashDirs=~/.local/share/Trash/files
+
 # always delete files from the remote directory when their local counterparts
 # are deleted, even if copies aren't found in the local user's trash
 #deleteAlways=no

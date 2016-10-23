@@ -148,10 +148,12 @@ parseConfig() {
 	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 
 	# format variables, preserving original input
-	localDir="${localDirIn%/}"
+	localDir="$(sed "s|^~/|$HOME/|" <<< "$localDirIn")"
+	localDir="${localDir%/}"
 	remoteUser="${remoteUserIn:+$remoteUserIn@}"
 	remoteHost="$remoteHostIn"
-	remoteDir="${remoteDirIn%/}"
+	remoteDir="$(sed "s|^~/|$HOME/|" <<< "$remoteDirIn")"
+	remoteDir="${remoteDir%/}"
 	sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
 	if [[ -n "$remoteHost" ]]; then
 		destDir="$configDir/mnt/.dest/.."

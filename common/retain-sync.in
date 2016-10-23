@@ -162,16 +162,20 @@ parseConfig() {
 
 	# format variables, preserving original input
 
+	# apply tilde expansion
+	localDir="$(sed "s|^~/|$HOME/|" <<< "$localDirIn")"
 	# remove trailing slash
-	localDir="${localDirIn%/}"
+	localDir="${localDir%/}"
 	# required for ssh command syntax
 	remoteUser="${remoteUserIn:+$remoteUserIn@}"
 	remoteHost="$remoteHostIn"
 	# treat 'localhost' or '127.0.0.1' as if the user had left the value blank
 	[[ "$remoteHost" == "localhost" || \
 		"$remoteHost" == "127.0.0.1" ]] && remoteHost=""
+	# apply tilde expansion
+	remoteDir="$(sed "s|^~/|$HOME/|" <<< "$remoteDirIn")"
 	# remove trailing slash
-	remoteDir="${remoteDirIn%/}"
+	remoteDir="${remoteDir%/}"
 	# convert human-readable format to bytes
 	storageLimit="$(sed -r -e 's/KB?/\*1024/' -e 's/MB?/\*1048576/' \
 		-e 's/GB?/\*1073741824/' <<< "$storageLimitIn" | bc)"
@@ -179,8 +183,8 @@ parseConfig() {
 	# (see bottom of initializeDir())
 	sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
 	IFS=$'\n'
-	# convert to an array of directory paths
-	trashDirs=($(tr ':' '\n' <<< "$trashDirs"))
+	# convert to an array of directory paths and apply tilde expansion
+	trashDirs=($(tr ':' '\n' <<< "$trashDirs" | sed "s|^~/|$HOME/|"))
 	unset IFS
 	# make input lower-case
 	deleteAlways="${deleteAlways,,}"
@@ -340,8 +344,8 @@ genConfig() {
 		while true; do
 			read -erp "Enter the remote directory path: " remoteDirIn </dev/tty
 			if [[ -z "$remoteDirIn" ]]; then
-				>&2 >&2 echo "Error: this value may not be blank"
-			elif [[ ! "$remoteDirIn" =~ ^/ ]]; then
+				>&2 echo "Error: this value may not be blank"
+			elif [[ ! "$remoteDirIn" =~ ^~?/ ]]; then
 				>&2 echo "Error: must be an absolute path"
 			else
 				break
