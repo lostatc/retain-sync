@@ -80,6 +80,7 @@ parseConfig() {
 
 	# source variables from config
 	local configError=0
+	local reqVarsTest
 	while read -r i; do
 		((lineNumber++))
 
@@ -105,7 +106,7 @@ parseConfig() {
 		# if option is required, add it to an array to be cross-referenced with the list
 		# of all required options
 		if echo "$varName" | grep -Fxqf <(printf "%s\n" "${reqVars[@]}"); then
-			local reqVarsTest+=("$varName")
+			reqVarsTest+=("$varName")
 		fi
 
 		# check if option is recognized
