@@ -822,7 +822,7 @@ syncDir() {
 		cut -d ',' -f 2- | rev)" | sort | uniq -u))
 	unset IFS
 
-	# find highest priority in the file priority file and add 1 to it
+	# find highest priority in priority.csv and add 1 to it
 	local newPriority="$(grep -v '^#' "$configDir/priority.csv" | rev | \
 		cut -d ',' -f 1 | rev | sort -nr | head -n 1 | \
 		awk '{print "scale=6; " $0 "+1"}' | bc)" 2> /dev/null
@@ -1138,6 +1138,29 @@ syncDir() {
 	else
 		printf "%s" "Importing new files... "
 	fi
+
+	# get list of local files that aren't in priority.csv
+	#
+	# 1) print list of files/symlinks in local directory that aren't hidden
+	# 2) filter out files that are in the exclude file (making paths relative)
+	# 3) filter out files that are in priority.csv
+	IFS=$'\n'
+	local newFiles=($(find "$localDir" -not -path '*/\.*' -not -type d | \
+		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
+		sed -r "s|$localDirEsc||" | \
+		grep -Fvxf <(grep -v '^#' "$configDir/priority.csv" | \
+		rev | cut -d ',' -f 2- | rev)))
+	unset IFS
+
+	# add new files to priority.csv (for files that were added to the remote
+	# directory since the last sync)
+	for i in "${newFiles[@]}"; do
+		if [[ "$inflatePriority" == "yes" ]]; then
+			echo "$i,${newPriority:-0}" >> "$configDir/priority.csv"
+		else
+			echo "$i,0" >> "$configDir/priority.csv"
+		fi
+	done
 
 	# download (and remove from the server) excluded files that are still on the server
 	find "$destDir" -not -type d | sed -r "s|$destDirEsc||" | grep -Fxf \
