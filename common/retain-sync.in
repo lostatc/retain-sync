@@ -935,8 +935,7 @@ syncDir() {
 		"$localDir/" "$destDir" || exit 1
 
 	# update any excluded files in the remote directory
-	printf "%s\n" "${excludeFilesRel[@]}" | \
-		rsync -aHAXS --existing --files-from=- --safe-links \
+	rsync -arHAXS --existing --files-from="$configDir/exclude" --safe-links \
 		"$localDir/" "$destDir" || exit 1
 
 	echo "done"
@@ -1135,20 +1134,20 @@ syncDir() {
 	printf "%s" "Removing unused files... "
 	printf "%s\n" "${rmFiles[@]}" | xargs -d '\n' rm -f
 
-	# get a list of empty directories in the local file tree (see below)
-	IFS=$'\n'
-	local emptyDirs=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || exit 1
-	unset IFS
+	# put a temporary file in each local empty directory to prevent them from
+	# being deleted later
+	find "$localDir" -mindepth 1 -not -path "*/\.*" -type d -empty -exec \
+		touch "{}/.rs-hold" \; 2> /dev/null
 
 	# replace missing files with symlinks
 	cp -asn "$destDir"/!(.*) "$localDir" &> /dev/null
 
-	# remove any empty directories that weren't already in the local file tree
-	IFS=$'\n'
-	emptyDirs+=($(find "$localDir" -mindepth 1 -not -name ".*" -type d -empty)) || \
-		exit 1
-	unset IFS
-	printf "%s\n" "${emptyDirs[@]}" | sort | uniq -u | xargs -d '\n' rmdir 2> /dev/null
+	# remove any empty directories that were copied from the remote directory
+	# (directories that contain only '.trash' files)
+	find "$localDir" -mindepth 1 -not -path "*/\.*" -type d -empty -delete
+
+	# remove temporary files
+	find "$localDir" -name ".rs-hold" -type f -empty -delete
 
 	echo "done"
 
@@ -1179,17 +1178,6 @@ syncDir() {
 		fi
 	done
 
-	# remove any empty directories on the server that aren't also local
-	IFS=$'\n'
-	emptyDirs=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -type d -empty | \
-		sed -r "s|$localDirEsc||" | grep -Fvxf "$configDir/exclude")" \
-		"$(find "$destDir" -not -name '.*' -type d -empty | sed -r \
-		"s|$destDirEsc||")" | sort | uniq -u))
-	unset IFS
-	for i in "${emptyDirs[@]}"; do
-		rmdir "$destDir$i" 2> /dev/null
-	done
-
 	while read -r i; do
 		# copy excluded file to local directory if it isn't already there
 		#
@@ -1206,6 +1194,17 @@ syncDir() {
 			fi
 		fi
 	done < <(grep -v '^#' "$configDir/exclude")
+
+	# put a temporary file in some remote empty directories to prevent them from
+	# being deleted later
+	find "$localDir" -mindepth 1 -not -path "*/\.*" -type d -empty | \
+		sed -r -e "s|$localDirEsc|$destDir|" -e 's|$|/.rs-hold|' | xargs -d '\n' touch 2> /dev/null
+
+	# remove remote empty directories that aren't also in the local directory
+	find "$destDir" -mindepth 1 -not -name ".*" -type d -empty -delete
+
+	# remove temporary files
+	find "$destDir" -name ".rs-hold" -type f -empty -delete
 
 	# find file paths in directory priority file
 	local downloadFiles
