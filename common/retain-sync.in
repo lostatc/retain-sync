@@ -163,6 +163,8 @@ parseConfig() {
 	# exit if there were errors in config file
 	[[ $configError -ne 0 ]] && exit 1
 
+	uniqueID="$(cut -c 1-8 /etc/machine-id)-$USER-$configName"
+
 	# set default values for non-mandatory options
 	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 	trashDirs=${trashDirsIn:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
@@ -249,7 +251,6 @@ readInput() {
 		exit 1
 	fi
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
-	uniqueID="$(cut -c 1-8 /etc/machine-id)-$USER-$configName"
 
 	freezeConfig
 	parseConfig "$configFile"
@@ -434,7 +435,7 @@ genConfig() {
 		for i in "${optVars[@]}"; do
 			# uncomment option if it is uncommented in template file
 			if grep -Eq "^[ \t]*$i[ \t]*=" "$optConfigFile"; then
-				sed -i "s/^#$i=/$i=/" "$configFile"
+				sed -i "s/^#$i=/$i=/" "$configDir/config"
 			fi
 		done
 	fi
@@ -554,21 +555,28 @@ initializeDir() {
 
 		# read template if one was specified
 		if [[ -n "$optConfigFile" ]]; then
-			# allow for 'configName=' option in template file
+			# allow for 'configName' option in template file
 			reqVars+=("configName")
 
-			# store value of $localDir so that it isn't overridden by the value in
-			# the template file
-			local localDirTemp="$localDir"
+			# remove requirement for 'localDir' option in template file because it
+			# is specified as a command-line parameter
+			IFS=$'\n'
+			reqVars=($(printf "%s\n" "${reqVars[@]}" | grep -v "localDir"))
+			unset IFS
+
+			# save value of '$localDir' so that it isn't overwritten
+			localDirTmp="$localDir"
 			parseConfig "$optConfigFile"
-			localDir="$localDirTemp"
+			localDir="$localDirTmp"
 
 			configName="$configNameIn"
 			configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
 
+			# undo changes to config file requirements
 			IFS=$'\n'
 			reqVars=($(printf "%s\n" "${reqVars[@]}" | grep -v "configName"))
 			unset IFS
+			reqVars+=("localDir")
 		fi
 
 		# generate config file
@@ -577,7 +585,7 @@ initializeDir() {
 		# This is required becuase genConfig() doesn't set the variables for the
 		# non-mandatory config file options, which is necessary so that user-set options
 		# aren't overridden when initializing from a template.
-		parseConfig "$configDir/exclude"
+		parseConfig "$configDir/config"
 
 		printf "\n"
 
