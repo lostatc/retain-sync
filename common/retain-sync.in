@@ -73,11 +73,23 @@ usage() {
 	EOF
 }
 
+freezeConfig() {
+	# copy config files into memory for parsing and to prevent issues with them
+	# being edited during an operation
+	excludeFile="$(mktemp)"
+	configFile="$(mktemp)"
+
+	[[ -f "$configDir/exclude" ]] && \
+		grep -v '^#' "$configDir/exclude" | sed 's|/$||' > "$excludeFile"
+	[[ -f "$configDir/config" ]] && \
+		cp "$configDir/config" "$configFile"
+}
+
 parseConfig() {
 	# parse a configuration file and read its contents into variables
 	# (see genConfig() for config file format)
 
-	configFile="$1"
+	local inputFile="$1"
 
 	# possible values for boolean options (case insensitive)
 	local boolValues=("yes" "no")
@@ -133,7 +145,7 @@ parseConfig() {
 		if [[ -n "$varValue" ]]; then
 			declare -g "${varName}In"="$varValue"
 		fi
-	done <"$configFile"
+	done <"$inputFile"
 
 	# check if all required options were included in config file
 	IFS=$'\n'
@@ -237,9 +249,10 @@ readInput() {
 		exit 1
 	fi
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
-	uniqueID="$(cut -c 1-8 /etc/machine-id)-$configName"
+	uniqueID="$(cut -c 1-8 /etc/machine-id)-$USER-$configName"
 
-	parseConfig "$configDir/config"
+	freezeConfig
+	parseConfig "$configFile"
 }
 
 fileLock() {
@@ -368,7 +381,7 @@ genConfig() {
 
 	# create config directory
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
-	mkdir "$configDir"
+	mkdir -p "$configDir"
 
 	# create config file
 	cat <<-EOF > "$configDir/config"
@@ -421,7 +434,7 @@ genConfig() {
 		for i in "${optVars[@]}"; do
 			# uncomment option if it is uncommented in template file
 			if grep -Eq "^[ \t]*$i[ \t]*=" "$optConfigFile"; then
-				sed -i "s/^#$i=/$i=/" "$configDir/config"
+				sed -i "s/^#$i=/$i=/" "$configFile"
 			fi
 		done
 	fi
@@ -564,7 +577,7 @@ initializeDir() {
 		# This is required becuase genConfig() doesn't set the variables for the
 		# non-mandatory config file options, which is necessary so that user-set options
 		# aren't overridden when initializing from a template.
-		parseConfig "$configDir/config"
+		parseConfig "$configDir/exclude"
 
 		printf "\n"
 
@@ -644,6 +657,8 @@ initializeDir() {
 			done
 		fi
 
+		freezeConfig
+
 		if ! [[ "$optAddRemote" == "true" ]]; then
 			# generate file indicating that the initialization process is in progress
 			echo "$configName" > "$localDir/.retain-sync_part"
@@ -686,10 +701,10 @@ initializeDir() {
 		printf "%s" "Copying local files to remote directory... "
 		if [[ -n "$remoteHost" ]]; then
 			rsync -e "ssh ${sshOptions[*]}" -asHAXS --exclude=".*" \
-				--exclude-from="$configDir/exclude" "$localDir/" \
+				--exclude-from="$excludeFile" "$localDir/" \
 				"$remoteUser$remoteHost:$remoteDir" || exit 1
 		else
-			rsync -asHAXS --exclude=".*" --exclude-from="$configDir/exclude" "$localDir/" \
+			rsync -asHAXS --exclude=".*" --exclude-from="$excludeFile" "$localDir/" \
 				"$remoteDir" || exit 1
 		fi
 		echo "done"
@@ -729,7 +744,7 @@ initializeDir() {
 	# copy 'exclude' file to remote directory for use when the remote directory
 	# is shared with other configurations
 	mkdir "$destDir/.exclude"
-	grep -v '^#' "$configDir/exclude" > "$destDir/.exclude/$uniqueID"
+	cat "$excludeFile" > "$destDir/.exclude/$uniqueID"
 
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
@@ -796,18 +811,17 @@ syncDir() {
 	printf "%s" "Checking for new files... "
 
 	# copy 'exclude' file to remote directory
-	grep -v '^#' "$configDir/exclude" > "$destDir/.exclude/$uniqueID"
+	cat "$excludeFile" > "$destDir/.exclude/$uniqueID"
 
 	# read contents of exclude file into an array of file paths
 	IFS=$'\n'
 	local excludeFiles
 	while read -r i; do
 		[[ "$i" =~ ^$ ]] && continue # skip line if empty
-		[[ "$i" =~ ^# ]] && continue # skip line if a comment
 
 		[[ -e "$localDir$i" ]] && \
 			excludeFiles+=($(find "$localDir$i" -not -path '*/\.*' -not -type d))
-	done <"$configDir/exclude"
+	done <"$excludeFile"
 	excludeFiles=($(printf "%s\n" "${excludeFiles[@]}" | sort | uniq))
 	local excludeFilesRel=($(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||"))
 
@@ -896,7 +910,7 @@ syncDir() {
 			# new file
 			if [[ -L "$localDir$i" ]]; then
 				# file is a symlink, add to exclude file
-				echo "$i" >> "$configDir/exclude"
+				echo "$i" | tee -a "$excludeFile" >> "$configDir/exclude"
 			else
 				# file is not a symlink, add to priority.csv
 				if [[ "$inflatePriority" == "yes" ]]; then
@@ -931,11 +945,11 @@ syncDir() {
 	fi
 
 	# upload new files and files that have changed since the last sync
-	rsync -aHAXSu --exclude-from="$configDir/exclude" --exclude=".*" --safe-links \
+	rsync -aHAXSu --exclude-from="$excludeFile" --exclude=".*" --safe-links \
 		"$localDir/" "$destDir" || exit 1
 
 	# update any excluded files in the remote directory
-	rsync -arHAXS --existing --files-from="$configDir/exclude" --safe-links \
+	rsync -arHAXS --existing --files-from="$excludeFile" --safe-links \
 		"$localDir/" "$destDir" || exit 1
 
 	echo "done"
@@ -946,7 +960,7 @@ syncDir() {
 	# tree
 	local dirPriorityFile="$(mktemp)"
 	find "$destDir" -mindepth 1 -not -name ".*" -type d | sed -r "s|$destDirEsc||" | \
-		grep -Fxvf "$configDir/exclude" > "$dirPriorityFile" || exit 1
+		grep -Fxvf "$excludeFile" > "$dirPriorityFile" || exit 1
 
 	# read directory priority file line-by-line
 	while read -r i; do
@@ -1055,7 +1069,7 @@ syncDir() {
 	IFS=$'\n'
 	local noSyncFiles
 	noSyncFiles=($(find "$destDir" -not -name '.*.trash' -not -type d | \
-		sed -r "s|$destDirEsc||" | grep -Fxvf "$configDir/exclude")) || exit 1
+		sed -r "s|$destDirEsc||" | grep -Fxvf "$excludeFile")) || exit 1
 	while read -r i; do
 		noSyncFiles+=($(find "$destDir$i" -not -name '.*.trash' -not \
 			-type d | sed -r "s|$destDirEsc||")) || exit 1
@@ -1164,7 +1178,7 @@ syncDir() {
 	# 3) filter out files that are in priority.csv
 	IFS=$'\n'
 	local newFiles=($(find "$localDir" -not -path '*/\.*' -not -type d | \
-		sed -r "s|$localDirEsc||" | grep -Fvxf <(grep -v '^#' "$configDir/exclude") | \
+		sed -r "s|$localDirEsc||" | grep -Fvxf "$excludeFile" | \
 		grep -Fvxf <(grep -v '^#' "$configDir/priority.csv" | rev | cut -d ',' -f 2- | rev)))
 	unset IFS
 
@@ -1193,10 +1207,10 @@ syncDir() {
 				rsync -aHAXS --ignore-missing-args "$destDir$i" "$localDir" || exit 1
 			fi
 		fi
-	done < <(grep -v '^#' "$configDir/exclude")
+	done < "$excludeFile"
 
-	# put a temporary file in some remote empty directories to prevent them from
-	# being deleted later
+	# for every local empty directory, put a temporary file in the corresponding
+	# remote directory to prevent it from being deleted later
 	find "$localDir" -mindepth 1 -not -path "*/\.*" -type d -empty | \
 		sed -r -e "s|$localDirEsc|$destDir|" -e 's|$|/.rs-hold|' | xargs -d '\n' touch 2> /dev/null
 
@@ -1218,7 +1232,7 @@ syncDir() {
 	# download directories that are in the directory priority file but not stored
 	# locally
 	printf "%s\n" "${downloadFiles[@]}" | rsync -asHAXS --files-from=- \
-		--exclude-from="$configDir/exclude" "$destDir/" "$localDir" || \
+		--exclude-from="$excludeFile" "$destDir/" "$localDir" || \
 		exit 1
 
 	if [[ "$syncExtraFiles" == "yes" ]]; then
@@ -1283,7 +1297,7 @@ resetDir() {
 		i="$localDir$i"
 		[[ -a "$i" ]] && \
 			excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
-	done <"$configDir/exclude"
+	done < "$excludeFile"
 
 	# remove symlinks that aren't in the exclude file from the local directory
 	find "$localDir" -not -path '*/\.*' -type l | \
