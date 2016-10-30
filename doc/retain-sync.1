@@ -4,7 +4,7 @@
 \# copy of this man page.
 \#     ./man-gen.sh retain-sync.1
 
-.TH RETAIN-SYNC 1 "2016-10-10" "" ""
+.TH RETAIN-SYNC 1 "2016-10-29" "" ""
 .SH NAME
 retain-sync \- distribute files based on how frequently they are accessed
 .SH SYNOPSIS
@@ -168,6 +168,13 @@ file/directory path in the exclude file is anchored to the local initialized
 directory. Another way to think of it: each file/directory path in the exclude
 file is relative to the initialized directory, but must include a leading
 slash.
+.sp
+If the remote directory is not shared with any other configurations, then files
+are removed from the remote directory once they are excluded. If the remote
+directory is shared, then files remain in the remote directory until they are
+excluded in each configuration that shares that directory. Files that are
+excluded in only some of these configurations will remain in the remote
+directory and will continue to sync normally.
 .SH TRASH
 Files that exist only in the remote directory are represented locally as
 symbolic links.  Whenever the \fBsync\fR command is run, local files (including

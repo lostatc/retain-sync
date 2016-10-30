@@ -237,6 +237,7 @@ readInput() {
 		exit 1
 	fi
 	configDir="${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs/$configName"
+	uniqueID="$(cut -c 1-8 /etc/machine-id)-$configName"
 
 	parseConfig "$configDir/config"
 }
@@ -725,6 +726,11 @@ initializeDir() {
 	find "$destDir" -not -type d -exec echo '{},0' \; | \
 		sed -r "s|$destDirEsc||" >> "$configDir/priority.csv" || exit 1
 
+	# copy 'exclude' file to remote directory for use when the remote directory
+	# is shared with other configurations
+	mkdir "$destDir/.exclude"
+	grep -v '^#' "$configDir/exclude" > "$destDir/.exclude/$uniqueID"
+
 	# create "init" file used to indicate that the directory has been initialized and
 	# what the name of its config is
 	if [[ "$optAddRemote" == "true" ]]; then
@@ -789,24 +795,32 @@ syncDir() {
 
 	printf "%s" "Checking for new files... "
 
+	# copy 'exclude' file to remote directory
+	grep -v '^#' "$configDir/exclude" > "$destDir/.exclude/$uniqueID"
+
 	# read contents of exclude file into an array of file paths
 	IFS=$'\n'
+	local excludeFiles
 	while read -r i; do
 		[[ "$i" =~ ^$ ]] && continue # skip line if empty
 		[[ "$i" =~ ^# ]] && continue # skip line if a comment
 
-		i="$localDir$i"
-		[[ -e "$i" ]] && excludeFiles+=($(find "$i" -not -path '*/\.*' -not -type d))
+		[[ -e "$localDir$i" ]] && \
+			excludeFiles+=($(find "$localDir$i" -not -path '*/\.*' -not -type d))
 	done <"$configDir/exclude"
+	excludeFiles=($(printf "%s\n" "${excludeFiles[@]}" | sort | uniq))
+	local excludeFilesRel=($(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||"))
 
-	# remove excluded files from priority.csv
-	for i in "${excludeFiles[@]}"; do
-		i="$(sed -r "s|$localDirEsc||" <<< "$i")"
-		sed -i -r -e "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$||" -e '/^$/d' \
-			"$configDir/priority.csv"
+	for i in "${excludeFilesRel[@]}"; do
+		iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i")"
+
+		if grep -Exq "^$iEsc,[0-9\.]+$" "$configDir/priority.csv"; then
+			# remove excluded files from priority.csv
+			sed -i -r -e "s|^$iEsc,[0-9\.]+$||" -e '/^$/d' "$configDir/priority.csv"
+		fi
 	done
 
-	# remove broken symlinks that aren't in the exclude file
+	# remove local broken symlinks that aren't in the exclude file
 	find "$localDir" -xtype l | grep -Fxvf <(printf "%s\n" "${excludeFiles[@]}") | \
 		xargs -d '\n' rm -f
 
@@ -817,9 +831,9 @@ syncDir() {
 	# 2) concatenate list of files in priority.csv (making paths relative)
 	# 3) remove all repeated entries in the list
 	local diffFiles=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -not -type d | \
-		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed -r "s|$localDirEsc||")" "$(grep -v '^#' "$configDir/priority.csv" | rev | \
-		cut -d ',' -f 2- | rev)" | sort | uniq -u))
+		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | sed -r "s|$localDirEsc||")" \
+		"$(grep -v '^#' "$configDir/priority.csv" | rev | cut -d ',' -f 2- | rev)" | \
+		sort | uniq -u))
 	unset IFS
 
 	# find highest priority in priority.csv and add 1 to it
@@ -831,9 +845,9 @@ syncDir() {
 	for i in "${diffFiles[@]}"; do
 		local iEsc="$(sed 's/[][()\.^$?*+]/\\&/g' <<< $i)"
 
-		if grep -Exq "$iEsc,[0-9\.]*" "$configDir/priority.csv"; then
+		if grep -Exq "^$iEsc,[0-9\.]+$" "$configDir/priority.csv"; then
 			# file is no longer present in local directory, remove from priority file
-			sed -i -r -e "s|^$iEsc,[0-9\.]*$||" -e '/^$/d' "$configDir/priority.csv"
+			sed -i -r -e "s|^$iEsc,[0-9\.]+$||" -e '/^$/d' "$configDir/priority.csv"
 
 			if [[ "$deleteAlways" == "no" ]]; then
 				# find size of all files in the user's trash if it hasn't already
@@ -920,6 +934,11 @@ syncDir() {
 	rsync -aHAXSu --exclude-from="$configDir/exclude" --exclude=".*" --safe-links \
 		"$localDir/" "$destDir" || exit 1
 
+	# update any excluded files in the remote directory
+	printf "%s\n" "${excludeFilesRel[@]}" | \
+		rsync -aHAXS --existing --files-from=- --safe-links \
+		"$localDir/" "$destDir" || exit 1
+
 	echo "done"
 
 	printf "%s" "Sorting directories by priority... "
@@ -971,7 +990,7 @@ syncDir() {
 	awk -F ',' '{print $NF,$0}' "$dirPriorityFile" | sort -rn | \
 		cut -d ' ' -f 2- > "$dirPriorityFile.swp"
 	mv "$dirPriorityFile.swp" "$dirPriorityFile"
-	sed -i 's/,[0-9\.]*$//' "$dirPriorityFile"
+	sed -i -r 's/,[0-9\.]+$//' "$dirPriorityFile"
 
 	# cut down the directory priority file to only the list of directories that can be
 	# stored locally without exceeding the storage limit
@@ -1037,7 +1056,7 @@ syncDir() {
 	IFS=$'\n'
 	local noSyncFiles
 	noSyncFiles=($(find "$destDir" -not -name '.*.trash' -not -type d | \
-		sed -r "s|$destDirEsc||")) || exit 1
+		sed -r "s|$destDirEsc||" | grep -Fxvf "$configDir/exclude")) || exit 1
 	while read -r i; do
 		noSyncFiles+=($(find "$destDir$i" -not -name '.*.trash' -not \
 			-type d | sed -r "s|$destDirEsc||")) || exit 1
@@ -1051,7 +1070,7 @@ syncDir() {
 		local noSyncSorted
 		for i in "${noSyncFiles[@]}"; do
 			# search for line containing complete file name in priority file
-			noSyncSorted+=($(grep -Ex "^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]*$" \
+			noSyncSorted+=($(grep -Ex "^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$i"),[0-9\.]+$" \
 				"$configDir/priority.csv"))
 		done
 
@@ -1072,7 +1091,7 @@ syncDir() {
 				# numbers easier to work with
 				local adjustedPriority=$(echo "scale=6; $(rev <<< "${noSyncSorted[$i]}" | \
 					cut -d ',' -f 1 | rev)/($currentFileSize/10485760)" | bc)
-				noSyncSorted[$i]="$(sed "s/,[0-9\.]*$/,$adjustedPriority/" <<< \
+				noSyncSorted[$i]="$(sed "s/,[0-9\.]+$/,$adjustedPriority/" <<< \
 					"${noSyncSorted[$i]}")"
 			done
 		fi
@@ -1146,10 +1165,8 @@ syncDir() {
 	# 3) filter out files that are in priority.csv
 	IFS=$'\n'
 	local newFiles=($(find "$localDir" -not -path '*/\.*' -not -type d | \
-		grep -Fvxf <(printf "%s\n" "${excludeFiles[@]}") | \
-		sed -r "s|$localDirEsc||" | \
-		grep -Fvxf <(grep -v '^#' "$configDir/priority.csv" | \
-		rev | cut -d ',' -f 2- | rev)))
+		sed -r "s|$localDirEsc||" | grep -Fvxf <(grep -v '^#' "$configDir/exclude") | \
+		grep -Fvxf <(grep -v '^#' "$configDir/priority.csv" | rev | cut -d ',' -f 2- | rev)))
 	unset IFS
 
 	# add new files to priority.csv (for files that were added to the remote
@@ -1162,12 +1179,6 @@ syncDir() {
 		fi
 	done
 
-	# download (and remove from the server) excluded files that are still on the server
-	find "$destDir" -not -type d | sed -r "s|$destDirEsc||" | grep -Fxf \
-		<(printf "%s\n" "${excludeFiles[@]}" | sed -r "s|$localDirEsc||") | \
-		rsync -asHAXS --files-from=- --remove-source-files "$destDir/" "$localDir" \
-		|| exit 1
-
 	# remove any empty directories on the server that aren't also local
 	IFS=$'\n'
 	emptyDirs=($(printf "%s\n" "$(find "$localDir" -not -path '*/\.*' -type d -empty | \
@@ -1178,6 +1189,23 @@ syncDir() {
 	for i in "${emptyDirs[@]}"; do
 		rmdir "$destDir$i" 2> /dev/null
 	done
+
+	while read -r i; do
+		# copy excluded file to local directory if it isn't already there
+		#
+		# if file has been excluded by each configuration that shares this
+		# remote directory, remove the file from the remote directory
+		if [[ -e "$destDir$i" ]]; then
+			local numExOccurrences=$(grep -FRl "$i" "$destDir/.exclude/" | wc -l)
+			local numExFiles=$(find "$destDir/.exclude/" -mindepth 1 | wc -l)
+			if [[ $numExOccurrences -eq $numExFiles ]]; then
+				rsync -aHAXS --remove-source-files --ignore-missing-args \
+					"$destDir$i" "$localDir" || exit 1
+			else
+				rsync -aHAXS --ignore-missing-args "$destDir$i" "$localDir" || exit 1
+			fi
+		fi
+	done < <(grep -v '^#' "$configDir/exclude")
 
 	# find file paths in directory priority file
 	local downloadFiles
@@ -1425,7 +1453,7 @@ agePriority() {
 	while read -r i; do
 		local fileName="$(rev <<< "$i" | cut -d ',' -f 2- | rev)"
 		local newPriority=$(echo "scale=6; $(rev <<< "$i" | cut -d ',' -f 1 | rev)/1.05" | bc) 2> /dev/null
-		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]*$|$fileName,${newPriority:-0}|" \
+		sed -i -r "s|^$(sed 's/[][()\.^$?*+]/\\&/g' <<< "$fileName"),[0-9\.]+$|$fileName,${newPriority:-0}|" \
 			"$configDir/priority.csv"
 	done <"$configDir/priority.csv"
 }
