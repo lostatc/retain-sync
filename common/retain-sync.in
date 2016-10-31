@@ -1211,22 +1211,12 @@ syncDir() {
 			if [[ $numExOccurrences -eq $numExFiles ]]; then
 				rsync -aHAXS --remove-source-files --ignore-missing-args \
 					"$destDir$i" "$localDir" || exit 1
+				find "$destDir$i" -type d -empty -delete
 			else
 				rsync -aHAXS --ignore-missing-args "$destDir$i" "$localDir" || exit 1
 			fi
 		fi
 	done < "$excludeFile"
-
-	# for every local empty directory, put a temporary file in the corresponding
-	# remote directory to prevent it from being deleted later
-	find "$localDir" -mindepth 1 -not -path "*/\.*" -type d -empty | \
-		sed -r -e "s|$localDirEsc|$destDir|" -e 's|$|/.rs-hold|' | xargs -d '\n' touch 2> /dev/null
-
-	# remove remote empty directories that aren't also in the local directory
-	find "$destDir" -mindepth 1 -not -name ".*" -type d -empty -delete
-
-	# remove temporary files
-	find "$destDir" -name ".rs-hold" -type f -empty -delete
 
 	# find file paths in directory priority file
 	local downloadFiles
