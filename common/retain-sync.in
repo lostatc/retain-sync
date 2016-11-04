@@ -85,6 +85,119 @@ freezeConfig() {
 		cp "$configDir/config" "$configFile"
 }
 
+checkConfig() {
+	# perform syntax checking of config file options
+
+	local varName="$1"      # name of the variable to be checked
+	local varValue="$2"     # value of the variable to be checked
+
+	local context="${checkConfigContext:-this value}"
+
+	case "$varName" in
+		configName)
+			IFS=$'\n'
+			if [[ -z "$varValue" ]]; then
+				>&2 echo "Error: $context may not be blank"
+				return 1
+			elif [[ "$varValue" =~ [\ ]+ ]]; then
+				>&2 echo "Error: $context may not contain spaces"
+				return 1
+			elif [[ "$varValue" =~ [^0-9A-Za-z_-]+ ]]; then
+				>&2 echo "Error: $context only accepts alphanumeric characters, hyphens and underscores"
+				return 1
+			elif [[ -z "$(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d)" ]]; then
+				return 0
+			elif grep -Fxq "$varValue" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d 2> /dev/null)); then
+				>&2 echo "Error: the name '$varValue' is already in use"
+				return 1
+			else
+				return 0
+			fi
+			unset IFS
+			;;
+		localDir)
+			if [[ -z "$varValue" ]]; then
+				>&2 echo "Error: $context may not be blank"
+				return 1
+			elif [[ ! "$varValue" =~ ^~?/ ]]; then
+				>&2 echo "Error: $context must be an absolute path"
+				return 1
+			else
+				return 0
+			fi
+			;;
+		remoteHost)
+			if [[ "$varValue" =~ [\ ]+ ]]; then
+				>&2 echo "Error: $context may not contain spaces"
+				return 1
+			else
+				return 0
+			fi
+			;;
+		remoteUser)
+			if [[ -n "$varValue" ]]; then
+				if [[ "$varValue" =~ [\ ]+ ]]; then
+					>&2 echo "Error: $context may not contain spaces"
+					return 1
+				else
+					return 0
+				fi
+			fi
+			;;
+		port)
+			if [[ -n "$varValue" ]]; then
+				if ! [[ "$varValue" =~ ^[0-9]+$ ]]; then
+					>&2 echo "Error: $context must be a number in the range 1-65535"
+					return 1
+				elif [[ "$varValue" -lt 1 || "$varValue" -gt 65535 ]]; then
+					>&2 echo "Error: $context must be a number in the range 1-65535"
+					return 1
+				else
+					return 0
+				fi
+			fi
+			;;
+		remoteDir)
+			if [[ -z "$varValue" ]]; then
+				>&2 echo "Error: $context may not be blank"
+				return 1
+			elif [[ ! "$varValue" =~ ^~?/ ]]; then
+				>&2 echo "Error: $context must be an absolute path"
+				return 1
+			else
+				return 0
+			fi
+			;;
+		storageLimit)
+			if [[ -z "$varValue" ]]; then
+				>&2 echo "Error: $context may not be blank"
+				return 1
+			elif [[ ! "$varValue" =~ ^[0-9]+(K|M|G|KiB|MiB|GiB)$ ]]; then
+				>&2 echo "Error: $context must be a whole number followed by a unit (e.g. 10G)"
+				return 1
+			else
+				return 0
+			fi
+			;;
+		sshfsOptions)
+			if [[ "$varValue" =~ [\ ]+ ]]; then
+				>&2 echo "Error: $context may not contain spaces"
+				return 1
+			else
+				return 0
+			fi
+			;;
+		trashDirs)
+			if [[ $(($(grep -o ":" <<< "$varValue" | wc -l)+1)) -ne $(grep -Eo "(^|:)~?/" <<< "$varValue" | wc -l) ]]; then
+				>&2 echo "Error: $context only accepts absolute paths"
+				return 1
+			else
+				return 0
+			fi
+			;;
+	esac
+}
+
 parseConfig() {
 	# parse a configuration file and read its contents into variables
 	# (see genConfig() for config file format)
@@ -114,16 +227,14 @@ parseConfig() {
 		fi
 
 		# parse option, removing leading/trailing whitespace
-		local varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^[ \t]*//' -e \
-			's/[ \t]*$//')"
-		local varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^[ \t]*//' -e \
-			's/[ \t]*$//')"
+		local varName="$(cut -d '=' -f 1 <<< "$i" | sed -e 's/^\s*//' -e \
+			's/\s*$//')"
+		local varValue="$(cut -d '=' -f 2- <<< "$i" | sed -e 's/^\s*//' -e \
+			's/\s*$//')"
 
-		# if option is required, add it to an array to be cross-referenced with the list
-		# of all required options
-		if echo "$varName" | grep -Fxqf <(printf "%s\n" "${reqVars[@]}"); then
-			reqVarsTest+=("$varName")
-		fi
+		# allow for option names in config file to start with an uppercase letter
+		# for purely asthetic reasons
+		varName="${varName,}"
 
 		# check if option is recognized
 		if ! grep -Fxqf <(printf "%s\n" "${reqVars[@]}" "${optVars[@]}") <<< "$varName"; then
@@ -132,7 +243,24 @@ parseConfig() {
 			continue
 		fi
 
-		# check if value of boolean option is recognized
+		# if option is required, add it to an array to be cross-referenced with the list
+		# of all required options to make sure none are missing
+		if grep -Fxqf <(printf "%s\n" "${reqVars[@]}") <<< "$varName"; then
+			reqVarsTest+=("$varName")
+		fi
+
+		# check if value of non-boolean option is valid
+		if ! grep -Fxqf <(printf "%s\n" "${boolVars[@]}") <<< "$varName"; then
+			# set the context for any error messages that are printed
+			local checkConfigContext="line $lineNumber of config file: '${varName^}'"
+
+			if ! checkConfig "$varName" "$varValue"; then
+				((configError ++))
+				continue
+			fi
+		fi
+
+		# check if value of boolean option is valid
 		if grep -Fxqf <(printf "%s\n" "${boolVars[@]}") <<< "$varName"; then
 			if ! grep -Fxqf <(printf "%s\n" "${boolValues[@]}") <<< "${varValue,,}"; then
 				>&2 echo "Error: line $lineNumber of config file: unrecognized value for boolean option"
@@ -155,7 +283,7 @@ parseConfig() {
 	unset IFS
 	if [[ "${#reqVarsMissing[@]}" -gt 0 ]]; then
 		for i in "${reqVarsMissing[@]}"; do
-			>&2 echo "Error: missing required option '$i' in config file"
+			>&2 echo "Error: config file: missing required option '${i^}'"
 			((configError++))
 		done
 	fi
@@ -165,7 +293,8 @@ parseConfig() {
 
 	uniqueID="$(cut -c 1-8 /etc/machine-id)-$USER-$configName"
 
-	# set default values for non-mandatory options
+	# set default values for some options
+	port="${port:-22}"
 	sshfsOptions="${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}"
 	trashDirs=${trashDirsIn:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
 	deleteAlways="${deleteAlwaysIn:-no}"
@@ -191,8 +320,8 @@ parseConfig() {
 	# remove trailing slash
 	remoteDir="${remoteDir%/}"
 	# convert human-readable format to bytes
-	storageLimit="$(sed -r -e 's/KB?/\*1024/' -e 's/MB?/\*1048576/' \
-		-e 's/GB?/\*1073741824/' <<< "$storageLimitIn" | bc)"
+	storageLimit="$(sed -r -e 's/K(iB)?/\*1024/' -e 's/M(iB)?/\*1048576/' \
+		-e 's/G(iB)?/\*1073741824/' <<< "$storageLimitIn" | bc)"
 	# 'nonempty' option required because of '.dest' directory in mountpoint
 	# (see bottom of initializeDir())
 	sshfsOptions=(-o "$sshfsOptions" -o "nonempty" -p "$portIn")
@@ -221,7 +350,7 @@ parseConfig() {
 	# check for additional dependencies
 	if [[ -n "$remoteHost" ]]; then
 		[[ ! -x "$(which sshfs 2> /dev/null)" ]] && \
-			echo "Error: 'sshfs' is required for syncing across machines" && exit 1
+			echo "Error: sshfs is required for syncing across machines" && exit 1
 	fi
 }
 
@@ -290,66 +419,35 @@ genConfig() {
 
 	# prompt user for name of config
 	if [[ -z "${configName:+x}" ]]; then
-		IFS=$'\n'
 		while true; do
 			read -erp "Enter a name for this configuration: " configName </dev/tty
-			if [[ -z "$configName" ]]; then
-				>&2 echo "Error: this value may not be blank"
-			elif [[ "$configName" =~ [\ ]+ ]]; then
-				>&2 echo "Error: this value may not contain spaces"
-			elif [[ "$configName" =~ [^0-9A-Za-z_-]+ ]]; then
-				>&2 echo "Error: only alphanumeric characters, hyphens and underscores are allowed"
-			elif [[ -z "$(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d)" ]]; then
-				break
-			elif grep -Fxq "$configName" <(basename -a $(find "${XDG_CONFIG_HOME:-$HOME/.config}/retain-sync/configs" -mindepth 1 -maxdepth 1 -type d 2> /dev/null)); then
-				>&2 echo "Error: the name '$configName' is already in use"
-			else
-				break
-			fi
+			checkConfig "configName" "$configName" && break
 		done
-		unset IFS
 	fi
 
 	# prompt user for hostname of remote machine
 	if [[ -z "${remoteHostIn:+x}" ]]; then
 		while true; do
-			read -erp "Enter the hostname, ip address or domain name of the server (optional): " remoteHostIn </dev/tty
-			if [[ "$remoteHostIn" =~ [\ ]+ ]]; then
-				>&2 echo "Error: this value may not contain spaces"
-			else
-				break
-			fi
+			read -erp "Enter the hostname, ip address or domain name of the server (if any): " remoteHostIn </dev/tty
+			checkConfig "remoteHost" "$remoteHostIn" && break
 		done
 	fi
 
-	[[ "$remoteHostIn" == "localhost" || "$remoteHostIn" == "127.0.0.1" ]] && remoteHostIn=""
+	[[ "$remoteHostIn" == "localhost" || "$remoteHostIn" == "127.0.0.1" ]] && unset remoteHostIn
 
 	if [[ -n "$remoteHostIn" ]]; then
 		# prompt user for user name on remote machine
 		if [[ -z "${remoteUserIn:+x}" ]]; then
 			while true; do
 				read -erp "Enter your user name on the server ($USER): " remoteUserIn </dev/tty
-				if [[ "$remoteUserIn" =~ [\ ]+ ]]; then
-					>&2 echo "Error: user name may not contain spaces"
-				else
-					break
-				fi
+				checkConfig "remoteUser" "$remoteUserIn" && break
 			done
 		fi
-
 		# prompt user for port number
 		if [[ -z "${portIn:+x}" ]]; then
 			while true; do
 				read -erp "Enter the port number for the connection: " -i "22" portIn </dev/tty
-				if [[ -z "$portIn" ]]; then
-					>&2 echo "Error: this value may not be blank"
-				elif ! [[ "$portIn" =~ ^[0-9]+$ ]]; then
-					>&2 echo "Error: value must be a number in the range 0-65535"
-				elif [[ "$portIn" -lt 1 || "$portIn" -gt 65535 ]]; then
-					>&2 echo "Error: value must be a number in the range 0-65535"
-				else
-					break
-				fi
+				checkConfig "port" "$portIn" && break
 			done
 		fi
 	fi
@@ -358,13 +456,7 @@ genConfig() {
 	if [[ -z "${remoteDirIn:+x}" ]]; then
 		while true; do
 			read -erp "Enter the remote directory path: " remoteDirIn </dev/tty
-			if [[ -z "$remoteDirIn" ]]; then
-				>&2 echo "Error: this value may not be blank"
-			elif [[ ! "$remoteDirIn" =~ ^~?/ ]]; then
-				>&2 echo "Error: must be an absolute path"
-			else
-				break
-			fi
+			checkConfig "remoteDir" "$remoteDirIn" && break
 		done
 	fi
 
@@ -372,11 +464,7 @@ genConfig() {
 	if [[ -z "${storageLimitIn:+x}" ]]; then
 		while true; do
 			read -erp "Enter the amount of data to keep synced in the local directory (accepts K, M or G): " storageLimitIn </dev/tty
-			if [[ ! "$storageLimitIn" =~ ^[0-9]+(K|M|G|KB|MB|GB)$ ]]; then
-				>&2 echo "Error: must be a whole number followed by a unit (e.g. 10G)"
-			else
-				break
-			fi
+			checkConfig "storageLimit" "$storageLimitIn" && break
 		done
 	fi
 
@@ -391,43 +479,43 @@ genConfig() {
 		#
 
 		# local directory to sync
-		localDir=$localDir
+		LocalDir=$localDir
 
 		# hostname, ip address or domain name of the server (optional)
-		remoteHost=$remoteHostIn
+		RemoteHost=$remoteHostIn
 
 		# user name on the server (optional)
-		remoteUser=$remoteUserIn
+		RemoteUser=$remoteUserIn
 
 		# port number for the connection (optional)
-		port=$portIn
+		Port=$portIn
 
 		# remote directory to sync to
-		remoteDir=$remoteDirIn
+		RemoteDir=$remoteDirIn
 
 		# amount of data to keep in local directory (accepts K, M or G)
-		storageLimit=$storageLimitIn
+		StorageLimit=$storageLimitIn
 
 
 		# mount options to pass to sshfs
-		#sshfsOptions=${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}
+		#SshfsOptions=${sshfsOptionsIn:-reconnect,ServerAliveInterval=5,ServerAliveCountMax=3}
 
 		# colon-separated list of directory paths in which to search for deleted files
-		#trashDirs=${trashDirs:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
+		#TrashDirs=${trashDirs:-${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files}
 
 		# always delete files from the remote directory when their local counterparts
 		# are deleted, even if copies aren't found in the local user's trash
-		#deleteAlways=${deleteAlwaysIn:-no}
+		#DeleteAlways=${deleteAlwaysIn:-no}
 
 		# start syncing individual files once no more whole directories can fit within
 		# the storage limit
-		#syncExtraFiles=${syncExtraFilesIn:-yes}
+		#SyncExtraFiles=${syncExtraFilesIn:-yes}
 
 		# inflate the priority of new local files so that they stick around longer
-		#inflatePriority=${inflatePriorityIn:-yes}
+		#InflatePriority=${inflatePriorityIn:-yes}
 
 		# take file size into account when prioritizing files
-		#accountForSize=${accountForSizeIn:-yes}
+		#AccountForSize=${accountForSizeIn:-yes}
 	EOF
 
 	# run if --template option was given
@@ -542,7 +630,8 @@ initializeDir() {
 			-mindepth 1 -maxdepth 1 -type d))
 		if [[ "${#configDirs[@]}" -gt 0 ]]; then
 			while read -r i; do
-				local localDirTest="$(grep "localDir=" "$i/config" | cut -d '=' -f 2-)"
+				local localDirTest="$(grep -Exi "^\s*[Ll]ocalDir\s*=.*$" "$i/config" | \
+					tail -n 1 | cut -d '=' -f 2-)"
 				local localTreeTest=($(find "$localDirTest" -type d))
 				local localTree=($(find "$localDir" -type d))
 				if [[ -n "$(printf "%s\n" "${localTreeTest[@]}" "${localTree[@]}" | sort | uniq -d)" ]]; then
@@ -1488,8 +1577,8 @@ main() {
 	# mandatory options
 	mapfile -t reqVars <<-EOF
 		localDir
-		remoteUser
 		remoteHost
+		remoteUser
 		port
 		remoteDir
 		storageLimit

@@ -3,40 +3,40 @@
 #
 
 # name of the configuration
-configName=
+ConfigName=
 
 # hostname, ip address or domain name of the server (optional)
-remoteHost=
+RemoteHost=
 
 # user name on the server (optional)
-remoteUser=
+RemoteUser=
 
 # port number for the connection (optional)
-port=
+Port=
 
 # remote directory to sync to
-remoteDir=
+RemoteDir=
 
 # amount of data to keep in local directory (accepts K, M or G)
-storageLimit=
+StorageLimit=
 
 
 # mount options to pass to sshfs
-#sshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
+#SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
 # colon-separated list of directory paths in which to search for deleted files
-#trashDirs=~/.local/share/Trash/files
+#TrashDirs=~/.local/share/Trash/files
 
 # always delete files from the remote directory when their local counterparts
 # are deleted, even if copies aren't found in the local user's trash
-#deleteAlways=no
+#DeleteAlways=no
 
 # start syncing individual files once no more whole directories can fit within
 # the storage limit
-#syncExtraFiles=yes
+#SyncExtraFiles=yes
 
 # inflate the priority of new local files so that they stick around longer
-#inflatePriority=yes
+#InflatePriority=yes
 
 # take file size into account when prioritizing files
-#accountForSize=yes
+#AccountForSize=yes
