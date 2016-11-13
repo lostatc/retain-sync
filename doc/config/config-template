@@ -1,0 +1,43 @@
+#
+# retain-sync config
+#
+
+# The local directory to sync with
+LocalDir=
+
+# The hostname, ip address or domain name of the server (optional)
+RemoteHost=
+
+# The user name on the server (optional)
+RemoteUser=
+
+# The port number for the connection (optional)
+Port=
+
+# The remote directory to sync with
+RemoteDir=
+
+# The amount of data to keep in local directory (accepts K, M or G)
+StorageLimit=
+
+
+# Mount options to pass to sshfs
+#SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
+
+# A colon-separated list of directory paths in which to search for deleted
+# files
+#TrashDirs=~/.local/share/Trash/files
+
+# Always delete files from the remote directory when their local counterparts
+# are deleted, even if copies aren't found in the local user's trash.
+#DeleteAlways=no
+
+# Start syncing individual files once no more whole directories can fit within
+# the storage limit.
+#SyncExtraFiles=yes
+
+# Inflate the priority of new local files so that they stick around longer.
+#InflatePriority=yes
+
+# Take file size into account when prioritizing files.
+#AccountForSize=yes

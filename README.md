@@ -30,9 +30,7 @@ back up your data before testing it.
 
 ## Installation
 #### Dependencies
-* bash >=4.0
-* bc
-* inotify-tools
+* python 3.x
 * rsync
 * sshfs (optional)
 * systemd
