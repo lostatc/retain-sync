@@ -17,7 +17,7 @@ Port=
 # The remote directory to sync with
 RemoteDir=
 
-# The amount of data to keep in local directory (accepts K, M or G)
+# The amount of data to keep in the local directory (accepts K, M or G)
 StorageLimit=
 
 
@@ -39,5 +39,6 @@ StorageLimit=
 # Inflate the priority of new local files so that they stick around longer.
 #InflatePriority=yes
 
-# Take file size into account when prioritizing files.
+# Take file size into account when prioritizing files (smaller files take
+# priority over larger ones).
 #AccountForSize=yes

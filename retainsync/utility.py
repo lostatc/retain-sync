@@ -1,4 +1,4 @@
-"""This is a collection of miscellaneous utilities."""
+"""A collection of miscellaneous utilities."""
 
 """
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
@@ -21,25 +21,38 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
 import os
-import readline
+import sqlite3
+from collections    import defaultdict
+from contextlib     import contextmanager
 
 def err(*args, **kwargs):
     """Print to standard error."""
+    # TODO: print error message on new line if cursor is not at the beginning
+    # of the line
     print(*args, file=sys.stderr, **kwargs)
 
 def env(var):
     """Return a default value if environment variable is unset."""
-    try:
-        return os.environ[var]
-    except KeyError:
-        if var == "XDG_CONFIG_HOME":
-            return os.path.join(os.environ["HOME"], ".config")
-        elif var == "XDG_DATA_HOME":
-            return os.path.join(os.environ["HOME"], ".local/share")
+    defaults = {
+        "XDG_CONFIG_HOME":  os.path.join(os.getenv("HOME"), ".config"),
+        "XDG_DATA_HOME":    os.path.join(os.getenv("HOME"), ".local/share")
+        }
+    defaults = defaultdict(lambda: None, defaults)
+    return os.getenv(var, defaults[var])
 
-def rinput(prompt, prefill=""):
-    """Prompt the user for input with a pre-populated input buffer."""
-    readline.set_startup_hook(lambda: readline.insert_text(prefill))
-    result = input(prompt)
-    readline.set_startup_hook()
-    return result
+def tty_input(prompt, prefill=""):
+    """Read user input from the tty device."""
+    # TODO: allow for the input buffer to be prepopulated with a default value
+    # (readline doesn't work normally when sys.stdin is reassigned)
+    with open("/dev/tty") as file:
+        sys.stdin = file
+        usr_in = input(prompt)
+    sys.stdin = sys.__stdin__
+    return usr_in
+
+@contextmanager
+def open_db(path):
+    db = sqlite3.connect(path)
+    yield db
+    db.commit()
+    db.close()
