@@ -1,6 +1,5 @@
-"""Manage command-line input and the printing of usage messages."""
+"""Manage command-line input and the printing of usage messages.
 
-"""
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
@@ -20,13 +19,11 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import argparse
-import re
 import sys
 import pkg_resources
-from textwrap       import dedent
-from collections    import defaultdict
+from textwrap import dedent
 
-from retainsync.utility import err
+from retainsync.util.misc import err
 
 
 def usage(command):
@@ -34,11 +31,11 @@ def usage(command):
 
     # Define ANSI escape color codes.
     if sys.stdout.isatty():
-        normal = "\033[0m"      # This is no formatting.
-        color1 = "\033[1;31m"   # This is bold red, used for commands/options.
-        color2 = "\033[1;32m"   # This is bold green, used for arguments.
+        normal = chr(27) + "[0m"      # This is no formatting.
+        color1 = chr(27) + "[1;31m"   # This is bold red, used for commands/options.
+        color2 = chr(27) + "[1;32m"   # This is bold green, used for arguments.
     else:
-        # Don't use colors if stdout is being redirected.
+        # Don't use colors if stdout isn't a tty.
         normal = ""
         color1 = ""
         color2 = ""
@@ -124,28 +121,35 @@ def usage(command):
     help_msg = help_msg.format(normal, color1, color2)
     print(help_msg)
 
+
 class CustomArgumentParser(argparse.ArgumentParser):
     """Set custom formatting of error messages for argparse."""
     def error(self, message):
         err("Error:", message)
         sys.exit(2)
 
+
 class HelpAction(argparse.Action):
     """Handle the '--help' flag."""
     def __init__(self, nargs=0, **kwargs):
         super(HelpAction, self).__init__(nargs=nargs, **kwargs)
+
     def __call__(self, parser, namespace, values, option_string=None):
         usage(namespace.command)
         parser.exit()
+
 
 class VersionAction(argparse.Action):
     """Handle the '--version' flag."""
     def __init__(self, nargs=0, **kwargs):
         super(VersionAction, self).__init__(nargs=nargs, **kwargs)
+
     def __call__(self, parser, namespace, values, option_string=None):
-        print("retain-sync",
+        print(
+            "retain-sync",
             pkg_resources.get_distribution("retain-sync").version)
         parser.exit()
+
 
 def parse_args():
     """Create a global dictionary of parsed command-line arguments."""

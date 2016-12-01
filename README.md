@@ -30,7 +30,7 @@ back up your data before testing it.
 
 ## Installation
 #### Dependencies
-* python 3.x
+* python >= 3.5
 * rsync
 * sshfs (optional)
 * systemd
