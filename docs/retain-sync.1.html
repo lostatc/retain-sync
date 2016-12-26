@@ -1,0 +1,696 @@
+<!-- Creator     : groff version 1.22.3 -->
+<!-- CreationDate: Mon Dec 26 11:30:40 2016 -->
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+ <head>
+  <meta content="groff -Thtml, see www.gnu.org" name="generator"/>
+  <meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>
+  <meta content="text/css" name="Content-Style"/>
+  <style type="text/css">
+   p       { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       pre     { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       table   { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       h1      { text-align: center }
+  </style>
+  <title>
+   RETAIN-SYNC
+  </title>
+  <link href="man.css" rel="stylesheet" type="text/css"/>
+ </head>
+ <body>
+  <h1 align="center">
+   RETAIN-SYNC
+  </h1>
+  <div class="man-navigation">
+   <a href="#NAME">
+    NAME
+   </a>
+   <br/>
+   <a href="#SYNOPSIS">
+    SYNOPSIS
+   </a>
+   <br/>
+   <a href="#DESCRIPTION">
+    DESCRIPTION
+   </a>
+   <br/>
+   <a href="#GLOBAL OPTIONS">
+    GLOBAL OPTIONS
+   </a>
+   <br/>
+   <a href="#COMMANDS">
+    COMMANDS
+   </a>
+   <br/>
+   <a href="#SYNCING">
+    SYNCING
+   </a>
+   <br/>
+   <a href="#EXCLUDING">
+    EXCLUDING
+   </a>
+   <br/>
+   <a href="#TRASH">
+    TRASH
+   </a>
+   <br/>
+   <a href="#FILES">
+    FILES
+   </a>
+   <br/>
+   <a href="#AUTHOR">
+    AUTHOR
+   </a>
+   <br/>
+  </div>
+  <hr/>
+  <h2>
+   NAME
+   <a name="NAME">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   retain-sync
+− distribute files based on how frequently they are
+accessed
+  </p>
+  <h2>
+   SYNOPSIS
+   <a name="SYNOPSIS">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    retain-sync
+   </b>
+   [
+   <i>
+    global_options
+   </i>
+   ]
+   <i>
+    command
+   </i>
+   [
+   <i>
+    command_options
+   </i>
+   ] [
+   <i>
+    command_arg
+   </i>
+   ]
+  </p>
+  <h2>
+   DESCRIPTION
+   <a name="DESCRIPTION">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    retain-sync
+   </b>
+   is a program that distributes files between a local and
+remote directory based on how frequently they’re
+accessed with the intent of conserving disk space. This
+remote directory can be on a separate hard drive or a
+seprate machine entirely (using sshfs). Files are
+prioritized based on how frequently and recently
+they’ve been accessed as well as the file size. The
+highest-priority files are kept in the local directory for
+quick access, while lower priority files are moved to the
+remote directory to conserve disk space. It uses symbolic
+links to allow files in the remote directory to be
+accessible from the local one. The user can specify how much
+data they want to remain in the local directory at any given
+point in time (referred to as the "storage
+limit"). Multiple local directories can be synced
+concurrently with either different remote directories or the
+same one. Since local directories on different machines can
+pair with the same remote directory,
+   <b>
+    retain-sync
+   </b>
+   can
+be used to sync files between machines.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    retain-sync
+   </b>
+   deliberately ignores hidden files and directories, meaning
+that they never leave the local directory. The program
+currently does not support file names containing newlines,
+but other characters should work fine.
+   <b>
+    retain-sync
+   </b>
+   does not require root access, and is meant to run as an
+unprivileged user. If the remote directory is located on a
+separate machine,
+   <b>
+    retain-sync
+   </b>
+   does not need to be
+installed on that machine to function, although you do need
+to have passwordless ssh access to it (i.e. via public key
+authentication with an ssh agent). For the sake of
+redundancy, files stay in the remote directory and are
+copied, not moved, to the local directory as space
+permits.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   For every pair
+of directories you wish to sync, a configuration must first
+be generated using the
+   <b>
+    initialize
+   </b>
+   command.
+  </p>
+  <h2>
+   GLOBAL OPTIONS
+   <a name="GLOBAL OPTIONS">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    --help
+   </b>
+  </p>
+  <p style="margin-left:17%;">
+   Display a usage message and
+exit.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    --version
+   </b>
+  </p>
+  <p style="margin-left:17%;">
+   Print version number and
+exit.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    -q
+   </b>
+   ,
+   <b>
+    --quiet
+   </b>
+  </p>
+  <p style="margin-left:17%;">
+   Suppress all non-error
+output.
+  </p>
+  <h2>
+   COMMANDS
+   <a name="COMMANDS">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    initialize
+   </b>
+   [
+   <i>
+    options
+   </i>
+   ]
+   <i>
+    path
+   </i>
+  </p>
+  <p style="margin-left:17%;">
+   Prepare the local directory
+   <i>
+    path
+   </i>
+   for syncing by moving its contents to the remote
+directory and generating a configuration for it. The user
+will be prompted for a few pieces of information used to
+generate the config file. At the input prompts, all
+characters are taken literally.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   <b>
+    -e
+   </b>
+   ,
+   <b>
+    --exclude
+   </b>
+   <i>
+    file
+   </i>
+  </p>
+  <p style="margin-left:23%;">
+   Get a list of file/directory
+paths from
+   <i>
+    file
+   </i>
+   (one per line) that will be excluded
+from syncing, meaning that they will never leave the local
+directory (see
+   <b>
+    EXCLUDING
+   </b>
+   ). If
+   <i>
+    file
+   </i>
+   is
+’-’, then a newline-separated list of file paths
+will be accepted from stdin. File paths specified here can
+be relative or absolute, and will be converted to the proper
+format and added to the ’exclude’ file
+automatically once it is generated.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   <b>
+    -t
+   </b>
+   ,
+   <b>
+    --template
+   </b>
+   <i>
+    file
+   </i>
+  </p>
+  <p style="margin-left:23%;">
+   Get settings for the
+configuration from the template
+   <i>
+    file
+   </i>
+   instead of
+prompting the user interactively. The user will still be
+prompted for any mandatory information that is missing from
+the template. A blank template can usually be found at
+/usr/local/share/retain-sync/config-template.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   <b>
+    -a
+   </b>
+   ,
+   <b>
+    --add-remote
+   </b>
+  </p>
+  <p style="margin-left:23%;">
+   Instead of moving local files
+to an empty remote directory, start with an existing remote
+directory and an empty local directory. Using this option,
+it is possible for two or more configurations to share a
+remote directory, which means that
+   <b>
+    retain-sync
+   </b>
+   can be
+used to sync files between machines.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    sync
+   </b>
+   <i>
+    config
+   </i>
+   |
+   <i>
+    path
+   </i>
+  </p>
+  <p style="margin-left:17%;">
+   Redistribute files between the
+local and remote directories based on their priority and
+update the remote directory with any new or deleted files.
+This command accepts the absolute path of a local
+initialized directory or the name of its configuration. This
+command is run automatically once an hour by the daemon (see
+   <b>
+    SYNCING
+   </b>
+   ).
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    reset
+   </b>
+   [
+   <i>
+    options
+   </i>
+   ]
+   <i>
+    config
+   </i>
+   |
+   <i>
+    path
+   </i>
+  </p>
+  <p style="margin-left:17%;">
+   Retrieve all files from the
+remote directory and de-initialize the local directory. This
+command accepts the absolute path of a local initialized
+directory or the name of its confguration.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   <b>
+    -k
+   </b>
+   ,
+   <b>
+    --keep-remote
+   </b>
+  </p>
+  <p style="margin-left:23%;">
+   Copy files from the remote
+directory to the local one instead of moving them. This
+leaves a copy of the files in the remote directory, which is
+useful when that remote directory is shared with other
+configurations that may also want to retrieve the files.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   <b>
+    -n
+   </b>
+   ,
+   <b>
+    --no-retrieve
+   </b>
+  </p>
+  <p style="margin-left:23%;">
+   Don’t retrieve files from
+the remote directory. This still de-initializes the local
+directory, but leaves it with whatever files are already in
+it. Remote files stay in the remote directory, and symlinks
+to remote files are removed from the local directory. This
+option supersedes
+   <b>
+    --keep-remote
+   </b>
+   .
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    list-configs
+   </b>
+  </p>
+  <p style="margin-left:17%;">
+   Print a table of all
+initialized directories and the names of their
+configurations.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    empty-trash
+   </b>
+   <i>
+    config
+   </i>
+   |
+   <i>
+    path
+   </i>
+  </p>
+  <p style="margin-left:17%;">
+   Permanently delete all files in
+the remote directory that are marked for deletion (see
+   <b>
+    TRASH
+   </b>
+   ). This command accepts the absolute path of a
+local initialized directory or the name of its
+configuration.
+  </p>
+  <h2>
+   SYNCING
+   <a name="SYNCING">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   Whenever a
+directory is initialized,
+   <b>
+    retain-sync
+   </b>
+   will direct the
+user to start the daemon for that directory. This daemon
+keeps track of file access within the initialized directory
+tree, adjusts file priority for time, keeps the remote
+directory mounted over sshfs and runs the
+   <b>
+    sync
+   </b>
+   command hourly by default, although this frequency can be
+configured in the systemd unit file
+´retain-sync-resync@.timer’. To make this change
+without root privileges and only for a specific user, copy
+the unit file into ~/.config/systemd/user/ before editing
+it.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   Whenever the
+   <b>
+    sync
+   </b>
+   command is run,
+   <b>
+    retain-sync
+   </b>
+   first tries
+to sync the highest-priority whole subdirectories to the
+local directory. Directories are synced recursively, meaning
+that all subdirectories are included when a directory is
+synced. Once no more whole directories can fit within the
+user-defined storage limit,
+   <b>
+    retain-sync
+   </b>
+   will try to
+sync individual files until the storage limit is reached.
+This behavior can be overridden by setting
+   <b>
+    syncExtraFiles
+   </b>
+   to ’no’ in the
+   <b>
+    retain-sync
+   </b>
+   config. Any files that have been added
+since the last sync are copied to the remote directory and
+have their priority artifically inflated so that
+they’re more likely to stay in the local directory for
+a while. This behavior can be overridden by setting
+   <b>
+    inflatePriority
+   </b>
+   to ’no’ in the
+   <b>
+    retain-sync
+   </b>
+   config. Any files that have been deleted
+since the last sync are either removed from or marked for
+deletion in the remote directory (see
+   <b>
+    TRASH
+   </b>
+   ).
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    retain-sync
+   </b>
+   uses
+   <b>
+    rsync
+   </b>
+   for copying files between the local and
+remote directories, and should preserve symbolic links,
+permissions, modification times, ownership, hard links,
+ACLs, extended attributes and sparse files as long as the
+remote filesystem supports them.
+  </p>
+  <h2>
+   EXCLUDING
+   <a name="EXCLUDING">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   <b>
+    retain-sync
+   </b>
+   allows the user to define certain files or directories to be
+excluded from syncing, meaning that they will never leave
+the local directory. This is done in the
+’exclude’ file for that configuration (see
+   <b>
+    FILES
+   </b>
+   ). To keep user-created symbolic links from
+being clobbered, all symbolic links found in the local
+initialized directory that
+   <b>
+    retain-sync
+   </b>
+   didn’t
+put there are added to the exclude file automatically. The
+root of each file/directory path in the exclude file is
+anchored to the local initialized directory. Another way to
+think of it: each file/directory path in the exclude file is
+relative to the initialized directory, but must include a
+leading slash.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   If the remote
+directory is not shared with any other configurations, then
+files are removed from the remote directory once they are
+excluded. If the remote directory is shared, then files
+remain in the remote directory until they are excluded in
+each configuration that shares that directory. Files that
+are excluded in only some of these configurations will
+remain in the remote directory and will continue to sync
+normally.
+  </p>
+  <h2>
+   TRASH
+   <a name="TRASH">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   Files that
+exist only in the remote directory are represented locally
+as symbolic links. Whenever the
+   <b>
+    sync
+   </b>
+   command is run,
+local files (including these symbolic links) that were
+deleted since the last sync operation are removed from the
+remote directory. If the user deletes a local symbolic link,
+the file it points to won’t appear in their local
+trash, making the file unrecoverable. For this reason,
+   <b>
+    retain-sync
+   </b>
+   implements a simple trash system.
+  </p>
+  <p style="margin-left:11%; margin-top: 1em">
+   Before
+   <b>
+    retain-sync
+   </b>
+   deletes a file in the remote directory,
+it first searches for the file in the user’s local
+trash directory by comparing file sizes first and then
+checksums. If it finds a copy of the file in the
+user’s trash, it permanently deletes the file in the
+remote directory. Otherwise, it only marks the file for
+deletion. Files marked for deletion are made hidden and have
+´.trash’ appended to the end of the file name.
+This behavior can be overridden by setting
+   <b>
+    deleteAlways
+   </b>
+   to ´yes’ in the
+   <b>
+    retain-sync
+   </b>
+   config. The command
+   <b>
+    empty-trash
+   </b>
+   can be used to permanently delete all files in the remote
+directory that are marked for deletion. Note that when a
+file is marked for deletion, it will override any previously
+marked file with the same name. The list of directories that
+are searched for deleted files can be altered in the config
+file.
+  </p>
+  <h2>
+   FILES
+   <a name="FILES">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   ~/.config/retain-sync/
+  </p>
+  <p style="margin-left:17%;">
+   This is the
+   <b>
+    retain-sync
+   </b>
+   config directory.
+   <b>
+    retain-sync
+   </b>
+   will respect
+XDG_CONFIG_HOME, and if it is set, put the directory there
+instead.
+  </p>
+  <p style="margin-left:17%; margin-top: 1em">
+   configs/&lt;config_name&gt;/
+  </p>
+  <p style="margin-left:23%;">
+   This directory exists for each
+directory that has been initialized by the user, where
+&lt;config_name&gt; is the user-specified name of the
+configuration.
+  </p>
+  <p style="margin-left:23%; margin-top: 1em">
+   mnt/
+  </p>
+  <p style="margin-left:29%;">
+   This is the sshfs mountpoint
+for the remote directory. Symbolic links in the local
+initialized directory point to files in this directory.
+  </p>
+  <p style="margin-left:23%; margin-top: 1em">
+   config
+  </p>
+  <p style="margin-left:29%;">
+   This is the main configuration
+file for the initialized directory. It contains required
+information that the user is prompted for when the
+   <b>
+    initialize
+   </b>
+   command is run as well as additional
+settings that can be configured.
+  </p>
+  <p style="margin-left:23%; margin-top: 1em">
+   exclude
+  </p>
+  <p style="margin-left:29%;">
+   This file contains a list of
+file/directory paths to be excluded from syncing (see
+   <b>
+    EXCLUDING
+   </b>
+   ).
+  </p>
+  <p style="margin-left:23%; margin-top: 1em">
+   priority.csv
+  </p>
+  <p style="margin-left:29%;">
+   This file keeps track of file
+priority and should not be edited by hand.
+  </p>
+  <h2>
+   AUTHOR
+   <a name="AUTHOR">
+   </a>
+  </h2>
+  <p style="margin-left:11%; margin-top: 1em">
+   Garrett Powell
+&lt;garrett@gpowell.net&gt;
+  </p>
+  <hr/>
+ </body>
+</html>
