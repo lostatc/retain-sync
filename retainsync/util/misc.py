@@ -20,12 +20,10 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
 import os
-import sqlite3
 import subprocess
 import atexit
 import shutil
 from collections import defaultdict
-from contextlib import contextmanager
 
 
 def err(*args, **kwargs):
@@ -66,7 +64,7 @@ def rec_scan(path):
 
 def shell_cmd(input_cmd):
     """Run a shell command and terminate it on exit."""
-    if type(input_cmd) is str:
+    if isinstance(input_cmd, str):
         input_cmd = input_cmd.split()
     cmd = subprocess.Popen(
         input_cmd, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -82,8 +80,8 @@ def progress_bar(coverage, msg="", r_align=True):
         coverage:   The percentage of the width of the terminal window that the
                     progress bar should cover.
         msg:        A message to be printed opposite the progress bar.
-        r_align:    Align the progress bar to the left edge of the screen instead
-                    of the right.
+        r_align:    Align the progress bar to the right edge of the screen
+                    instead of the left.
     """
     coverage = float(coverage)
 

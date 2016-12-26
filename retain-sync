@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import profile
-
 from retainsync.main import main
-# profile.run("main()")
-main()
+
+
+if __name__ == "__main__":
+    main()
+    # profile.run("main()")

@@ -22,8 +22,15 @@ import sys
 import os
 import re
 import json
-import retainsync.config as c
+import shlex
+import subprocess
+from textwrap import indent
+
 from retainsync.util.misc import err, env, shell_cmd
+
+
+class NotMountedError(Exception):
+    """Raised when file IO occurs on the remote mountpoint while unmounted."""
 
 
 class ConfigFile:
@@ -109,12 +116,12 @@ class ProgramDir:
     """Get information about the main configuration directory.
 
     Attributes:
-        path:               The path to the program directory.
-        profile_basedir:    The base directory containing profile directories.
+        path:           The path to the program directory.
+        profiles_dir:   The base directory containing profile directories.
     """
 
     path = os.path.join(env("XDG_CONFIG_HOME"), "retain-sync")
-    profile_basedir = os.path.join(path, "profiles")
+    profiles_dir = os.path.join(path, "profiles")
 
     @classmethod
     def list_profiles(cls):
@@ -123,61 +130,48 @@ class ProgramDir:
         Returns:
             A list containing the name of each profile as a string.
         """
-        profiles = []
-        for entry in os.scandir(cls.profile_basedir):
+        profile_names = []
+        for entry in os.scandir(cls.path):
             if entry.is_dir(follow_symlinks=False):
-                profiles.append(entry.name)
-        return profiles
-
-    @classmethod
-    def check_overlap(cls, check_path):
-        """Get the names of profiles that overlap with the given path.
-
-        Returns:
-            A list of profile names as strings.
-        """
-        overlap_profiles = []
-        for name, profile in c.profiles.items():
-            common = os.path.commonpath([
-                profile.cfg_file.vals["LocalDir"], check_path])
-            if (common == profile.cfg_file.vals["LocalDir"]
-                    or common == os.path.normpath(check_path)):
-                overlap_profiles.append(name)
-        return overlap_profiles
+                profile_names.append(entry.name)
+        return profile_names
 
 
 class SSHConnection:
-    """Run commands over ssh."""
+    """Run commands over ssh.
 
-    def __init__(self):
-        self._host = c.main.cfg_file.vals["RemoteHost"]
-        self._user = c.main.cfg_file.vals["RemoteUser"]
-        self._port = c.main.cfg_file.vals["Port"]
+    Attributes:
+        connected:  Whether the ssh master connection has been initiated.
+    """
+    def __init__(self, host, remote_dir, opts=None, user=None, port=None):
+        self._host = host
+        self._remote_dir = remote_dir
+        self._mount_opts = opts
+        self._user = user
+        self._port = port
+
         self._id_str = self._host
         if self._user:
             self._id_str = self._user + "@" + self._id_str
-        self._cmd_str = ["ssh", self._id_str]
+
+        self._ssh_args = ["ssh", self._id_str]
         if self._port:
-            self._cmd_str.extend(["-p", self._port])
+            self._ssh_args.extend(["-p", self._port])
 
     def connect(self):
         """Start an ssh master connection."""
         runtime_dir = os.path.join(env("XDG_RUNTIME_DIR"), "retain-sync")
         os.makedirs(runtime_dir, exist_ok=True)
-        self._cmd_str.extend(["-S", os.path.join(runtime_dir, "%C.sock")])
-        ssh_cmd = shell_cmd(self._cmd_str + ["-fNM"])
-        try:
-            ssh_cmd.wait(20)
-        except subprocess.TimeoutExpired:
-            err("Error: ssh connection timed out")
-            sys.exit(1)
-        if ssh_cmd.returncode != 0:
-            err("Error: ssh connection failed")
-            sys.exit(1)
+        self._ssh_args.extend(["-S", os.path.join(runtime_dir, "%C")])
+        ssh_cmd = shell_cmd(self._ssh_args + ["-NM"])
 
     def disconnect(self):
         """Stop the ssh master connection."""
-        shell_cmd(self._cmd_str + ["-O", "exit"])
+        ssh_cmd = shell_cmd(self._cmd_str + ["-O", "exit"])
+        try:
+            ssh_cmd.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
 
     def execute(self, remote_cmd):
         """Run a given command in list form over ssh.
@@ -188,10 +182,72 @@ class SSHConnection:
         Returns:
             A subprocess.Popen object for the command.
         """
-        ssh_cmd = shell_cmd(self._cmd_str + ["--"] + remote_cmd)
+        ssh_cmd = shell_cmd(self._ssh_args + ["--"] + remote_cmd)
         try:
-            ssh_cmd.wait(10)
+            ssh_cmd.wait(timeout=20)
         except subprocess.TimeoutExpired:
             err("Error: ssh connection timed out")
             sys.exit(1)
         return ssh_cmd
+
+    def mount(self, mountpoint):
+        """Mount remote directory using sshfs."""
+        sshfs_args = [
+            "sshfs", self._id_str + ":" + self._remote_dir, mountpoint]
+        if self._port:
+            sshfs_args.extend(["-p", self._port])
+        if self._mount_opts:
+            sshfs_args.extend(["-o", self._mount_opts])
+
+        os.makedirs(mountpoint, exist_ok=True)
+        sshfs_cmd = shell_cmd(sshfs_args)
+
+        try:
+            stdout, stderr = sshfs_cmd.communicate(timeout=20)
+        except subprocess.TimeoutExpired:
+            err("Error: ssh connection timed out")
+            sys.exit(1)
+        if sshfs_cmd.returncode != 0:
+            err("Error: failed to mount remote directory over ssh")
+            # Print the last three lines of stderr.
+            print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
+            sys.exit(1)
+
+    def unmount(self, mountpoint):
+        """Unmount remote directory."""
+        if os.path.ismount(mountpoint):
+            unmount_cmd = shell_cmd(["fusermount", "-u", mountpoint])
+            try:
+                stdout, stderr = unmount_cmd.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                err("Error: timed out unmounting remote directory")
+                sys.exit(1)
+            if unmount_cmd.returncode != 0:
+                err("Error: failed to unmount remote directory")
+                # Print the last three lines of stderr.
+                print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
+                sys.exit(1)
+
+    def check_isdir(self):
+        """Check if the remote directory is actually a directory."""
+        remote_dir = shlex.quote(self._remote_dir)
+        cmd = self.execute(["[[", "-d", remote_dir, "]]"])
+        return not bool(cmd.returncode)
+
+    def check_iswritable(self):
+        """Check if the remote directory is writable."""
+        remote_dir = shlex.quote(self._remote_dir)
+        cmd = self.execute(["[[", "-w", remote_dir, "]]"])
+        return not bool(cmd.returncode)
+
+    def check_isempty(self):
+        """Check if the remote directory is empty."""
+        remote_dir = shlex.quote(self._remote_dir)
+        cmd = self.execute(["[[", "!", "-s", remote_dir, "]]"])
+        return not bool(cmd.returncode)
+
+    def mkdir(self):
+        """Create the remote direcory if it doesn't already exist."""
+        remote_dir = shlex.quote(self._remote_dir)
+        cmd = self.execute(["mkdir", "-p", remote_dir])
+        return not bool(cmd.returncode)

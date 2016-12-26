@@ -2,30 +2,35 @@
 # retain-sync config
 #
 
-# The local directory to sync with
+
+# The path to the local sync directory.
 LocalDir=
 
-# The hostname, ip address or domain name of the server (optional)
+# The hostname, IP address or domain name of the remote. This defaults to
+# 'localhost'.
 RemoteHost=
 
-# The user name on the server (optional)
+# The user name on the server. This defaults to the local user name and is
+# ignored if 'RemoteHost' is set to the local machine.
 RemoteUser=
 
-# The port number for the connection (optional)
+# The port number for the connection. This defaults to '22' and is ignored if
+# 'RemoteHost' is set to the local machine.
 Port=
 
-# The remote directory to sync with
+# The path to the remote sync directory.
 RemoteDir=
 
-# The amount of data to keep in the local directory (accepts K, M or G)
+# The amount of data to keep in the local directory. This accepts KB, MB and
+# GB.
 StorageLimit=
 
 
-# Mount options to pass to sshfs
+# Mount options to pass to sshfs.
 #SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
 # A colon-separated list of directory paths in which to search for deleted
-# files
+# files.
 #TrashDirs=~/.local/share/Trash/files
 
 # Always delete files from the remote directory when their local counterparts

@@ -25,16 +25,16 @@ import glob
 import datetime
 import pkg_resources
 import sqlite3
+import weakref
 from textwrap import dedent
 from collections import defaultdict
 
-import retainsync.config as c
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
 from retainsync.util.misc import err, env, tty_input
 
 
-class ProfileDir:
-    """Get information about a profile directory and its contents.
+class Profile:
+    """Get information about a profile and its contents.
 
     Attributes:
         name:       The name of the profile.
@@ -47,19 +47,20 @@ class ProfileDir:
     """
     def __init__(self, name):
         self.name = name
-        self.path = os.path.join(ProgramDir.profile_basedir, self.name)
+        self.path = os.path.join(ProgramDir.profiles_dir, self.name)
         os.makedirs(self.path, exist_ok=True)
         self.mnt_dir = os.path.join(self.path, "mnt")
         self.ex_file = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
-        self.info_file = ProfileInfoFile(os.path.join(self.path, ".info.json"))
+        self.info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
         self.db_file = ProfileDBFile(
-            os.path.join(self.path, ".local.db"))
-        self.cfg_file = ProfileConfigFile(os.path.join(self.path, "config"))
+            os.path.join(self.path, "local.db"))
+        self.cfg_file = ProfileConfigFile(
+            os.path.join(self.path, "config"), profile_obj=self)
 
 
 class ProfileExcludeFile:
-    """Get file paths from the local exclude file.
+    """Manipulate a file containing exclude patterns for the profile.
 
     Attributes:
         path:       The path to the exclude pattern file.
@@ -150,13 +151,13 @@ class ProfileInfoFile(JSONFile):
                 self.vals["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
                 tzinfo=datetime.timezone.utc).timestamp()
 
-    def generate(self):
+    def generate(self, name, add_remote=False):
         """Generate info for a new profile.
 
         JSON Values:
             Status:     A short string describing the status of the profile.
-                        "init": fully initialized
-                        "part": partially initialized
+                        "initialized": fully initialized
+                        "partial": partially initialized
             Locked:     A boolean used to determine if another operation is
                         already running on the profile.
             LastSync:   The date and time (UTC) of the last sync on the
@@ -165,19 +166,24 @@ class ProfileInfoFile(JSONFile):
                         initialized by.
             ID:         A unique ID consisting of the machine ID, username and
                         profile name.
+            InitOpts:   A dictionary of options given at the command line
+                        at initialization.
 
         Args:
             name:   The name of the profile to use for the unique ID.
         """
         with open("/etc/machine-id") as id_file:
-            unique_id = "-".join([id_file.read(8), env("USER"), c.main.name])
+            unique_id = "-".join([id_file.read(8), env("USER"), name])
         version = float(pkg_resources.get_distribution("retain-sync").version)
         self.vals.update({
-            "Status":   "part",
+            "Status":   "partial",
             "Locked":   True,
             "LastSync": None,
             "Version":  version,
-            "ID":       unique_id
+            "ID":       unique_id,
+            "InitOpts": {
+                "add_remote": add_remote
+                }
             })
         self.write()
 
@@ -190,7 +196,7 @@ class ProfileInfoFile(JSONFile):
 
 
 class ProfileDBFile:
-    """Manipulate the local file database.
+    """Manipulate a profile file database.
 
     Attributes:
         path:  The path to the database file.
@@ -287,35 +293,41 @@ class ProfileDBFile:
 
 
 class ProfileConfigFile(ConfigFile):
-    """Manipulate the local configuration file.
+    """Manipulate a profile configuration file.
 
     Attributes:
-        path:      The path to the configuration file.
-        raw_vals:  A dictionary of unmodified config value strings.
-        vals:      A dictionary of modified config values.
+        instances:      A weakly-referenced set of instances of this class.
+        req_keys:       A list of config keys that must be included in the
+                        config file.
+        opt_keys:       A list of config keys that may be commented out or
+                        omitted.
+        all_keys:       A list of all keys that are recognized in the config
+                        file.
+        bool_keys:      A list of config keys that must have boolean values.
+        defaults:       A dictionary of default config values.
+        true_vals:      A list of strings that are recognized as boolean true.
+        false_vals:     A list of strings that are recognized as boolean false.
+        host_synonyms:  A list of strings that are synonyms for 'localhost'.
+        path:           The path to the configuration file.
+        profile:        The Profile object that the config file belongs to.
+        add_remote:     Flip-flop the requirements of 'LocalDir' and
+                        'RemoteDir'.
+        raw_vals:       A dictionary of unmodified config value strings.
+        vals:           A dictionary of modified config values.
     """
-
-    # Define keys that must be included in the config file.
+    instances = weakref.WeakSet()
     req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit"
         ]
-
-    # Define keys that may be commented out or omitted.
     opt_keys = [
-        "SshfsOption", "TrashDirs", "DeleteAlways", "SyncExtraFiles",
+        "SshfsOptions", "TrashDirs", "DeleteAlways", "SyncExtraFiles",
         "InflatePriority", "AccountForSize"
         ]
-
-    # Define all keys that are recognized in the config file.
     all_keys = req_keys + opt_keys
-
-    # Define keys that must have boolean values.
     bool_keys = [
         "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
-
-    # Define default values for keys.
     defaults = {
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
@@ -325,20 +337,18 @@ class ProfileConfigFile(ConfigFile):
         "InflatePriority":  "yes",
         "AccountForSize":   "yes"
         }
-
-    # These are strings that are recognized as valid boolean values
-    # (case insensitive).
     true_vals = ["yes", "true"]
     false_vals = ["no", "false"]
-
-    # These are values for 'RemoteHost' that refer to the local machine.
     host_synonyms = ["localhost", "127.0.0.1"]
 
-    def __init__(self, path):
+    def __init__(self, path, profile_obj=None, add_remote=False):
         self.path = path
-        self.raw_vals = {key: "" for key in self.req_keys}
+        self.profile = profile_obj
+        self.add_remote = add_remote
+        self.raw_vals = {}
+        self.instances.add(self)
 
-    def _check_syntax(self, key, value):
+    def _check_values(self, key, value):
         """Check the syntax of a config option and return an error message.
 
         Args:
@@ -348,28 +358,40 @@ class ProfileConfigFile(ConfigFile):
         Returns:
             An unformatted string corresponding to the syntax error (if any).
         """
-        # Check for boolean values.
-        if key in self.bool_keys:
-            if value:
-                if value.lower() not in (self.true_vals + self.false_vals):
-                    return "Error: {} must have a boolean value"
+        # Check boolean values.
+        if key in self.bool_keys and value:
+            if value.lower() not in (self.true_vals + self.false_vals):
+                return "Error: {} must have a boolean value"
 
         if key == "LocalDir":
-            value = os.path.expanduser(os.path.normpath(value))
             if not value:
                 return "Error: {} must not be blank"
             elif not re.search("^~?/", value):
                 return "Error: {} must be an absolute path"
-            overlap_profiles = ProgramDir.check_overlap(value)
+            value = os.path.expanduser(os.path.normpath(value))
             if os.path.commonpath([value, ProgramDir.path]) == value:
                 return "Error: {} must not contain retain-sync config files"
-            elif overlap_profiles:
+            overlap_profiles = []
+            for instance in self.instances:
+                # Check if value overlaps with the 'LocalDir' of another
+                # profile.
+                if not instance.profile or instance is self:
+                    # Do not include the current instance or any instances that
+                    # do not belong to a profile.
+                    continue
+                name = instance.profile.name
+                if not instance.vals:
+                    instance.read()
+                common = os.path.commonpath([instance.vals["LocalDir"], value])
+                if common in [instance.vals["LocalDir"], value]:
+                    overlap_profiles.append(name)
+            if overlap_profiles:
                 if len(overlap_profiles) > 1:
                     suffix = "s"
                 else:
                     suffix = ""
-                # Print a comma-separated list of quoted conflicting
-                # profile names after the error message.
+                # Print a comma-separated list of conflicting profile names
+                # after the error message.
                 return (
                     "Error: {} "
                     "overlaps with the profile{0} {1}".format(
@@ -380,12 +402,12 @@ class ProfileConfigFile(ConfigFile):
                     if not os.access(value, os.W_OK):
                         return ("Error: {} must be a directory with write "
                                 "access")
-                    elif c.cmd_args["add_remote"] and os.listdir(value):
+                    elif self.add_remote and os.listdir(value):
                         return "Error: {} must be an empty directory"
                 else:
                     return "Error: {} must be a directory"
             else:
-                if c.cmd_args["add_remote"]:
+                if self.add_remote:
                     check_path = value
                     while os.path.dirname(check_path) != check_path:
                         if os.access(check_path, os.W_OK):
@@ -410,19 +432,40 @@ class ProfileConfigFile(ConfigFile):
                     return "Error: {} must be an integer in the range 1-65535"
         elif key == "RemoteDir":
             # In order to keep the interactive interface responsive, we don't
-            # check the validity of the remote directory here because of the
-            # delay connecting over ssh would cause.
-            value = os.path.expanduser(os.path.normpath(value))
+            # do any checking of the remote directory that requires connecting
+            # over ssh.
             if not value:
                 return "Error: {} must not be blank"
             elif not re.search("^~?/", value):
                 return "Error: {} must be an absolute path"
+            value = os.path.expanduser(os.path.normpath(value))
+            if value in self.host_synonyms or not value:
+                if os.path.exists(value):
+                    if os.path.isdir(value):
+                        if not os.access(value, os.W_OK):
+                            return ("Error: {} must be a directory with write "
+                                    "access")
+                        elif (not self.add_remote
+                                and os.stat(value).st_size > 0):
+                            return "Error: {} must be an empty directory"
+                    else:
+                        return "Error: {} must be a directory"
+                else:
+                    if self.add_remote:
+                        try:
+                            os.makedirs(value)
+                        except PermissionError:
+                            return ("Error: {} must be in a directory with "
+                                    "write access")
+                    else:
+                        return "Error: {} must be an existing directory"
+
         elif key == "StorageLimit":
             if not value:
                 return "Error: {} must not be blank"
-            elif not re.search("^[0-9]+[KMG]$", value):
+            elif not re.search("^[0-9]+(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
                 return ("Error: {} must be an integer followed by a unit "
-                        "(e.g. 10G)")
+                        "(e.g. 10GB)")
         elif key == "SshfsOptions":
             if value:
                 if re.search("\s+", value):
@@ -439,7 +482,6 @@ class ProfileConfigFile(ConfigFile):
             check_empty:    Check empty/unset values.
             context:        The context to show in the error messages.
         """
-
         errors = 0
 
         # Check that all key names are valid.
@@ -457,7 +499,7 @@ class ProfileConfigFile(ConfigFile):
         # Check values for valid syntax.
         for key, value in self.raw_vals.items():
             if check_empty or not check_empty and value:
-                err_msg = self._check_syntax(key, value)
+                err_msg = self._check_values(key, value)
                 if err_msg:
                     print(err_msg.format("{0}: '{1}'".format(context, key)))
                     errors += 1
@@ -483,13 +525,15 @@ class ProfileConfigFile(ConfigFile):
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "StorageLimit":
                 # Convert human-readable value to bytes.
+                # Use binary units even if the user uses the metric notation.
                 try:
-                    num, unit = re.findall("^([0-9]+)([KMG])$", value)[0]
-                    if unit == "K":
+                    num, unit = re.findall(
+                        "^([0-9]+)(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
+                    if unit in ["K", "KB", "KiB"]:
                         value = int(num) * 2**10
-                    if unit == "M":
+                    if unit in ["M", "MB", "MiB"]:
                         value = int(num) * 2**20
-                    if unit == "G":
+                    if unit in ["G", "GB", "GiB"]:
                         value = int(num) * 2**30
                 except IndexError:
                     pass
@@ -499,7 +543,7 @@ class ProfileConfigFile(ConfigFile):
                 for index, element in enumerate(value):
                     value[index] = os.path.expanduser(element)
             elif key in self.bool_keys:
-                if value is str:
+                if isinstance(value, str):
                     if value.lower() in self.true_vals:
                         value = True
                     elif value.lower() in self.false_vals:
@@ -511,25 +555,25 @@ class ProfileConfigFile(ConfigFile):
     def prompt(self):
         """Prompt the user interactively for unset required values."""
 
-        # These dictionary values contain the prompt messages to use.
         prompt_msg = {
             "LocalDir":     "Enter the local directory path: ",
-            "RemoteHost":   ("Enter the hostname, ip address or domain name "
-                             "of the server (if any): "),
+            "RemoteHost":   ("Enter the hostname, IP address or domain name "
+                             "of the remote (localhost): "),
             "RemoteUser":   ("Enter your user name on the server "
                              "({}): ".format(env("USER"))),
             "Port":         "Enter the port number for the connection (22): ",
             "RemoteDir":    "Enter the remote directory path: ",
-            "StorageLimit": ("Enter the amount of data to keep synced locally "
-                             "(accepts K, M or G): ")
+            "StorageLimit": "Enter the amount of data to keep synced locally: "
             }
 
-        prompt_keys = self.req_keys
+        prompt_keys = self.req_keys.copy()
         for key in prompt_keys:
-            if not self.raw_vals[key]:
+            # We don't use a defaultdict for this so that we can know if a
+            # config file has been read based on whether raw_vals is empty.
+            if not self.raw_vals.get(key, None):
                 while True:
                     usr_input = tty_input(prompt_msg[key]).strip()
-                    err_msg = self._check_syntax(key, usr_input)
+                    err_msg = self._check_values(key, usr_input)
                     if err_msg:
                         print(err_msg.format("this value"))
                     else:

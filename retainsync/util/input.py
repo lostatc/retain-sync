@@ -31,9 +31,9 @@ def usage(command):
 
     # Define ANSI escape color codes.
     if sys.stdout.isatty():
-        normal = chr(27) + "[0m"      # This is no formatting.
-        color1 = chr(27) + "[1;31m"   # This is bold red, used for commands/options.
-        color2 = chr(27) + "[1;32m"   # This is bold green, used for arguments.
+        normal = chr(27) + "[0m"      # No formatting.
+        color1 = chr(27) + "[1;31m"   # Bold red, used for commands/options.
+        color2 = chr(27) + "[1;32m"   # Bold green, used for arguments.
     else:
         # Don't use colors if stdout isn't a tty.
         normal = ""
@@ -132,7 +132,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
 class HelpAction(argparse.Action):
     """Handle the '--help' flag."""
     def __init__(self, nargs=0, **kwargs):
-        super(HelpAction, self).__init__(nargs=nargs, **kwargs)
+        super().__init__(nargs=nargs, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
         usage(namespace.command)
@@ -142,7 +142,7 @@ class HelpAction(argparse.Action):
 class VersionAction(argparse.Action):
     """Handle the '--version' flag."""
     def __init__(self, nargs=0, **kwargs):
-        super(VersionAction, self).__init__(nargs=nargs, **kwargs)
+        super().__init__(nargs=nargs, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
         print(
@@ -160,6 +160,7 @@ def parse_args():
     parser.add_argument("--quiet", "-q", action="store_true")
 
     subparsers = parser.add_subparsers(dest="command")
+    subparsers.required = True
 
     parser_init = subparsers.add_parser("initialize", add_help=False)
     parser_init.add_argument("--help", action=HelpAction)

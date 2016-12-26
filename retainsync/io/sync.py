@@ -18,15 +18,11 @@ You should have received a copy of the GNU General Public License
 along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import sys
 import os
-import subprocess
-import shlex
 import sqlite3
 import datetime
 
-import retainsync.config as c
-from retainsync.util.misc import err, rec_scan, shell_cmd
+from retainsync.util.misc import rec_scan
 
 
 class SyncDir:
@@ -41,7 +37,7 @@ class SyncDir:
         self.path = path.rstrip("/")
         self.tpath = os.path.join(path, "")
 
-    def list_files(self):
+    def list_files(self, rel=False):
         """Get the paths of files in the directory.
 
         Yields:
@@ -50,9 +46,12 @@ class SyncDir:
         """
         for entry in rec_scan(self.path):
             if not entry.is_dir(follow_symlinks=False):
-                yield entry.path
+                if rel:
+                    yield os.path.relpath(entry.path, self.path)
+                else:
+                    yield entry.path
 
-    def list_mtimes(self):
+    def list_mtimes(self, rel=False):
         """Get the paths and mtimes of files in the directory.
 
         Yields:
@@ -61,9 +60,13 @@ class SyncDir:
         """
         for entry in rec_scan(self.path):
             if not entry.is_dir(follow_symlinks=False):
-                yield entry.path, entry.stat(follow_symlinks=False).st_mtime
+                mtime = entry.stat(follow_symlinks=False).st_mtime
+                if rel:
+                    yield os.path.relpath(entry.path, self.path), mtime
+                else:
+                    yield entry.path, mtime
 
-    def list_dirs(self):
+    def list_dirs(self, rel=False):
         """Get the paths of subdirectories in the directory.
 
         Yields:
@@ -72,7 +75,10 @@ class SyncDir:
         """
         for entry in rec_scan(self.path):
             if entry.is_dir(follow_symlinks=False):
-                yield entry.path
+                if rel:
+                    yield os.path.relpath(entry.path, self.path)
+                else:
+                    yield entry.path
 
     def total_size(self):
         """Get the total size of the directory and all of its contents.
@@ -137,110 +143,7 @@ class DestSyncDir(SyncDir):
         self.prgm_dir = os.path.join(self.path, ".retain-sync")
         self.safe_path = os.path.join(self.prgm_dir, "..")
         self.ex_dir = os.path.join(self.prgm_dir, "exclude")
-        self.db_file = os.path.join(self.prgm_dir, "remote.db")
-
-    def check(self):
-        """Check the validity of the remote directory."""
-        if c.main.cfg_file.vals["RemoteHost"]:
-            # Define ssh commands for checking the remote directory.
-            remote_dir = shlex.quote(c.main.cfg_file.vals["RemoteDir"])
-            dir_cmd = c.ssh.execute(["[[", "-d", remote_dir, "]]"])
-            writable_cmd = c.ssh.execute(["[[", "-w", remote_dir, "]]"])
-            nonzero_cmd = c.ssh.execute(["[[", "-s", remote_dir, "]]"])
-            mkdir_cmd = c.ssh.execute(["mkdir", "-p", remote_dir])
-
-            if c.cmd_args["add_remote"]:
-                if dir_cmd.returncode == 0:
-                    if writable_cmd.returncode != 0:
-                        err("Error: insufficient permissions for remote "
-                            "directory")
-                        sys.exit(1)
-                else:
-                    err("Error: remote directory doesn't exist")
-                    sys.exit(1)
-            else:
-                if dir_cmd.returncode == 0:
-                    if writable_cmd.returncode != 0:
-                        err("Error: insufficient permissions for remote "
-                            "directory")
-                        sys.exit(1)
-                    elif nonzero_cmd.returncode != 0:
-                        err("Error: remote directory is not empty")
-                        sys.exit(1)
-                else:
-                    # Create remote directory.
-                    if mkdir_cmd.returncode != 0:
-                        err("Error: failed creating the remote directory")
-                        sys.exit(1)
-        else:
-            if c.cmd_args["add_remote"]:
-                if os.path.isdir(self.path):
-                    if not os.access(self.path, os.W_OK):
-                        err("Error: insufficient permissions for remote "
-                            "directory")
-                        sys.exit(1)
-                else:
-                    err("Error: remote directory doesn't exist")
-                    sys.exit(1)
-            else:
-                if os.path.isdir(self.path):
-                    if not os.access(self.path, os.W_OK):
-                        err("Error: insufficient permissions for remote "
-                            "directory")
-                        sys.exit(1)
-                    elif os.stat(self.path).st_size > 0:
-                        err("Error: remote directory is not empty")
-                        sys.exit(1)
-                else:
-                    try:
-                        os.makedirs(self.path)
-                    except FileExistsError:
-                        err("Error: file at remote directory path is not a "
-                            "directory")
-                        sys.exit(1)
-                    except PermissionError:
-                        err("Error: insufficient permissions for remote "
-                            "directory")
-                        sys.exit(1)
-
-    def mount_ssh(self):
-        """Mount remote directory using sshfs."""
-        host = c.main.cfg_file.vals["RemoteHost"]
-        user = c.main.cfg_file.vals["RemoteUser"]
-        port = c.main.cfg_file.vals["Port"]
-        remote_dir = c.main.cfg_file.vals["RemoteDir"]
-        opts = c.main.cfg_file.vals["SshfsOptions"]
-
-        id_string = host + ":" + remote_dir
-        if user:
-            id_string = user + "@" + id_string
-        if port:
-            opts = ",".join([opts, "port=" + port])
-
-        os.makedirs(self.path, exist_ok=True)
-        sshfs_cmd = shell_cmd([
-            "sshfs", "-o", opts, id_string, self.path])
-        try:
-            sshfs_cmd.wait(20)
-        except subprocess.TimeoutExpired:
-            err("Error: ssh self.connection timed out")
-            sys.exit(1)
-        if sshfs_cmd.returncode != 0:
-            err("Error: failed to mount remote directory over ssh")
-            sys.exit(1)
-
-    def unmount_ssh(self):
-        """Unmount remote directory."""
-        if os.path.ismount(self.path):
-            umount_cmd = shell_cmd(["fusermount", "-u", self.path])
-            try:
-                umount_cmd.wait(10)
-            except subprocess.TimeoutExpired:
-                err("Error: timed out unmounting remote directory")
-                sys.exit(1)
-            if umount_cmd.returncode != 0:
-                err("Error: failed to unmount remote directory")
-                sys.exit(1)
+        self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))
 
 
 class DestDBFile:
