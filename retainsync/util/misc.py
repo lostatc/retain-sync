@@ -24,16 +24,17 @@ import subprocess
 import atexit
 import shutil
 from collections import defaultdict
+from types import FunctionType
 
 
-def err(*args, **kwargs):
+def err(*args, **kwargs) -> None:
     """Print to standard error."""
     # TODO: print error message on new line if cursor is not at the beginning
     # of the line
     print(*args, file=sys.stderr, **kwargs)
 
 
-def env(var):
+def env(var: str) -> str:
     """Return a default value if environment variable is unset."""
     defaults = {
         "XDG_CONFIG_HOME":  os.path.join(os.getenv("HOME"), ".config"),
@@ -44,7 +45,7 @@ def env(var):
     return os.getenv(var, defaults[var])
 
 
-def tty_input(prompt):
+def tty_input(prompt: str) -> str:
     """Read user input from the tty device."""
     # TODO: figure out how to use readline while taking input from tty
     with open("/dev/tty") as file:
@@ -54,7 +55,7 @@ def tty_input(prompt):
     return usr_in
 
 
-def rec_scan(path):
+def rec_scan(path: str):
     """Recursively scan a directory tree and yield a DirEntry object."""
     for entry in os.scandir(path):
         yield entry
@@ -62,10 +63,8 @@ def rec_scan(path):
             yield from rec_scan(entry.path)
 
 
-def shell_cmd(input_cmd):
+def shell_cmd(input_cmd: list) -> subprocess.Popen:
     """Run a shell command and terminate it on exit."""
-    if isinstance(input_cmd, str):
-        input_cmd = input_cmd.split()
     cmd = subprocess.Popen(
         input_cmd, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, universal_newlines=True)
@@ -73,7 +72,7 @@ def shell_cmd(input_cmd):
     return cmd
 
 
-def progress_bar(coverage, msg="", r_align=True):
+def progress_bar(coverage, msg="", r_align=True) -> FunctionType:
     """Create a function for updating a progress bar.
 
     Args:
@@ -85,7 +84,7 @@ def progress_bar(coverage, msg="", r_align=True):
     """
     coverage = float(coverage)
 
-    def update(percent):
+    def update(percent) -> None:
         """Update a progress bar.
 
         Args:

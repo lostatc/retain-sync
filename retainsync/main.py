@@ -27,7 +27,7 @@ from retainsync.io.program import NotMountedError
 from retainsync.commands.initialize import InitializeCommand
 
 
-def main():
+def main() -> None:
     """Main function."""
     # Exit properly on SIGTERM, SIGHUP or SIGINT
     signal.signal(signal.SIGTERM, signal_handler)
@@ -61,7 +61,7 @@ def main():
         sys.exit(1)
 
 
-def signal_handler(signum, frame):
+def signal_handler(signum, frame) -> None:
     """Print an appropriate error message for an interruption by signal."""
     err("Error: program received", signal.Signals(signum).name)
     sys.exit(1)

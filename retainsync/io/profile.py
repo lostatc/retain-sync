@@ -28,6 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from collections import defaultdict
+from typing import Dict, Any
 
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
 from retainsync.util.misc import err, env, tty_input
@@ -45,7 +46,7 @@ class Profile:
         db_file:    The path to the file priority database.
         cfg_file:   The path to the profile's configuration file.
     """
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.path = os.path.join(ProgramDir.profiles_dir, self.name)
         os.makedirs(self.path, exist_ok=True)
@@ -72,12 +73,12 @@ class ProfileExcludeFile:
     # This is regex that denotes a comment line.
     comment_reg = re.compile(r"^\s*#")
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.path = path
         self.files = set()
         self.rel_files = set()
 
-    def generate(self, infile=None):
+    def generate(self, infile=None) -> None:
         """Generate a new file with comments.
 
         Args:
@@ -101,7 +102,7 @@ class ProfileExcludeFile:
                     for line in infile:
                         outfile.write(line)
 
-    def readlines(self):
+    def readlines(self) -> str:
         """Yield lines that are not comments.
 
         Yields:
@@ -112,7 +113,7 @@ class ProfileExcludeFile:
                 if not self.comment_reg.search(line):
                     yield line
 
-    def glob(self, start_path):
+    def glob(self, start_path: str) -> None:
         """Create a set of all file paths that match the globbing patterns.
 
         Args:
@@ -139,7 +140,7 @@ class ProfileExcludeFile:
 
 class ProfileInfoFile(JSONFile):
     """Parse a JSON-formatted file for profile metadata."""
-    def read(self):
+    def read(self) -> None:
         """Read file into an object and make substitutions."""
         # Create an empty defaultdict if the file doesn't exist.
         self.vals = {}
@@ -151,7 +152,7 @@ class ProfileInfoFile(JSONFile):
                 self.vals["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
                 tzinfo=datetime.timezone.utc).timestamp()
 
-    def generate(self, name, add_remote=False):
+    def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
 
         JSON Values:
@@ -187,7 +188,7 @@ class ProfileInfoFile(JSONFile):
             })
         self.write()
 
-    def update_synctime(self):
+    def update_synctime(self) -> None:
         """Update the time of the last sync."""
         # Store the timestamp as a human-readable string so that the file can
         # be edited manually.
@@ -202,10 +203,10 @@ class ProfileDBFile:
         path:  The path to the database file.
     """
 
-    def __init__(self, path):
+    def __init__(self, path) -> None:
         self.path = path
 
-    def create(self):
+    def create(self) -> None:
         """Create a new empty database.
 
         Database Columns:
@@ -227,7 +228,7 @@ class ProfileDBFile:
                 );
                 """)
 
-    def add_file(self, path, priority=0):
+    def add_file(self, path: str, priority=0) -> None:
         """Add a new file path to the database if it doesn't already exist.
 
         Args:
@@ -241,7 +242,7 @@ class ProfileDBFile:
                 WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
                 """, (path, priority, path))
 
-    def add_inflated(self, path):
+    def add_inflated(self, path: str) -> None:
         """Add a new file path to the database with an inflated priority.
 
         Args:
@@ -254,7 +255,7 @@ class ProfileDBFile:
             max_priority = self.cur.fetchone()
             self.add_file(path, max_priority)
 
-    def rm_file(self, path):
+    def rm_file(self, path: str) -> None:
         """Remove a file path from the database.
 
         Args:
@@ -266,7 +267,7 @@ class ProfileDBFile:
                 WHERE path=?;
                 """, (path,))
 
-    def increment(self, path):
+    def increment(self, path: str) -> None:
         """Increment the priority of a file path by one.
 
         Args:
@@ -279,7 +280,7 @@ class ProfileDBFile:
                 WHERE path=?;
                 """, (path,))
 
-    def adjust_all(self, adjustment=0.99):
+    def adjust_all(self, adjustment=0.99) -> None:
         """Multiply the priorities of all file paths by a constant.
 
         Args:
@@ -341,14 +342,14 @@ class ProfileConfigFile(ConfigFile):
     false_vals = ["no", "false"]
     host_synonyms = ["localhost", "127.0.0.1"]
 
-    def __init__(self, path, profile_obj=None, add_remote=False):
+    def __init__(self, path: str, profile_obj=None, add_remote=False) -> None:
         self.path = path
         self.profile = profile_obj
         self.add_remote = add_remote
         self.raw_vals = {}
         self.instances.add(self)
 
-    def _check_values(self, key, value):
+    def _check_values(self, key: str, value: str) -> str:
         """Check the syntax of a config option and return an error message.
 
         Args:
@@ -402,7 +403,7 @@ class ProfileConfigFile(ConfigFile):
                     if not os.access(value, os.W_OK):
                         return ("Error: {} must be a directory with write "
                                 "access")
-                    elif self.add_remote and os.listdir(value):
+                    elif self.add_remote and os.stat(value).st_size > 0:
                         return "Error: {} must be an empty directory"
                 else:
                     return "Error: {} must be a directory"
@@ -439,7 +440,8 @@ class ProfileConfigFile(ConfigFile):
             elif not re.search("^~?/", value):
                 return "Error: {} must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if value in self.host_synonyms or not value:
+            if (self.raw_vals["RemoteHost"] in self.host_synonyms
+                    or not self.raw_vals["RemoteHost"]):
                 if os.path.exists(value):
                     if os.path.isdir(value):
                         if not os.access(value, os.W_OK):
@@ -452,13 +454,13 @@ class ProfileConfigFile(ConfigFile):
                         return "Error: {} must be a directory"
                 else:
                     if self.add_remote:
+                        return "Error: {} must be an existing directory"
+                    else:
                         try:
                             os.makedirs(value)
                         except PermissionError:
                             return ("Error: {} must be in a directory with "
                                     "write access")
-                    else:
-                        return "Error: {} must be an existing directory"
 
         elif key == "StorageLimit":
             if not value:
@@ -475,7 +477,7 @@ class ProfileConfigFile(ConfigFile):
                 if re.search("(^|:)(?!~?/)", value):
                     return "Error: {} only accepts absolute paths"
 
-    def check_all(self, check_empty=True, context="config file"):
+    def check_all(self, check_empty=True, context="config file") -> None:
         """Check that file is valid and syntactically correct.
 
         Args:
@@ -508,7 +510,7 @@ class ProfileConfigFile(ConfigFile):
             sys.exit(1)
 
     @property
-    def vals(self):
+    def vals(self) -> Dict[str, Any]:
         """Create a new dict with more computer-friendly config values."""
 
         # Set default values.
@@ -552,7 +554,7 @@ class ProfileConfigFile(ConfigFile):
 
         return output
 
-    def prompt(self):
+    def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
 
         prompt_msg = {

@@ -26,7 +26,7 @@ from textwrap import dedent
 from retainsync.util.misc import err
 
 
-def usage(command):
+def usage(command: str) -> None:
     """Print a usage message."""
 
     # Define ANSI escape color codes.
@@ -124,34 +124,34 @@ def usage(command):
 
 class CustomArgumentParser(argparse.ArgumentParser):
     """Set custom formatting of error messages for argparse."""
-    def error(self, message):
+    def error(self, message) -> None:
         err("Error:", message)
         sys.exit(2)
 
 
 class HelpAction(argparse.Action):
     """Handle the '--help' flag."""
-    def __init__(self, nargs=0, **kwargs):
+    def __init__(self, nargs=0, **kwargs) -> None:
         super().__init__(nargs=nargs, **kwargs)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
         usage(namespace.command)
         parser.exit()
 
 
 class VersionAction(argparse.Action):
     """Handle the '--version' flag."""
-    def __init__(self, nargs=0, **kwargs):
+    def __init__(self, nargs=0, **kwargs) -> None:
         super().__init__(nargs=nargs, **kwargs)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
         print(
             "retain-sync",
             pkg_resources.get_distribution("retain-sync").version)
         parser.exit()
 
 
-def parse_args():
+def parse_args() -> dict:
     """Create a global dictionary of parsed command-line arguments."""
 
     parser = CustomArgumentParser(add_help=False)

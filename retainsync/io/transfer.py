@@ -25,7 +25,7 @@ from textwrap import indent
 from retainsync.util.misc import err, progress_bar, shell_cmd
 
 
-def rsync_cmd(add_args, files=[], exclude=[], msg=""):
+def rsync_cmd(add_args: list, files=[], exclude=[], msg="") -> None:
     """Run an rsync command and print a status bar.
 
     Args:

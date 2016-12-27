@@ -21,6 +21,7 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sqlite3
 import datetime
+from typing import Tuple
 
 from retainsync.util.misc import rec_scan
 
@@ -33,16 +34,15 @@ class SyncDir:
         tpath:  The directory path including a trailing slash.
     """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.path = path.rstrip("/")
         self.tpath = os.path.join(path, "")
 
-    def list_files(self, rel=False):
+    def list_files(self, rel=False) -> str:
         """Get the paths of files in the directory.
 
         Yields:
-            A string containing an absolute file path for each file in the
-            directory.
+            An absolute file path for each file in the directory.
         """
         for entry in rec_scan(self.path):
             if not entry.is_dir(follow_symlinks=False):
@@ -51,12 +51,11 @@ class SyncDir:
                 else:
                     yield entry.path
 
-    def list_mtimes(self, rel=False):
+    def list_mtimes(self, rel=False) -> Tuple[ str, float ]:
         """Get the paths and mtimes of files in the directory.
 
         Yields:
-            A tuple containing an absolute path and an mtime for each file in
-            the directory..
+            An absolute path and an mtime for each file in the directory.
         """
         for entry in rec_scan(self.path):
             if not entry.is_dir(follow_symlinks=False):
@@ -66,12 +65,11 @@ class SyncDir:
                 else:
                     yield entry.path, mtime
 
-    def list_dirs(self, rel=False):
+    def list_dirs(self, rel=False) -> str:
         """Get the paths of subdirectories in the directory.
 
         Yields:
-            A string containing the absolute file path for each directory in
-            the directory.
+            An absolute file path for each directory in the directory.
         """
         for entry in rec_scan(self.path):
             if entry.is_dir(follow_symlinks=False):
@@ -80,27 +78,27 @@ class SyncDir:
                 else:
                     yield entry.path
 
-    def total_size(self):
+    def total_size(self) -> int:
         """Get the total size of the directory and all of its contents.
 
         Returns:
-            An integer representing the total size of the directory in bytes.
+            The total size of the directory in bytes.
         """
         total_size = 0
         for entry in rec_scan(self.path):
             total_size += entry.stat(follow_symlinks=False).st_size
         return total_size
 
-    def space_avail(self):
+    def space_avail(self) -> int:
         """Get the available space in the filesystem the directory is in.
 
         Returns:
-            An integer representing the total free bytes of space.
+            The amount of free space in bytes.
         """
         fs_stats = os.statvfs(self.path)
         return fs_stats.f_bsize * fs_stats.f_bavail
 
-    def symlink_tree(self, destdir, overwrite=False):
+    def symlink_tree(self, destdir: str, overwrite=False) -> None:
         """Recursively copy the directory as a tree of symlinks.
 
         Args:
@@ -125,6 +123,9 @@ class SyncDir:
 
 class LocalSyncDir(SyncDir):
     """Perform operations on a local sync directory."""
+    def  __init__(self, path):
+        super().__init__(path)
+        os.makedirs(path)
 
 
 class DestSyncDir(SyncDir):
@@ -137,8 +138,7 @@ class DestSyncDir(SyncDir):
         ex_dir:     Contains copies of each client's exclude pattern file.
         db_file:    Contains a list of deleted files in the remote.
     """
-
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         super().__init__(path)
         self.prgm_dir = os.path.join(self.path, ".retain-sync")
         self.safe_path = os.path.join(self.prgm_dir, "..")
@@ -153,10 +153,10 @@ class DestDBFile:
         path:   The path to the database file.
     """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.path = path
 
-    def create(self):
+    def create(self) -> None:
         """Create a new empty database.
 
         Database Columns:
@@ -182,7 +182,7 @@ class DestDBFile:
                 );
                 """)
 
-    def add_file(self, path):
+    def add_file(self, path: str) -> None:
         """Add a new file path to the database.
 
         Args:
@@ -195,7 +195,7 @@ class DestDBFile:
                 WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
                 """, (path, path))
 
-    def rm_file(self, path):
+    def rm_file(self, path: str) -> None:
         """Remove a file path from the database.
         Args:
             path:   The file path to remove.
@@ -206,33 +206,33 @@ class DestDBFile:
                 WHERE path=?;
                 """, (path,))
 
-    def set_trash(self, path, boolean):
-        """Mark a file path as being in the trash or not.
-        Args:
-            path:       The file path to set.
-            boolean:    The boolean value to set the 'trash' column to.
-        """
-        if type(boolean) is not bool:
-            raise TypeError("expected boolean")
+        def set_trash(self, path: str, boolean: bool) -> None:
+            """Mark a file path as being in the trash or not.
+            Args:
+                path:       The file path to set.
+                boolean:    The boolean value to set the 'trash' column to.
+            """
+            if type(boolean) is not bool:
+                raise TypeError("Expected boolean")
 
-        with self.conn:
-            self.cur.execute("""\
-                UPDATE files
-                SET trash=?
-                WHERE path=?;
-                """, (boolean, path))
+            with self.conn:
+                self.cur.execute("""\
+                    UPDATE files
+                    SET trash=?
+                    WHERE path=?;
+                    """, (boolean, path))
 
-    def update_synctime(self, path):
-        """Update the time of the last sync.
+        def update_synctime(self, path: str) -> None:
+            """Update the time of the last sync.
 
-        Args:
-            path:   The file path to set.
-        """
-        utc_now = datetime.datetime.utcnow().replace(
-            tzinfo=datetime.timezone.utc).timestamp()
-        with self.conn:
-            self.cur.execute("""\
-                UPDATE files
-                SET lastsync=?
-                WHERE path=?;
-                """, (utc_now, path))
+            Args:
+                path:   The file path to set.
+            """
+            utc_now = datetime.datetime.utcnow().replace(
+                tzinfo=datetime.timezone.utc).timestamp()
+            with self.conn:
+                self.cur.execute("""\
+                    UPDATE files
+                    SET lastsync=?
+                    WHERE path=?;
+                    """, (utc_now, path))

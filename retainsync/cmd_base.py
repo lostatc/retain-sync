@@ -20,6 +20,7 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import sys
+from typing import Dict
 
 from retainsync.io.program import ProgramDir
 from retainsync.io.profile import Profile
@@ -32,17 +33,17 @@ class Command:
     Attributes:
         profiles:   A dictionary of Profile instances.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self._profiles = {}
 
     @property
-    def profiles(self):
+    def profiles(self) -> Dict[str, Profile]:
         if not self._profiles:
             self._profiles = {name: Profile(name) for name in
                               ProgramDir.list_profiles()}
         return self._profiles
 
-    def select_profile(self, input_str):
+    def select_profile(self, input_str: str) -> Profile:
         # Check if input is the name of an existing profile.
         if input_str in self.profiles:
             return self.profiles[input_str]

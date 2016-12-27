@@ -25,6 +25,7 @@ import json
 import shlex
 import subprocess
 from textwrap import indent
+from typing import List
 
 from retainsync.util.misc import err, env, shell_cmd
 
@@ -44,11 +45,11 @@ class ConfigFile:
     # This is regex that denotes a comment line.
     comment_reg = re.compile(r"^\s*#")
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.path = path
         self.raw_vals = {}
 
-    def read(self):
+    def read(self) -> None:
         """Parse file for key-value pairs and save in a dictionary."""
         try:
             with open(self.path) as file:
@@ -62,7 +63,7 @@ class ConfigFile:
             err("Error: could not open configuration file")
             sys.exit(1)
 
-    def write(self, infile):
+    def write(self, infile: str) -> None:
         """Generate a new config file based on the input file."""
 
         try:
@@ -97,16 +98,16 @@ class JSONFile:
         path:  The path to the JSON file.
         vals:  A dictionary or list of values from the file.
     """
-    def __init__(self, path):
+    def __init__(self, path) -> None:
         self.path = path
         self.vals = None
 
-    def read(self):
+    def read(self) -> None:
         """Read file into an object."""
         with open(self.path) as file:
             self.vals = json.load(file)
 
-    def write(self):
+    def write(self) -> None:
         """Write object to a file."""
         with open(self.path, "w") as file:
             json.dump(self.vals, file, indent=4)
@@ -124,11 +125,11 @@ class ProgramDir:
     profiles_dir = os.path.join(path, "profiles")
 
     @classmethod
-    def list_profiles(cls):
+    def list_profiles(cls) -> List[str]:
         """Get the names of all existing profiles.
 
         Returns:
-            A list containing the name of each profile as a string.
+            A list containing the name of each profile.
         """
         profile_names = []
         for entry in os.scandir(cls.path):
@@ -138,12 +139,9 @@ class ProgramDir:
 
 
 class SSHConnection:
-    """Run commands over ssh.
-
-    Attributes:
-        connected:  Whether the ssh master connection has been initiated.
-    """
-    def __init__(self, host, remote_dir, opts=None, user=None, port=None):
+    """Run commands over ssh."""
+    def __init__(self, host: str, remote_dir: str, opts: str, user: str,
+                 port: str) -> None:
         self._host = host
         self._remote_dir = remote_dir
         self._mount_opts = opts
@@ -158,14 +156,14 @@ class SSHConnection:
         if self._port:
             self._ssh_args.extend(["-p", self._port])
 
-    def connect(self):
+    def connect(self) -> None:
         """Start an ssh master connection."""
         runtime_dir = os.path.join(env("XDG_RUNTIME_DIR"), "retain-sync")
         os.makedirs(runtime_dir, exist_ok=True)
         self._ssh_args.extend(["-S", os.path.join(runtime_dir, "%C")])
         ssh_cmd = shell_cmd(self._ssh_args + ["-NM"])
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Stop the ssh master connection."""
         ssh_cmd = shell_cmd(self._cmd_str + ["-O", "exit"])
         try:
@@ -173,7 +171,7 @@ class SSHConnection:
         except subprocess.TimeoutExpired:
             pass
 
-    def execute(self, remote_cmd):
+    def execute(self, remote_cmd: list) -> subprocess.Popen:
         """Run a given command in list form over ssh.
 
         Args:
@@ -190,7 +188,7 @@ class SSHConnection:
             sys.exit(1)
         return ssh_cmd
 
-    def mount(self, mountpoint):
+    def mount(self, mountpoint: str) -> None:
         """Mount remote directory using sshfs."""
         sshfs_args = [
             "sshfs", self._id_str + ":" + self._remote_dir, mountpoint]
@@ -213,7 +211,7 @@ class SSHConnection:
             print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
             sys.exit(1)
 
-    def unmount(self, mountpoint):
+    def unmount(self, mountpoint: str) -> None:
         """Unmount remote directory."""
         if os.path.ismount(mountpoint):
             unmount_cmd = shell_cmd(["fusermount", "-u", mountpoint])
@@ -228,25 +226,25 @@ class SSHConnection:
                 print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
                 sys.exit(1)
 
-    def check_isdir(self):
+    def check_isdir(self) -> bool:
         """Check if the remote directory is actually a directory."""
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self.execute(["[[", "-d", remote_dir, "]]"])
         return not bool(cmd.returncode)
 
-    def check_iswritable(self):
+    def check_iswritable(self) -> bool:
         """Check if the remote directory is writable."""
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self.execute(["[[", "-w", remote_dir, "]]"])
         return not bool(cmd.returncode)
 
-    def check_isempty(self):
+    def check_isempty(self) -> bool:
         """Check if the remote directory is empty."""
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self.execute(["[[", "!", "-s", remote_dir, "]]"])
         return not bool(cmd.returncode)
 
-    def mkdir(self):
+    def mkdir(self) -> bool:
         """Create the remote direcory if it doesn't already exist."""
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self.execute(["mkdir", "-p", remote_dir])

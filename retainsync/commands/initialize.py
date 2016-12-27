@@ -35,8 +35,8 @@ from retainsync.util.misc import err
 
 class InitializeCommand(Command):
     """Create a new profile for a pair of directories to sync."""
-    def __init__(self, profile_input, exclude=None, template=None,
-                 add_remote=False):
+    def __init__(self, profile_input: str, exclude=None, template=None,
+                 add_remote=False) -> None:
         """
         Args:
             profile_input:  A string representing the selected profile.
@@ -51,37 +51,37 @@ class InitializeCommand(Command):
         self.template = template
         self.add_remote = add_remote
 
-    def main(self):
+    def main(self) -> None:
         """Run the command."""
         # Define cleanup functions.
-        def unlock():
+        def unlock() -> None:
             """Release lock on the profile."""
             self.profile.info_file.vals["Locked"] = False
             if os.path.isfile(self.profile.info_file.path):
                 self.profile.info_file.write()
 
-        def cleanup_profile():
+        def cleanup_profile() -> None:
             """Remove the profile directory if empty."""
             try:
                 os.rmdir(self.profile.path)
             except (FileNotFoundError, OSError):
                 pass
 
-        def delete_profile():
+        def delete_profile() -> None:
             """Delete the profile directory."""
             try:
                 shutil.rmtree(self.profile.path)
             except FileNotFoundError:
                 pass
 
-        def interrupt_msg():
+        def interrupt_msg() -> None:
             """Warn user that initialization was interrupted."""
             print(dedent("""
                 Initialization was interrupted.
                 Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
                 cancel it."""))
 
-        def unmount_sshfs():
+        def unmount_sshfs() -> None:
             """Unmount the sshfs mount."""
             ssh_conn.unmount(dest_dir.path)
 
@@ -106,6 +106,7 @@ class InitializeCommand(Command):
 
         self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
+        self.profile.cfg_file.add_remote = self.add_remote
         self.profile.info_file.read()
 
         # Check if the profile has already been initialized.
