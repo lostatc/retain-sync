@@ -51,7 +51,7 @@ class SyncDir:
                 else:
                     yield entry.path
 
-    def list_mtimes(self, rel=False) -> Tuple[ str, float ]:
+    def list_mtimes(self, rel=False) -> Tuple[str, float]:
         """Get the paths and mtimes of files in the directory.
 
         Yields:

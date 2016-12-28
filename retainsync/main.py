@@ -20,6 +20,7 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sys
 import signal
+import time
 
 from retainsync.util.input import parse_args
 from retainsync.util.misc import err
@@ -61,7 +62,7 @@ def main() -> None:
         sys.exit(1)
 
 
-def signal_handler(signum, frame) -> None:
+def signal_handler(signum: int, frame) -> None:
     """Print an appropriate error message for an interruption by signal."""
     err("Error: program received", signal.Signals(signum).name)
     sys.exit(1)

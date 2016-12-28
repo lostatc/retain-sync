@@ -526,17 +526,21 @@ class ProfileConfigFile(ConfigFile):
             elif key == "RemoteDir":
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "StorageLimit":
-                # Convert human-readable value to bytes.
-                # Use binary units even if the user uses the metric notation.
                 try:
                     num, unit = re.findall(
                         "^([0-9]+)(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
-                    if unit in ["K", "KB", "KiB"]:
+                    if unit in ["K", "KiB"]:
                         value = int(num) * 2**10
-                    if unit in ["M", "MB", "MiB"]:
+                    elif unit in ["M", "MiB"]:
                         value = int(num) * 2**20
-                    if unit in ["G", "GB", "GiB"]:
+                    elif unit in ["G", "GiB"]:
                         value = int(num) * 2**30
+                    elif unit == "KB":
+                        value = int(num) * 10**3
+                    elif unit == "MB":
+                        value = int(num) * 10**6
+                    elif unit == "GB":
+                        value = int(num) * 10**9
                 except IndexError:
                     pass
             elif key == "TrashDirs":
