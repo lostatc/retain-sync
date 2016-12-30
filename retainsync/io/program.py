@@ -51,17 +51,17 @@ class ConfigFile:
 
     def read(self) -> None:
         """Parse file for key-value pairs and save in a dictionary."""
-        try:
-            with open(self.path) as file:
-                for line in file:
-                    # Skip line if it is a comment.
-                    if (not self.comment_reg.search(line)
-                            and re.search("=", line)):
-                        key, value = line.partition("=")[::2]
-                        self.raw_vals[key.strip()] = value.strip()
-        except IOError:
-            err("Error: could not open configuration file")
-            sys.exit(1)
+        # try:
+        with open(self.path) as file:
+            for line in file:
+                # Skip line if it is a comment.
+                if (not self.comment_reg.search(line)
+                        and re.search("=", line)):
+                    key, value = line.partition("=")[::2]
+                    self.raw_vals[key.strip()] = value.strip()
+        # except IOError:
+        #     err("Error: could not open configuration file")
+        #     sys.exit(1)
 
     def write(self, infile: str) -> None:
         """Generate a new config file based on the input file."""

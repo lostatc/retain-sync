@@ -45,6 +45,7 @@ class InitializeCommand(Command):
             template:       The path to a template configuration file.
             add_remote:     Start with a set of existing remote files.
         """
+        super().__init__()
         self.profile_input = profile_input
         self.profile = None
         self.exclude = exclude
@@ -54,12 +55,6 @@ class InitializeCommand(Command):
     def main(self) -> None:
         """Run the command."""
         # Define cleanup functions.
-        def unlock() -> None:
-            """Release lock on the profile."""
-            self.profile.info_file.vals["Locked"] = False
-            if os.path.isfile(self.profile.info_file.path):
-                self.profile.info_file.write()
-
         def cleanup_profile() -> None:
             """Remove the profile directory if empty."""
             try:
@@ -73,13 +68,6 @@ class InitializeCommand(Command):
                 shutil.rmtree(self.profile.path)
             except FileNotFoundError:
                 pass
-
-        def interrupt_msg() -> None:
-            """Warn user that initialization was interrupted."""
-            print(dedent("""
-                Initialization was interrupted.
-                Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
-                cancel it."""))
 
         def unmount_sshfs() -> None:
             """Unmount the sshfs mount."""
@@ -106,7 +94,6 @@ class InitializeCommand(Command):
 
         self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
-        self.profile.cfg_file.add_remote = self.add_remote
         self.profile.info_file.read()
 
         # Check if the profile has already been initialized.
@@ -114,22 +101,14 @@ class InitializeCommand(Command):
             err("Error: this profile already exists")
             sys.exit(1)
 
-        # Check if the profile is locked.
-        if self.profile.info_file.vals["Locked"] is True:
-            err("Error: another operation on this profile is already taking "
-                "place")
-            sys.exit(1)
-
-        # Lock the profile.
-        self.profile.info_file.vals["Locked"] = True
-        self.profile.info_file.write()
-        atexit.register(unlock)
+        # Lock profile if not already locked.
+        self.lock()
 
         # Check whether an interrupted initialization is being resumed.
         if self.profile.info_file.vals["Status"] == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
-            atexit.register(interrupt_msg)
+            atexit.register(self.interrupt_msg)
 
             self.profile.cfg_file.read()
             self.profile.cfg_file.check_all()
@@ -161,13 +140,15 @@ class InitializeCommand(Command):
 
             # Parse template file if one was given.
             if self.template:
-                template_file = ProfileConfigFile(self.template)
+                template_file = ProfileConfigFile(
+                    self.template, add_remote=self.add_remote)
                 template_file.read()
                 template_file.check_all(
                     check_empty=False, context="template file")
                 self.profile.cfg_file.raw_vals = template_file.raw_vals
 
             # Prompt user interactively for unset config values.
+            self.profile.cfg_file.add_remote = self.add_remote
             self.profile.cfg_file.prompt()
 
             # Write config values to file.
@@ -201,7 +182,7 @@ class InitializeCommand(Command):
             # interrupted from this point, it can be resumed.
             self.profile.info_file.generate(
                 self.profile.name, add_remote=self.add_remote)
-            atexit.register(interrupt_msg)
+            atexit.register(self.interrupt_msg)
             atexit.unregister(delete_profile)
 
         if self.profile.cfg_file.vals["RemoteHost"]:
@@ -213,6 +194,8 @@ class InitializeCommand(Command):
         except PermissionError:
             err("Error: remote directory must be writable")
             sys.exit(1)
+
+        user_symlinks = set(local_dir.list_symlinks(rel=True))
 
         if self.add_remote:
             try:
@@ -241,7 +224,7 @@ class InitializeCommand(Command):
             try:
                 rsync_cmd(
                     ["-asHAXS", local_dir.tpath, dest_dir.safe_path],
-                    exclude=self.profile.ex_file.rel_files,
+                    exclude=self.profile.ex_file.rel_files | user_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
                 raise NotMountedError
@@ -253,7 +236,7 @@ class InitializeCommand(Command):
         # Generate file priority database.
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
-        for filepath in local_dir.list_files(rel=True):
+        for filepath in dest_dir.list_files(rel=True):
             self.profile.db_file.add_file(filepath)
 
         # Copy exclude pattern file to remote directory for use when remote dir
@@ -269,7 +252,7 @@ class InitializeCommand(Command):
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
         atexit.unregister(unmount_sshfs)
-        atexit.unregister(interrupt_msg)
+        atexit.unregister(self.interrupt_msg)
 
         # Advise user to start/enable the daemon.
         print(dedent("""

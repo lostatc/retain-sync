@@ -20,7 +20,12 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import sys
+import tempfile
+import re
+import stat
+import atexit
 from typing import Dict
+from textwrap import dedent
 
 from retainsync.io.program import ProgramDir
 from retainsync.io.profile import Profile
@@ -32,9 +37,11 @@ class Command:
 
     Attributes:
         profiles:   A dictionary of Profile instances.
+        profile:    The currently selected profile.
     """
     def __init__(self) -> None:
         self._profiles = {}
+        self.profile = None
 
     @property
     def profiles(self) -> Dict[str, Profile]:
@@ -58,3 +65,45 @@ class Command:
                     return profile
         err("Error: argument is not a profile name or initialized directory")
         sys.exit(1)
+
+    def lock(self) -> None:
+        """Lock the profile if not already locked."""
+        def unlock() -> None:
+            """Release the lock on the profile."""
+            self.profile.info_file.vals["Locked"] = False
+            if os.path.isfile(self.profile.info_file.path):
+                self.profile.info_file.write()
+
+        if self.profile:
+            self.profile.info_file.read()
+            if self.profile.info_file.vals["Locked"] is True:
+                err("Error: another operation on this profile is already "
+                    "taking place")
+                sys.exit(1)
+            self.profile.info_file.vals["Locked"] = True
+            self.profile.info_file.write()
+            atexit.register(unlock)
+
+    def ssh_env(self) -> bool:
+        """Set environment variables for ssh-agent."""
+        if not os.environ["SSH_AUTH_SOCK"]:
+            for entry in os.scandir(tempfile.gettempdir()):
+                if (re.search("^ssh-", entry.name)
+                        and entry.is_dir
+                        and entry.stat().st_uid == os.getuid()):
+                    for subentry in os.scandir(entry.path):
+                        if (re.search(r"^agent\.[0-9]+$", subentry.name)
+                                and stat.S_ISSOCK(subentry.stat().st_mode)
+                                and subentry.stat().st_uid == os.getuid()):
+                            os.environ["SSH_AUTH_SOCK"] = subentry.path
+                            return True
+            return False
+        else:
+            return True
+
+    def interrupt_msg(sefl) -> None:
+        """Warn user that initialization was interrupted."""
+        err(dedent("""
+            Initialization was interrupted.
+            Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
+            cancel it."""))

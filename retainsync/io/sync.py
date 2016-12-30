@@ -42,10 +42,37 @@ class SyncDir:
         """Get the paths of files in the directory.
 
         Yields:
-            An absolute file path for each file in the directory.
+            A file path for each file in the directory.
         """
         for entry in rec_scan(self.path):
-            if not entry.is_dir(follow_symlinks=False):
+            if (not entry.is_dir(follow_symlinks=False)
+                    and not entry.is_symlink()):
+                if rel:
+                    yield os.path.relpath(entry.path, self.path)
+                else:
+                    yield entry.path
+
+    def list_dirs(self, rel=False) -> str:
+        """Get the paths of subdirectories in the directory.
+
+        Yields:
+            A file path for each directory in the directory.
+        """
+        for entry in rec_scan(self.path):
+            if entry.is_dir(follow_symlinks=False):
+                if rel:
+                    yield os.path.relpath(entry.path, self.path)
+                else:
+                    yield entry.path
+
+    def list_symlinks(self, rel=False) -> str:
+        """Get the paths of symlinks in the directory.
+
+        Yields:
+            A file path for eash symlink in the directory.
+        """
+        for entry in rec_scan(self.path):
+            if entry.is_symlink():
                 if rel:
                     yield os.path.relpath(entry.path, self.path)
                 else:
@@ -55,7 +82,7 @@ class SyncDir:
         """Get the paths and mtimes of files in the directory.
 
         Yields:
-            An absolute path and an mtime for each file in the directory.
+            A file path and an mtime for each file in the directory.
         """
         for entry in rec_scan(self.path):
             if not entry.is_dir(follow_symlinks=False):
@@ -64,19 +91,6 @@ class SyncDir:
                     yield os.path.relpath(entry.path, self.path), mtime
                 else:
                     yield entry.path, mtime
-
-    def list_dirs(self, rel=False) -> str:
-        """Get the paths of subdirectories in the directory.
-
-        Yields:
-            An absolute file path for each directory in the directory.
-        """
-        for entry in rec_scan(self.path):
-            if entry.is_dir(follow_symlinks=False):
-                if rel:
-                    yield os.path.relpath(entry.path, self.path)
-                else:
-                    yield entry.path
 
     def total_size(self) -> int:
         """Get the total size of the directory and all of its contents.
@@ -125,7 +139,7 @@ class LocalSyncDir(SyncDir):
     """Perform operations on a local sync directory."""
     def  __init__(self, path):
         super().__init__(path)
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
 
 
 class DestSyncDir(SyncDir):
@@ -155,6 +169,13 @@ class DestDBFile:
 
     def __init__(self, path: str) -> None:
         self.path = path
+        if os.path.isfile(self.path):
+            self.conn = sqlite3.connect(
+                self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+            self.cur = self.conn.cursor()
+        else:
+            self.conn = None
+            self.cur = None
 
     def create(self) -> None:
         """Create a new empty database.
@@ -166,19 +187,22 @@ class DestDBFile:
             trash:      A boolean representing whether the file is considered
                         to be in the trash.
         """
+        if os.path.isfile(self.path):
+            raise FileExistsError
+
         self.conn = sqlite3.connect(
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
-        sqlite3.register_converter("boolean", lambda x: bool(int(x)))
+        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
         with self.conn:
             self.cur.execute("""\
                 CREATE TABLE files (
                     path text,
                     lastsync real,
-                    deleted boolean
+                    deleted bool
                 );
                 """)
 

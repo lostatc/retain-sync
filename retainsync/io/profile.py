@@ -106,7 +106,7 @@ class ProfileExcludeFile:
         """Yield lines that are not comments.
 
         Yields:
-            A string for every line in the file that's not a comment.
+            Every line in the file that's not a comment.
         """
         with open(self.path) as file:
             for line in file:
@@ -200,11 +200,20 @@ class ProfileDBFile:
     """Manipulate a profile file database.
 
     Attributes:
-        path:  The path to the database file.
+        path:   The path to the database file.
+        conn:   The sqlite connection object for the database.
+        cur:    The sqlite cursor object for the connection.
     """
 
     def __init__(self, path) -> None:
         self.path = path
+        if os.path.isfile(self.path):
+            self.conn = sqlite3.connect(
+                self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+            self.cur = self.conn.cursor()
+        else:
+            self.conn = None
+            self.cur = None
 
     def create(self) -> None:
         """Create a new empty database.
@@ -213,12 +222,15 @@ class ProfileDBFile:
             path:       The relative path to the file.
             priority:   The priority value of the file.
         """
+        if os.path.isfile(self.path):
+            raise FileExistsError
+
         self.conn = sqlite3.connect(
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
-        sqlite3.register_converter("boolean", lambda x: bool(int(x)))
+        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
         with self.conn:
             self.cur.execute("""\
@@ -342,11 +354,10 @@ class ProfileConfigFile(ConfigFile):
     false_vals = ["no", "false"]
     host_synonyms = ["localhost", "127.0.0.1"]
 
-    def __init__(self, path: str, profile_obj=None, add_remote=False) -> None:
-        self.path = path
+    def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
+        super().__init__(path)
         self.profile = profile_obj
         self.add_remote = add_remote
-        self.raw_vals = {}
         self.instances.add(self)
 
     def _check_values(self, key: str, value: str) -> str:
@@ -376,7 +387,9 @@ class ProfileConfigFile(ConfigFile):
             for instance in self.instances:
                 # Check if value overlaps with the 'LocalDir' of another
                 # profile.
-                if not instance.profile or instance is self:
+                if (not instance.profile
+                        or not os.path.isfile(instance.path)
+                        or instance is self):
                     # Do not include the current instance or any instances that
                     # do not belong to a profile.
                     continue
@@ -447,7 +460,7 @@ class ProfileConfigFile(ConfigFile):
                         if not os.access(value, os.W_OK):
                             return ("Error: {} must be a directory with write "
                                     "access")
-                        elif (not self.add_remote
+                        elif (self.add_remote is False
                                 and os.stat(value).st_size > 0):
                             return "Error: {} must be an empty directory"
                     else:
@@ -512,10 +525,11 @@ class ProfileConfigFile(ConfigFile):
     @property
     def vals(self) -> Dict[str, Any]:
         """Create a new dict with more computer-friendly config values."""
-
-        # Set default values.
-        output = self.defaults.copy()
-        output.update(self.raw_vals)
+        output = {}
+        if self.raw_vals:
+            # Set default values.
+            output = self.defaults.copy()
+            output.update(self.raw_vals)
 
         for key, value in output.copy().items():
             if key == "LocalDir":
