@@ -488,7 +488,7 @@ class ProfileConfigFile(ConfigFile):
                                     "write access")
 
         elif key == "StorageLimit":
-            if not re.search("^[0-9]+(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
+            if not re.search("^[0-9]+\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
                 return ("Error: {} must be an integer followed by a unit "
                         "(e.g. 10GB)")
         elif key == "SshfsOptions":
@@ -558,7 +558,7 @@ class ProfileConfigFile(ConfigFile):
             elif key == "StorageLimit":
                 try:
                     num, unit = re.findall(
-                        "^([0-9]+)(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
+                        "^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
                     if unit in ["K", "KiB"]:
                         value = int(num) * 2**10
                     elif unit in ["M", "MiB"]:
@@ -595,9 +595,9 @@ class ProfileConfigFile(ConfigFile):
             "LocalDir":     "Enter the local directory path: ",
             "RemoteHost":   ("Enter the hostname, IP address or domain name "
                              "of the remote ({}): ".format(
-                             self.subs["RemoteHost"])),
+                                self.subs["RemoteHost"])),
             "RemoteUser":   ("Enter your user name on the server "
-                            "({}): ".format(self.subs["RemoteUser"])),
+                             "({}): ".format(self.subs["RemoteUser"])),
             "Port":         ("Enter the port number for the connection "
                              "({}): ".format(self.subs["Port"])),
             "RemoteDir":    "Enter the remote directory path: ",

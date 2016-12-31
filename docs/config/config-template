@@ -20,8 +20,8 @@ Port=
 # The path to the remote sync directory.
 RemoteDir=
 
-# The amount of data to keep in the local directory. This KB, MB, GB, KiB, MiB
-# and GiB.
+# The amount of data to keep in the local directory. This accepts KB, MB, GB,
+# KiB, MiB and GiB.
 StorageLimit=
 
 
