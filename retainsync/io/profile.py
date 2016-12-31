@@ -31,7 +31,7 @@ from collections import defaultdict
 from typing import Dict, Any
 
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
-from retainsync.util.misc import err, env, tty_input
+from retainsync.util.misc import err, env, prefill_input
 
 
 class Profile:
@@ -310,6 +310,9 @@ class ProfileConfigFile(ConfigFile):
 
     Attributes:
         instances:      A weakly-referenced set of instances of this class.
+        true_vals:      A list of strings that are recognized as boolean true.
+        false_vals:     A list of strings that are recognized as boolean false.
+        host_synonyms:  A list of strings that are synonyms for 'localhost'.
         req_keys:       A list of config keys that must be included in the
                         config file.
         opt_keys:       A list of config keys that may be commented out or
@@ -317,10 +320,12 @@ class ProfileConfigFile(ConfigFile):
         all_keys:       A list of all keys that are recognized in the config
                         file.
         bool_keys:      A list of config keys that must have boolean values.
-        defaults:       A dictionary of default config values.
-        true_vals:      A list of strings that are recognized as boolean true.
-        false_vals:     A list of strings that are recognized as boolean false.
-        host_synonyms:  A list of strings that are synonyms for 'localhost'.
+        connect_keys:   A list of config keys that only matter when connecting
+                        over ssh.
+        defaults:       A dictionary of default values for optional config
+                        keys.
+        subs:           A dictionary of default values for required config
+                        keys.
         path:           The path to the configuration file.
         profile:        The Profile object that the config file belongs to.
         add_remote:     Flip-flop the requirements of 'LocalDir' and
@@ -329,6 +334,9 @@ class ProfileConfigFile(ConfigFile):
         vals:           A dictionary of modified config values.
     """
     instances = weakref.WeakSet()
+    true_vals = ["yes", "true"]
+    false_vals = ["no", "false"]
+    host_synonyms = ["localhost", "127.0.0.1"]
     req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit"
@@ -341,6 +349,9 @@ class ProfileConfigFile(ConfigFile):
     bool_keys = [
         "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
+    connect_keys = ["RemoteUser", "Port"]
+    # The reason for the distinction between self.defaults and self.subs is
+    # that some optional config values have a valid reason for being blank.
     defaults = {
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
@@ -350,9 +361,11 @@ class ProfileConfigFile(ConfigFile):
         "InflatePriority":  "yes",
         "AccountForSize":   "yes"
         }
-    true_vals = ["yes", "true"]
-    false_vals = ["no", "false"]
-    host_synonyms = ["localhost", "127.0.0.1"]
+    subs = {
+        "RemoteHost":   host_synonyms[0],
+        "RemoteUser":   env("USER"),
+        "Port":         "22"
+        }
 
     def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
         super().__init__(path)
@@ -370,15 +383,17 @@ class ProfileConfigFile(ConfigFile):
         Returns:
             An unformatted string corresponding to the syntax error (if any).
         """
+        # Check if required values are blank.
+        if key in self.req_keys and not value:
+            return "Error: {} must not be blank"
+
         # Check boolean values.
         if key in self.bool_keys and value:
             if value.lower() not in (self.true_vals + self.false_vals):
                 return "Error: {} must have a boolean value"
 
         if key == "LocalDir":
-            if not value:
-                return "Error: {} must not be blank"
-            elif not re.search("^~?/", value):
+            if not re.search("^~?/", value):
                 return "Error: {} must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
             if os.path.commonpath([value, ProgramDir.path]) == value:
@@ -439,22 +454,18 @@ class ProfileConfigFile(ConfigFile):
             if re.search("\s+", value):
                 return "Error: {} must not contain spaces"
         elif key == "Port":
-            if value:
-                if (not re.search("^[0-9]+$", value)
-                        or int(value) < 1
-                        or int(value) > 65535):
-                    return "Error: {} must be an integer in the range 1-65535"
+            if (not re.search("^[0-9]+$", value)
+                    or int(value) < 1
+                    or int(value) > 65535):
+                return "Error: {} must be an integer in the range 1-65535"
         elif key == "RemoteDir":
             # In order to keep the interactive interface responsive, we don't
             # do any checking of the remote directory that requires connecting
             # over ssh.
-            if not value:
-                return "Error: {} must not be blank"
-            elif not re.search("^~?/", value):
+            if not re.search("^~?/", value):
                 return "Error: {} must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if (self.raw_vals["RemoteHost"] in self.host_synonyms
-                    or not self.raw_vals["RemoteHost"]):
+            if self.raw_vals["RemoteHost"] in self.host_synonyms:
                 if os.path.exists(value):
                     if os.path.isdir(value):
                         if not os.access(value, os.W_OK):
@@ -476,9 +487,7 @@ class ProfileConfigFile(ConfigFile):
                                     "write access")
 
         elif key == "StorageLimit":
-            if not value:
-                return "Error: {} must not be blank"
-            elif not re.search("^[0-9]+(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
+            if not re.search("^[0-9]+(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
                 return ("Error: {} must be an integer followed by a unit "
                         "(e.g. 10GB)")
         elif key == "SshfsOptions":
@@ -512,7 +521,13 @@ class ProfileConfigFile(ConfigFile):
                 errors += 1
 
         # Check values for valid syntax.
-        for key, value in self.raw_vals.items():
+        check_vals = self.raw_vals.copy()
+        if self.raw_vals["RemoteHost"] in self.host_synonyms:
+            # These values are irrelevant if the remote directory is on the
+            # local machine.
+            for key in self.connect_keys:
+                del check_vals[key]
+        for key, value in check_vals.items():
             if check_empty or not check_empty and value:
                 err_msg = self._check_values(key, value)
                 if err_msg:
@@ -578,12 +593,15 @@ class ProfileConfigFile(ConfigFile):
         prompt_msg = {
             "LocalDir":     "Enter the local directory path: ",
             "RemoteHost":   ("Enter the hostname, IP address or domain name "
-                             "of the remote (localhost): "),
+                             "of the remote ({}): ".format(
+                             self.subs["RemoteHost"])),
             "RemoteUser":   ("Enter your user name on the server "
-                             "({}): ".format(env("USER"))),
-            "Port":         "Enter the port number for the connection (22): ",
+                            "({}): ".format(self.subs["RemoteUser"])),
+            "Port":         ("Enter the port number for the connection "
+                             "({}): ".format(self.subs["Port"])),
             "RemoteDir":    "Enter the remote directory path: ",
-            "StorageLimit": "Enter the amount of data to keep synced locally: "
+            "StorageLimit": ("Enter the amount of data to keep synced "
+                             "locally: ")
             }
 
         prompt_keys = self.req_keys.copy()
@@ -592,18 +610,18 @@ class ProfileConfigFile(ConfigFile):
             # config file has been read based on whether raw_vals is empty.
             if not self.raw_vals.get(key, None):
                 while True:
-                    usr_input = tty_input(prompt_msg[key]).strip()
+                    usr_input = input(prompt_msg[key]).strip()
+                    if not usr_input and key in self.subs:
+                        usr_input = self.subs[key]
                     err_msg = self._check_values(key, usr_input)
                     if err_msg:
                         print(err_msg.format("this value"))
                     else:
                         break
-                if key == "RemoteHost":
-                    if usr_input in self.host_synonyms or not usr_input:
-                        # These values are irrelevant if the remote
-                        # directory is on the local machine, so don't prompt
-                        # for them.
-                        prompt_keys.remove("RemoteUser")
-                        prompt_keys.remove("Port")
+                if key == "RemoteHost" and usr_input in self.host_synonyms:
+                    # These values are irrelevant if the remote
+                    # directory is on the local machine.
+                    for conn_key in self.connect_keys:
+                        prompt_keys.remove(conn_key)
                 self.raw_vals[key] = usr_input
         print()

@@ -6,23 +6,22 @@
 # The path to the local sync directory.
 LocalDir=
 
-# The hostname, IP address or domain name of the remote. This defaults to
-# 'localhost'.
+# The hostname, IP address or domain name of the remote.
 RemoteHost=
 
-# The user name on the server. This defaults to the local user name and is
-# ignored if 'RemoteHost' is set to the local machine.
+# The user name on the server. This is ignored if 'RemoteHost' refers to the
+# local machine.
 RemoteUser=
 
-# The port number for the connection. This defaults to '22' and is ignored if
-# 'RemoteHost' is set to the local machine.
+# The port number for the connection. This is ignored if 'RemoteHost' refers
+# to the local machine.
 Port=
 
 # The path to the remote sync directory.
 RemoteDir=
 
-# The amount of data to keep in the local directory. This accepts KB, MB and
-# GB.
+# The amount of data to keep in the local directory. This KB, MB, GB, KiB, MiB
+# and GiB.
 StorageLimit=
 
 

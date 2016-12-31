@@ -23,6 +23,8 @@ import os
 import subprocess
 import atexit
 import shutil
+import readline
+import pwd
 from collections import defaultdict
 from types import FunctionType
 
@@ -39,7 +41,8 @@ def env(var: str) -> str:
     defaults = {
         "XDG_CONFIG_HOME":  os.path.join(os.getenv("HOME"), ".config"),
         "XDG_DATA_HOME":    os.path.join(os.getenv("HOME"), ".local/share"),
-        "XDG_RUNTIME_DIR":  os.path.join("/run/user", str(os.getuid()))
+        "XDG_RUNTIME_DIR":  os.path.join("/run/user", str(os.getuid())),
+        "USER":             pwd.getpwuid(os.getuid()).pw_name
         }
     defaults = defaultdict(lambda: None, defaults)
     return os.getenv(var, defaults[var])
@@ -53,6 +56,14 @@ def tty_input(prompt: str) -> str:
         usr_in = input(prompt)
     sys.stdin = sys.__stdin__
     return usr_in
+
+
+def prefill_input(prompt: str, prefill: str) -> str:
+    """Prompt the user for input with a prepopulated input buffer."""
+    readline.set_startup_hook(lambda: readline.insert_text(prefill))
+    usr_input = input(prompt)
+    readline.set_startup_hook()
+    return usr_input
 
 
 def rec_scan(path: str):
@@ -72,7 +83,7 @@ def shell_cmd(input_cmd: list) -> subprocess.Popen:
     return cmd
 
 
-def progress_bar(coverage, msg="", r_align=True) -> FunctionType:
+def progress_bar(coverage: float, msg="", r_align=True) -> FunctionType:
     """Create a function for updating a progress bar.
 
     Args:
