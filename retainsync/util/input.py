@@ -76,8 +76,7 @@ def usage(command: str) -> None:
 
                 {1}-e{0}, {1}--exclude{0} {2}file{0}
                     Get a list of file/directory paths from {2}file{0} that will be
-                    excluded from syncing. If {2}file{0} is '-', then a newline-separated
-                    list of file paths will be accepted from stdin.
+                    excluded from syncing.
 
                 {1}-t{0}, {1}--template{0} {2}file{0}
                     Get settings for the profile from the template {2}file{0} instead

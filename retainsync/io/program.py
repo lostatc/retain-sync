@@ -226,6 +226,12 @@ class SSHConnection:
                 print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
                 sys.exit(1)
 
+    def check_exists(self) -> bool:
+        """Check if the remote directory exists."""
+        remote_dir = shlex.quote(self._remote_dir)
+        cmd = self.execute(["[[", "-e", remote_dir, "]]"])
+        return not bool(cmd.returncode)
+
     def check_isdir(self) -> bool:
         """Check if the remote directory is actually a directory."""
         remote_dir = shlex.quote(self._remote_dir)

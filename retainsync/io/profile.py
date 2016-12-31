@@ -31,7 +31,7 @@ from collections import defaultdict
 from typing import Dict, Any
 
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
-from retainsync.util.misc import err, env, prefill_input
+from retainsync.util.misc import err, env
 
 
 class Profile:
@@ -91,9 +91,10 @@ class ProfileExcludeFile:
                 #
                 # The patterns follow shell globbing rules as described in retain-sync(1).
                 #
-                # Lines with a leading slash are patterns relative to the root of the sync
-                # directory. Lines without a leading slash are patterns that search the whole
-                # tree.\n"""))
+                # Lines with a leading slash are patterns that match relative to the root of
+                # the sync directory. Lines without a leading slash are patterns that match
+                # anywhere in the tree.
+                """))
             if infile == "-":
                 for line in sys.stdin.read():
                     outfile.write(line)
@@ -106,7 +107,7 @@ class ProfileExcludeFile:
         """Yield lines that are not comments.
 
         Yields:
-            Every line in the file that's not a comment.
+            Each line in the file that's not a comment.
         """
         with open(self.path) as file:
             for line in file:

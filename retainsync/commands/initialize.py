@@ -83,8 +83,7 @@ class InitializeCommand(Command):
 
         # Check the arguments of command-line options.
         if self.exclude:
-            if self.exclude != "-" \
-                    and not os.path.isfile(self.exclude):
+            if not os.path.isfile(self.exclude):
                 err("Error: argument for '--exclude' is not a valid file")
                 sys.exit(1)
         if self.template:
@@ -167,11 +166,26 @@ class InitializeCommand(Command):
                     self.profile.cfg_file.vals["RemoteUser"],
                     self.profile.cfg_file.vals["Port"])
                 ssh_conn.connect()
-                if not self.add_remote:
-                    if not ssh_conn.mkdir():
-                        err("Error: failed creating the remote directory")
+                if ssh_conn.check_exists():
+                    if ssh_conn.check_isdir():
+                        if not ssh_conn.check_iswritable():
+                            err("Error: remote directory must be writable")
+                            sys.exit(1)
+                        elif (not self.add_remote
+                                and not ssh_conn.check_isempty()):
+                            err("Error: remote directory must be empty")
+                            sys.exit(1)
+                    else:
+                        err("Error: remote directory must be a directory")
                         sys.exit(1)
-
+                else:
+                    if self.add_remote:
+                        err("Error: remote directory must be an existing "
+                            "directory")
+                        sys.exit(1)
+                    elif not ssh_conn.mkdir():
+                        err("Error: remote directory must be writable")
+                        sys.exit(1)
             else:
                 dest_dir = DestSyncDir(self.profile.cfg_file.vals["RemoteDir"])
 
@@ -189,12 +203,7 @@ class InitializeCommand(Command):
             atexit.register(unmount_sshfs)
             ssh_conn.mount(dest_dir.path)
 
-        try:
-            os.makedirs(dest_dir.ex_dir, exist_ok=True)
-        except PermissionError:
-            err("Error: remote directory must be writable")
-            sys.exit(1)
-
+        os.makedirs(dest_dir.ex_dir, exist_ok=True)
         user_symlinks = set(local_dir.list_symlinks(rel=True))
 
         if self.add_remote:
