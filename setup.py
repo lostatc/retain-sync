@@ -8,6 +8,18 @@ setup(
     author="Garrett Powell",
     author_email="garrett@gpowell.net",
     license="GPLv3",
+    data_files=[
+        ("bin",
+            ["scripts/retain-sync"]),
+        ("share/man/man1",
+            ["docs/retain-sync.1"]),
+        ("share/retain-sync",
+            ["docs/config/config-template"]),
+        ("share/licenses/retain-sync",
+            ["LICENSE"]),
+        ("lib/systemd/user",
+            ["docs/unit/retain-sync@.service"])
+        ],
     packages=[
         "retainsync", "retainsync.io", "retainsync.util",
         "retainsync.commands"

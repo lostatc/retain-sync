@@ -1,9 +1,0 @@
-[Unit]
-Description=Pull commonly accessed files from a server
-Documentation=man:retain-sync(1)
-
-[Service]
-Type=oneshot
-ExecStart=@PROGRAM@ sync %i
-StandardOutput=journal
-StandardError=journal

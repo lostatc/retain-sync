@@ -6,7 +6,8 @@
 # The path to the local sync directory.
 LocalDir=
 
-# The hostname, IP address or domain name of the remote.
+# The hostname, IP address or domain name of the remote. Use 'localhost' if the
+# remote directory is on the local machine.
 RemoteHost=
 
 # The user name on the server. This is ignored if 'RemoteHost' refers to the

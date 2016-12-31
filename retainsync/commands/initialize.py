@@ -240,7 +240,7 @@ class InitializeCommand(Command):
 
         # Overwrite local files with symlinks to the corresponding files in the
         # remote dir.
-        dest_dir.symlink_tree(local_dir.path, True)
+        dest_dir.symlink_tree(local_dir.path, overwrite=True)
 
         # Generate file priority database.
         if not os.path.isfile(self.profile.db_file.path):

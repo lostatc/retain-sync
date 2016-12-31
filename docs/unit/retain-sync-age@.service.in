@@ -1,9 +1,0 @@
-[Unit]
-Description=Adjust file priority for time
-Documentation=man:retain-sync(1)
-
-[Service]
-Type=oneshot
-ExecStart=@PROGRAM@ age %i
-StandardOutput=journal
-StandardError=journal

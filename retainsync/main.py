@@ -66,3 +66,6 @@ def signal_handler(signum: int, frame) -> None:
     """Print an appropriate error message for an interruption by signal."""
     err("Error: program received", signal.Signals(signum).name)
     sys.exit(1)
+
+if __name__ == "__main__":
+    main()

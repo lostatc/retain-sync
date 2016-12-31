@@ -1,12 +1,10 @@
 [Unit]
 Description=Watch for file access in a specific directory
 Documentation=man:retain-sync(1)
-Wants=retain-sync-resync@%i.timer
-Requires=retain-sync-age@%i.timer
 
 [Service]
 Type=simple
-ExecStart=@DAEMON@ %i
+ExecStart=/usr/bin/env python3 -c "from retainsync.deamon import main; main()" %i
 StandardOutput=journal
 StandardError=journal
 

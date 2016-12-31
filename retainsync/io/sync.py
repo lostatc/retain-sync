@@ -41,6 +41,9 @@ class SyncDir:
     def list_files(self, rel=False) -> str:
         """Get the paths of files in the directory.
 
+        Args:
+            rel:    Yield relative file paths.
+
         Yields:
             A file path for each file in the directory.
         """
@@ -55,6 +58,9 @@ class SyncDir:
     def list_dirs(self, rel=False) -> str:
         """Get the paths of subdirectories in the directory.
 
+        Args:
+            rel:    Yield relative file paths.
+
         Yields:
             A file path for each directory in the directory.
         """
@@ -68,6 +74,9 @@ class SyncDir:
     def list_symlinks(self, rel=False) -> str:
         """Get the paths of symlinks in the directory.
 
+        Args:
+            rel:    Yield relative file paths.
+
         Yields:
             A file path for eash symlink in the directory.
         """
@@ -80,6 +89,9 @@ class SyncDir:
 
     def list_mtimes(self, rel=False) -> Tuple[str, float]:
         """Get the paths and mtimes of files in the directory.
+
+        Args:
+            rel:    Yield relative file paths.
 
         Yields:
             A file path and an mtime for each file in the directory.
@@ -126,6 +138,8 @@ class SyncDir:
                 destdir, os.path.relpath(entry.path, self.path))
             if entry.is_dir(follow_symlinks=False):
                 os.makedirs(destfile, exist_ok=True)
+            elif entry.is_symlink():
+                continue
             else:
                 try:
                     os.symlink(entry.path, destfile)
