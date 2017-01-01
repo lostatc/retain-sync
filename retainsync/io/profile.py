@@ -28,7 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from collections import defaultdict
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
 from retainsync.util.misc import err, env
@@ -241,57 +241,74 @@ class ProfileDBFile:
                 );
                 """)
 
-    def add_file(self, path: str, priority=0) -> None:
-        """Add a new file path to the database if it doesn't already exist.
+    def add_files(self, paths: List[str], priority=0) -> None:
+        """Add new file paths to the database if they do not already exist.
 
         Args:
-            path:       The file path to add.
+            path:       The file paths to add.
             priority:   The starting priority of the file path.
         """
         with self.conn:
-            self.cur.execute("""\
-                INSERT INTO files (path, priority)
+            for path in paths:
+                self.cur.execute("""\
+                    INSERT INTO files (path, priority)
                     SELECT ?, ?
-                WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
-                """, (path, priority, path))
+                    WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
+                    """, (path, priority, path))
 
-    def add_inflated(self, path: str) -> None:
-        """Add a new file path to the database with an inflated priority.
+    def add_inflated(self, paths: List[str]) -> None:
+        """Add new file paths to the database with an inflated priority.
 
         Args:
-            path:   The file path to add.
+            path:   The file paths to add.
         """
         with self.conn:
             self.cur.execute("""\
                 SELECT MAX(priority) FROM files;
                 """)
-            max_priority = self.cur.fetchone()
-            self.add_file(path, max_priority)
+        max_priority = self.cur.fetchone()[0]
+        self.add_files(paths, max_priority)
 
-    def rm_file(self, path: str) -> None:
-        """Remove a file path from the database.
+    def rm_files(self, paths: List[str]) -> None:
+        """Remove file paths from the database.
 
         Args:
-            path:   The file path to remove.
+            path:   The file paths to remove.
+        """
+        with self.conn:
+            for path in paths:
+                self.cur.execute("""\
+                    DELETE FROM files
+                    WHERE path=?;
+                    """, (path,))
+
+    def prioritize(self) -> List[str]:
+        """Get the paths of files sorted by their priorities.
+
+        Returns:
+            A list of file paths and their priorities.
         """
         with self.conn:
             self.cur.execute("""\
-                DELETE FROM files
-                WHERE path=?;
-                """, (path,))
+                SELECT path, priority
+                FROM files
+                ORDER BY priority DESC
+                """)
+        return [path for path, priority in self.cur.fetchall()]
 
-    def increment(self, path: str) -> None:
-        """Increment the priority of a file path by one.
+    def increment(self, paths: List[str]) -> None:
+        """Increment the priority of some file paths by one.
 
         Args:
-            path:   The file path to increment the priority of.
+            path:   The file paths to increment the priority of.
         """
         with self.conn:
-            self.cur.execute("""\
-                UPDATE files
-                SET priority=priority+1
-                WHERE path=?;
-                """, (path,))
+            for path in paths:
+                self.cur.execute("""\
+                    UPDATE files
+                    SET priority=priority+1
+                    WHERE path=?;
+                    """, (path,))
 
     def adjust_all(self, adjustment=0.99) -> None:
         """Multiply the priorities of all file paths by a constant.

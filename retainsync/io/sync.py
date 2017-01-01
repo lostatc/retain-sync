@@ -21,7 +21,7 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sqlite3
 import datetime
-from typing import Tuple
+from typing import Tuple, Sequence, List
 
 from retainsync.util.misc import rec_scan
 
@@ -220,57 +220,88 @@ class DestDBFile:
                 );
                 """)
 
-    def add_file(self, path: str) -> None:
-        """Add a new file path to the database.
+    def add_files(self, paths: Sequence[str], deleted=False) -> None:
+        """Add new file paths to the database.
 
         Args:
-            path:   The file path to add.
+            paths:  The file paths to add.
         """
         with self.conn:
-            self.cur.execute("""\
-                INSERT INTO files (path)
-                    SELECT ?
-                WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
-                """, (path, path))
+            for path in paths:
+                self.cur.execute("""\
+                    INSERT INTO files (path, deleted)
+                    SELECT ?, ?
+                    WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
+                    """, (path, deleted, path))
 
-    def rm_file(self, path: str) -> None:
-        """Remove a file path from the database.
+    def rm_files(self, paths: Sequence[str]) -> None:
+        """Remove file paths from the database.
+
         Args:
-            path:   The file path to remove.
+            paths:  The file paths to remove.
         """
         with self.conn:
-            self.cur.execute("""\
-                DELETE FROM files
-                WHERE path=?;
-                """, (path,))
+            for path in paths:
+                self.cur.execute("""\
+                    DELETE FROM files
+                    WHERE path=?;
+                    """, (path,))
 
-        def set_trash(self, path: str, boolean: bool) -> None:
-            """Mark a file path as being in the trash or not.
-            Args:
-                path:       The file path to set.
-                boolean:    The boolean value to set the 'trash' column to.
-            """
-            if type(boolean) is not bool:
-                raise TypeError("Expected boolean")
+    def set_trash(self, paths: Sequence[str], boolean: bool) -> None:
+        """Mark file paths as being in the trash or not.
 
-            with self.conn:
+        Args:
+            paths:      The file paths to set.
+            boolean:    The boolean value to set the 'trash' column to.
+        """
+        if not isinstance(boolean, bool):
+            raise TypeError("Expected boolean")
+
+        with self.conn:
+            for path in paths:
                 self.cur.execute("""\
                     UPDATE files
-                    SET trash=?
+                    SET deleted=?
                     WHERE path=?;
                     """, (boolean, path))
 
-        def update_synctime(self, path: str) -> None:
-            """Update the time of the last sync.
+    def update_synctime(self, paths: Sequence[str]) -> None:
+        """Update the time of the last sync for some files.
 
-            Args:
-                path:   The file path to set.
-            """
-            utc_now = datetime.datetime.utcnow().replace(
-                tzinfo=datetime.timezone.utc).timestamp()
-            with self.conn:
+        Args:
+            paths:  The file paths to set.
+        """
+        time = datetime.datetime.utcnow().replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+        with self.conn:
+            for path in paths:
                 self.cur.execute("""\
                     UPDATE files
                     SET lastsync=?
                     WHERE path=?;
-                    """, (utc_now, path))
+                    """, (time, path))
+
+    def file_info(self, paths=None) -> List[Tuple[str, float, bool]]:
+        """Get information about a list of files or all files.
+
+        Args:
+            paths: The files to list. If None, list all files.
+        """
+        output = []
+        if paths is None:
+            with self.conn:
+                self.cur.execute("""\
+                    SELECT path, lastsync, deleted
+                    FROM files;
+                    """)
+            output = self.cur.fetchall()
+        else:
+            with self.conn:
+                for path in paths:
+                    self.cur.execute("""\
+                        SELECT path, lastsync, deleted
+                        FROM files
+                        WHERE path=?;
+                        """, (path,))
+                    output.append(self.cur.fetchone())
+        return output

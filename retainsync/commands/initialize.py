@@ -245,8 +245,7 @@ class InitializeCommand(Command):
         # Generate file priority database.
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
-        for filepath in dest_dir.list_files(rel=True):
-            self.profile.db_file.add_file(filepath)
+        self.profile.db_file.add_files(list(dest_dir.list_files(rel=True)))
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
