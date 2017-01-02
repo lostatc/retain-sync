@@ -20,9 +20,6 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import sys
-import tempfile
-import re
-import stat
 import atexit
 from typing import Dict
 from textwrap import dedent
@@ -83,23 +80,6 @@ class Command:
             self.profile.info_file.vals["Locked"] = True
             self.profile.info_file.write()
             atexit.register(unlock)
-
-    def ssh_env(self) -> bool:
-        """Set environment variables for ssh-agent."""
-        if not os.environ["SSH_AUTH_SOCK"]:
-            for entry in os.scandir(tempfile.gettempdir()):
-                if (re.search("^ssh-", entry.name)
-                        and entry.is_dir
-                        and entry.stat().st_uid == os.getuid()):
-                    for subentry in os.scandir(entry.path):
-                        if (re.search(r"^agent\.[0-9]+$", subentry.name)
-                                and stat.S_ISSOCK(subentry.stat().st_mode)
-                                and subentry.stat().st_uid == os.getuid()):
-                            os.environ["SSH_AUTH_SOCK"] = subentry.path
-                            return True
-            return False
-        else:
-            return True
 
     def interrupt_msg(sefl) -> None:
         """Warn user that initialization was interrupted."""

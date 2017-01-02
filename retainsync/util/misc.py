@@ -25,6 +25,7 @@ import atexit
 import shutil
 import readline
 import pwd
+import hashlib
 from collections import defaultdict
 from types import FunctionType
 
@@ -124,3 +125,12 @@ def progress_bar(coverage: float, msg="", r_align=True) -> FunctionType:
             print(bar_str + msg.rjust(term_width - len(bar_str)),
                   flush=True, end="\r")
     return update
+
+
+def md5sum(path) -> str:
+    """Get the MD5 checksum of a file."""
+    md5_hash = hashlib.md5()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(4096), b""):
+            md5_hash.update(chunk)
+    return md5_hash.hexdigest()

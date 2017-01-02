@@ -23,7 +23,48 @@ import sqlite3
 import datetime
 from typing import Tuple, Sequence, List
 
-from retainsync.util.misc import rec_scan
+from retainsync.util.misc import rec_scan, md5sum
+
+
+class TrashDir:
+    """Get information about the user's local trash directory.
+
+    Attributes:
+        path:   The paths to the trash directories.
+        sizes:  A list of tuples containing the paths and sizes of every file
+                in the trash.
+    """
+    def __init__(self, paths: List[str]) -> None:
+        self.paths = paths
+        self._sizes = []
+
+    @property
+    def sizes(self) -> List[Tuple[str, int]]:
+        """Get the sizes of every file in the trash directory.
+
+        Returns:
+            A list of file sizes in bytes.
+        """
+        if not self._sizes:
+            output = []
+            for path in self.paths:
+                for entry in rec_scan(path):
+                    if not entry.is_dir():
+                        output.append((
+                            entry.path,
+                            entry.stat(follow_symlinks=False).st_size))
+            self._sizes = output
+        return self._sizes
+
+    def check_file(self, path) -> bool:
+        """Check if a file is in the trash by comparing sizes and checksums."""
+        overlap_files = [item[0] for item in self.sizes if
+                         os.stat(path).st_size == item[1]]
+        if overlap_files:
+            overlap_sums = [md5sum(path) for path in overlap_files]
+            if md5sum(path) in overlap_sums:
+                return True
+        return False
 
 
 class SyncDir:

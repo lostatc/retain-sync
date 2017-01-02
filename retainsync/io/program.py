@@ -1,4 +1,4 @@
-"""Generic base classes for file types.
+"""Generic classes for program-wide files and directories.
 
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
 

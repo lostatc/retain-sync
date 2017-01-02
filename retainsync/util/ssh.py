@@ -22,6 +22,9 @@ import sys
 import os
 import shlex
 import subprocess
+import re
+import stat
+import tempfile
 from textwrap import indent
 
 from retainsync.util.misc import err, env, shell_cmd
@@ -144,3 +147,21 @@ class SSHConnection:
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self.execute(["mkdir", "-p", remote_dir])
         return not bool(cmd.returncode)
+
+
+def ssh_env(self) -> bool:
+    """Guess environment variables for ssh-agent."""
+    if not os.environ["SSH_AUTH_SOCK"]:
+        for entry in os.scandir(tempfile.gettempdir()):
+            if (re.search("^ssh-", entry.name)
+                    and entry.is_dir
+                    and entry.stat().st_uid == os.getuid()):
+                for subentry in os.scandir(entry.path):
+                    if (re.search(r"^agent\.[0-9]+$", subentry.name)
+                            and stat.S_ISSOCK(subentry.stat().st_mode)
+                            and subentry.stat().st_uid == os.getuid()):
+                        os.environ["SSH_AUTH_SOCK"] = subentry.path
+                        return True
+        return False
+    else:
+        return True
