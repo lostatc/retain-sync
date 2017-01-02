@@ -25,11 +25,12 @@ import atexit
 import shutil
 from textwrap import dedent
 
-from retainsync.cmd_base import Command
-from retainsync.io.program import SSHConnection, NotMountedError
+from retainsync.basecommand import Command
+from retainsync.io.program import NotMountedError
 from retainsync.io.profile import Profile, ProfileConfigFile
-from retainsync.io.sync import LocalSyncDir, DestSyncDir
+from retainsync.io.userdata import LocalSyncDir, DestSyncDir
 from retainsync.io.transfer import rsync_cmd
+from retainsync.util.ssh import SSHConnection
 from retainsync.util.misc import err
 
 
