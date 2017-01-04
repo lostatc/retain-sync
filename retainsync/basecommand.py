@@ -67,17 +67,18 @@ class Command:
         """Lock the profile if not already locked."""
         def unlock() -> None:
             """Release the lock on the profile."""
-            self.profile.info_file.vals["Locked"] = False
+            self.profile.info_file.raw_vals["Locked"] = False
             if os.path.isfile(self.profile.info_file.path):
                 self.profile.info_file.write()
 
         if self.profile:
-            self.profile.info_file.read()
+            if os.path.isfile(self.profile.info_file.path):
+                self.profile.info_file.read()
             if self.profile.info_file.vals["Locked"] is True:
                 err("Error: another operation on this profile is already "
                     "taking place")
                 sys.exit(1)
-            self.profile.info_file.vals["Locked"] = True
+            self.profile.info_file.raw_vals["Locked"] = True
             self.profile.info_file.write()
             atexit.register(unlock)
 

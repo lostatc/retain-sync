@@ -23,6 +23,7 @@ import sys
 import re
 import atexit
 import shutil
+import sqlite3
 from textwrap import dedent
 
 from retainsync.basecommand import Command
@@ -94,7 +95,8 @@ class InitializeCommand(Command):
 
         self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
-        self.profile.info_file.read()
+        if os.path.isfile(self.profile.info_file.path):
+            self.profile.info_file.read()
 
         # Check if the profile has already been initialized.
         if self.profile.info_file.vals["Status"] == "initialized":
@@ -205,7 +207,8 @@ class InitializeCommand(Command):
             ssh_conn.mount(dest_dir.path)
 
         os.makedirs(dest_dir.ex_dir, exist_ok=True)
-        user_symlinks = set(local_dir.list_symlinks(rel=True))
+        user_symlinks = set(local_dir.list_files(
+            rel=True, files=False, symlinks=True))
 
         if self.add_remote:
             try:
@@ -243,10 +246,20 @@ class InitializeCommand(Command):
         # remote dir.
         dest_dir.symlink_tree(local_dir.path, overwrite=True)
 
-        # Generate file priority database.
+        remote_files = list(dest_dir.list_files(rel=True))
+
+        # Generate the local file priority database.
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
-        self.profile.db_file.add_files(list(dest_dir.list_files(rel=True)))
+        self.profile.db_file.add_files(remote_files)
+
+        # Generate the remote file priority database.
+        try:
+            if not os.path.isfile(dest_dir.db_file.path):
+                dest_dir.db_file.create()
+            dest_dir.db_file.add_files(remote_files)
+        except sqlite3.OperationalError:
+            raise NotMountedError
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
@@ -257,7 +270,7 @@ class InitializeCommand(Command):
             raise NotMountedError
 
         # The profile is now fully initialized. Update the info file.
-        self.profile.info_file.vals["Status"] = "initialized"
+        self.profile.info_file.raw_vals["Status"] = "initialized"
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
         atexit.unregister(unmount_sshfs)

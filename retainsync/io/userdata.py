@@ -1,4 +1,4 @@
-"""Perform operations on sync directories.
+"""Perform operations on the user's files and directories.
 
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
 
@@ -21,7 +21,7 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sqlite3
 import datetime
-from typing import Tuple, Sequence, List
+from typing import Tuple, Iterable, List, Set
 
 from retainsync.util.misc import rec_scan, md5sum
 
@@ -34,7 +34,7 @@ class TrashDir:
         sizes:  A list of tuples containing the paths and sizes of every file
                 in the trash.
     """
-    def __init__(self, paths: List[str]) -> None:
+    def __init__(self, paths: Iterable[str]) -> None:
         self.paths = paths
         self._sizes = []
 
@@ -79,66 +79,53 @@ class SyncDir:
         self.path = path.rstrip("/")
         self.tpath = os.path.join(path, "")
 
-    def list_files(self, rel=False) -> str:
+    def list_files(self, rel=False, files=True, symlinks=False,
+                   dirs=False) -> str:
         """Get the paths of files in the directory.
 
         Args:
-            rel:    Yield relative file paths.
+            rel:        Yield relative file paths.
+            files:      Include regular files.
+            symlinks:   Include symbolic links.
+            dirs:       Include directories.
 
         Yields:
             A file path for each file in the directory.
         """
         for entry in rec_scan(self.path):
-            if (not entry.is_dir(follow_symlinks=False)
-                    and not entry.is_symlink()):
+            if entry.is_file(follow_symlinks=False) and files is False:
+                continue
+            elif entry.is_dir(follow_symlinks=False) and dirs is False:
+                continue
+            elif entry.is_symlink() and symlinks is False:
+                continue
+            else:
                 if rel:
                     yield os.path.relpath(entry.path, self.path)
                 else:
                     yield entry.path
 
-    def list_dirs(self, rel=False) -> str:
-        """Get the paths of subdirectories in the directory.
-
-        Args:
-            rel:    Yield relative file paths.
-
-        Yields:
-            A file path for each directory in the directory.
-        """
-        for entry in rec_scan(self.path):
-            if entry.is_dir(follow_symlinks=False):
-                if rel:
-                    yield os.path.relpath(entry.path, self.path)
-                else:
-                    yield entry.path
-
-    def list_symlinks(self, rel=False) -> str:
-        """Get the paths of symlinks in the directory.
-
-        Args:
-            rel:    Yield relative file paths.
-
-        Yields:
-            A file path for eash symlink in the directory.
-        """
-        for entry in rec_scan(self.path):
-            if entry.is_symlink():
-                if rel:
-                    yield os.path.relpath(entry.path, self.path)
-                else:
-                    yield entry.path
-
-    def list_mtimes(self, rel=False) -> Tuple[str, float]:
+    def list_mtimes(self, rel=False, files=True, symlinks=False,
+                    dirs=False) -> Tuple[str, float]:
         """Get the paths and mtimes of files in the directory.
 
         Args:
-            rel:    Yield relative file paths.
+            rel:        Yield relative file paths.
+            files:      Include regular files.
+            symlinks:   Include symbolic links.
+            dirs:       Include directories.
 
         Yields:
             A file path and an mtime for each file in the directory.
         """
         for entry in rec_scan(self.path):
-            if not entry.is_dir(follow_symlinks=False):
+            if entry.is_file(follow_symlinks=False) and files is False:
+                continue
+            elif entry.is_dir(follow_symlinks=False) and dirs is False:
+                continue
+            elif entry.is_symlink() and symlinks is False:
+                continue
+            else:
                 mtime = entry.stat(follow_symlinks=False).st_mtime
                 if rel:
                     yield os.path.relpath(entry.path, self.path), mtime
@@ -165,20 +152,33 @@ class SyncDir:
         fs_stats = os.statvfs(self.path)
         return fs_stats.f_bsize * fs_stats.f_bavail
 
-    def symlink_tree(self, destdir: str, overwrite=False) -> None:
+    def symlink_tree(self, destdir: str, exclude=None,
+                     overwrite=False) -> None:
         """Recursively copy the directory as a tree of symlinks.
 
         Args:
             destdir:    The directory to create symlinks in.
             overwrite:  Overwrite existing files in the destination directory
                         with symlinks.
+            exclude:    A list of absolute paths of files to not symlink.
         """
+        if exclude is None:
+            exclude = []
+
         os.makedirs(destdir, exist_ok=True)
         for entry in rec_scan(self.path):
             destfile = os.path.join(
                 destdir, os.path.relpath(entry.path, self.path))
-            if entry.is_dir(follow_symlinks=False):
-                os.makedirs(destfile, exist_ok=True)
+            if entry.path in exclude:
+                continue
+            elif entry.is_dir(follow_symlinks=False):
+                try:
+                    os.mkdir(destfile)
+                except FileNotFoundError:
+                    # The directory's parent dir was in the exclude list.
+                    pass
+                except FileExistsError:
+                    pass
             elif entry.is_symlink():
                 continue
             else:
@@ -214,6 +214,14 @@ class DestSyncDir(SyncDir):
         self.ex_dir = os.path.join(self.prgm_dir, "exclude")
         self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))
 
+    def symlink_tree(self, destdir: str, exclude=None,
+                     overwrite=False) -> None:
+        """Extend parent method to automatically exclude program directory."""
+        if exclude is None:
+            exclude = []
+        exclude.append(self.prgm_dir)
+        super().symlink_tree(destdir, exclude, overwrite)
+
 
 class DestDBFile:
     """Manipulate the remote file database.
@@ -231,6 +239,9 @@ class DestDBFile:
         else:
             self.conn = None
             self.cur = None
+        # Create adapter from python boolean to sqlite integer.
+        sqlite3.register_adapter(bool, int)
+        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
     def create(self) -> None:
         """Create a new empty database.
@@ -248,9 +259,6 @@ class DestDBFile:
         self.conn = sqlite3.connect(
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
-        # Create adapter from python boolean to sqlite integer.
-        sqlite3.register_adapter(bool, int)
-        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
         with self.conn:
             self.cur.execute("""\
@@ -261,7 +269,7 @@ class DestDBFile:
                 );
                 """)
 
-    def add_files(self, paths: Sequence[str], deleted=False) -> None:
+    def add_files(self, paths: Iterable[str], deleted=False) -> None:
         """Add new file paths to the database.
 
         Args:
@@ -275,7 +283,7 @@ class DestDBFile:
                     WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
                     """, (path, deleted, path))
 
-    def rm_files(self, paths: Sequence[str]) -> None:
+    def rm_files(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
 
         Args:
@@ -288,25 +296,7 @@ class DestDBFile:
                     WHERE path=?;
                     """, (path,))
 
-    def set_trash(self, paths: Sequence[str], boolean: bool) -> None:
-        """Mark file paths as being in the trash or not.
-
-        Args:
-            paths:      The file paths to set.
-            boolean:    The boolean value to set the 'trash' column to.
-        """
-        if not isinstance(boolean, bool):
-            raise TypeError("Expected boolean")
-
-        with self.conn:
-            for path in paths:
-                self.cur.execute("""\
-                    UPDATE files
-                    SET deleted=?
-                    WHERE path=?;
-                    """, (boolean, path))
-
-    def update_synctime(self, paths: Sequence[str]) -> None:
+    def update_synctime(self, paths: Iterable[str]) -> None:
         """Update the time of the last sync for some files.
 
         Args:
@@ -322,27 +312,28 @@ class DestDBFile:
                     WHERE path=?;
                     """, (time, path))
 
-    def file_info(self, paths=None) -> List[Tuple[str, float, bool]]:
-        """Get information about a list of files or all files.
+    def list_files(self, deleted=None, min_lastsync=None) -> Set[str]:
+        """Get a list of file paths that match certain constraints.
 
         Args:
-            paths: The files to list. If None, list all files.
+            deleted:        Select files marked as deleted.
+            min_lastsync:   Select files that were last synced more recently
+                            than this time.
         """
-        output = []
-        if paths is None:
-            with self.conn:
-                self.cur.execute("""\
-                    SELECT path, lastsync, deleted
-                    FROM files;
-                    """)
-            output = self.cur.fetchall()
-        else:
-            with self.conn:
-                for path in paths:
-                    self.cur.execute("""\
-                        SELECT path, lastsync, deleted
-                        FROM files
-                        WHERE path=?;
-                        """, (path,))
-                    output.append(self.cur.fetchone())
-        return output
+        sql_command = """\
+            SELECT path
+            FROM files
+            WHERE path IS NOT NULL
+            """
+        sql_args = []
+        if deleted is not None:
+            sql_command += "AND deleted=?\n"
+            sql_args.append(deleted)
+        if min_lastsync is not None:
+            sql_command += "AND lastsync>?\n"
+            sql_args.append(min_lastsync)
+        sql_command += ";"
+
+        with self.conn:
+            self.cur.execute(sql_command, sql_args)
+        return {path for path, in self.cur.fetchall()}

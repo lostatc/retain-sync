@@ -1,4 +1,4 @@
-"""Generic classes for program-wide files and directories.
+"""Perform operations on the program's files and directories.
 
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
 
@@ -27,10 +27,6 @@ from typing import List
 from retainsync.util.misc import err, env
 
 
-class NotMountedError(Exception):
-    """Raised when file IO occurs on the remote mountpoint while unmounted."""
-
-
 class ProgramDir:
     """Get information about the main configuration directory.
 
@@ -50,7 +46,7 @@ class ProgramDir:
             A list containing the name of each profile.
         """
         profile_names = []
-        for entry in os.scandir(cls.path):
+        for entry in os.scandir(cls.profiles_dir):
             if entry.is_dir(follow_symlinks=False):
                 profile_names.append(entry.name)
         return profile_names
@@ -73,7 +69,7 @@ class ConfigFile:
 
     def read(self) -> None:
         """Parse file for key-value pairs and save in a dictionary."""
-        # try:
+        try:
         with open(self.path) as file:
             for line in file:
                 # Skip line if it is a comment.
@@ -81,9 +77,9 @@ class ConfigFile:
                         and re.search("=", line)):
                     key, value = line.partition("=")[::2]
                     self.raw_vals[key.strip()] = value.strip()
-        # except IOError:
-        #     err("Error: could not open configuration file")
-        #     sys.exit(1)
+        except IOError:
+            err("Error: could not open configuration file")
+            sys.exit(1)
 
     def write(self, infile: str) -> None:
         """Generate a new config file based on the input file."""
@@ -117,19 +113,19 @@ class JSONFile:
     """Parse a JSON-formatted file.
 
     Attributes:
-        path:  The path to the JSON file.
-        vals:  A dictionary or list of values from the file.
+        path:       The path to the JSON file.
+        raw_vals:   A dictionary or list of values from the file.
     """
     def __init__(self, path) -> None:
         self.path = path
-        self.vals = None
+        self.raw_vals = None
 
     def read(self) -> None:
         """Read file into an object."""
         with open(self.path) as file:
-            self.vals = json.load(file)
+            self.raw_vals = json.load(file)
 
     def write(self) -> None:
         """Write object to a file."""
         with open(self.path, "w") as file:
-            json.dump(self.vals, file, indent=4)
+            json.dump(self.raw_vals, file, indent=4)

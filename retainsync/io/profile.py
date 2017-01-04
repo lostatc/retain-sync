@@ -28,7 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from collections import defaultdict
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Iterable, Set
 
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
 from retainsync.util.misc import err, env
@@ -134,24 +134,33 @@ class ProfileExcludeFile:
                 glob_str = os.path.join(start_path, "**", line)
             self.files.update(glob.glob(glob_str, recursive=True))
 
-            # Create a set with relative file paths.
-            self.rel_files = {os.path.relpath(path, start_path) for path in
-                              self.files}
+        # Create a set with relative file paths.
+        self.rel_files = {os.path.relpath(path, start_path) for path in
+                          self.files}
 
 
 class ProfileInfoFile(JSONFile):
-    """Parse a JSON-formatted file for profile metadata."""
-    def read(self) -> None:
-        """Read file into an object and make substitutions."""
-        # Create an empty defaultdict if the file doesn't exist.
-        self.vals = {}
-        if os.path.isfile(self.path):
-            super().read()
-        self.vals = defaultdict(lambda: None, self.vals)
-        if self.vals["LastSync"]:
-            self.vals["LastSync"] = datetime.datetime.strptime(
-                self.vals["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
-                tzinfo=datetime.timezone.utc).timestamp()
+    """Parse a JSON-formatted file for profile metadata.
+
+    Attributes:
+        raw_vals:   A dictionary of raw values from the file.
+        vals:       A dictionary of parsed values from the file.
+    """
+    def __init__(self, path) -> None:
+        super().__init__(path)
+        self.raw_vals = {}
+
+    @property
+    def vals(self) -> Dict[str, Any]:
+        output = {}
+        output = defaultdict(lambda: None)
+        if self.raw_vals:
+            output.update(self.raw_vals)
+            if output["LastSync"]:
+                output["LastSync"] = datetime.datetime.strptime(
+                    output["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
+                    tzinfo=datetime.timezone.utc).timestamp()
+        return output
 
     def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
@@ -177,7 +186,7 @@ class ProfileInfoFile(JSONFile):
         with open("/etc/machine-id") as id_file:
             unique_id = "-".join([id_file.read(8), env("USER"), name])
         version = float(pkg_resources.get_distribution("retain-sync").version)
-        self.vals.update({
+        self.raw_vals.update({
             "Status":   "partial",
             "Locked":   True,
             "LastSync": None,
@@ -193,7 +202,7 @@ class ProfileInfoFile(JSONFile):
         """Update the time of the last sync."""
         # Store the timestamp as a human-readable string so that the file can
         # be edited manually.
-        self.vals["LastSync"] = datetime.datetime.utcnow().strftime(
+        self.raw_vals["LastSync"] = datetime.datetime.utcnow().strftime(
             "%Y-%m-%dT%H:%M:%S")
 
 
@@ -215,6 +224,9 @@ class ProfileDBFile:
         else:
             self.conn = None
             self.cur = None
+        # Create adapter from python boolean to sqlite integer.
+        sqlite3.register_adapter(bool, int)
+        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
     def create(self) -> None:
         """Create a new empty database.
@@ -229,9 +241,6 @@ class ProfileDBFile:
         self.conn = sqlite3.connect(
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
-        # Create adapter from python boolean to sqlite integer.
-        sqlite3.register_adapter(bool, int)
-        sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
         with self.conn:
             self.cur.execute("""\
@@ -241,7 +250,7 @@ class ProfileDBFile:
                 );
                 """)
 
-    def add_files(self, paths: List[str], priority=0) -> None:
+    def add_files(self, paths: Iterable[str], priority=0) -> None:
         """Add new file paths to the database if they do not already exist.
 
         Args:
@@ -256,7 +265,7 @@ class ProfileDBFile:
                     WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
                     """, (path, priority, path))
 
-    def add_inflated(self, paths: List[str]) -> None:
+    def add_inflated(self, paths: Iterable[str]) -> None:
         """Add new file paths to the database with an inflated priority.
 
         Args:
@@ -269,7 +278,7 @@ class ProfileDBFile:
         max_priority = self.cur.fetchone()[0]
         self.add_files(paths, max_priority)
 
-    def rm_files(self, paths: List[str]) -> None:
+    def rm_files(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
 
         Args:
@@ -282,7 +291,7 @@ class ProfileDBFile:
                     WHERE path=?;
                     """, (path,))
 
-    def prioritize(self) -> List[str]:
+    def prioritize(self) -> Set[str]:
         """Get the paths of files sorted by their priorities.
 
         Returns:
@@ -294,9 +303,9 @@ class ProfileDBFile:
                 FROM files
                 ORDER BY priority DESC
                 """)
-        return [path for path, priority in self.cur.fetchall()]
+        return {path for path, priority in self.cur.fetchall()}
 
-    def increment(self, paths: List[str]) -> None:
+    def increment(self, paths: Iterable[str]) -> None:
         """Increment the priority of some file paths by one.
 
         Args:
@@ -549,7 +558,7 @@ class ProfileConfigFile(ConfigFile):
             if check_empty or not check_empty and value:
                 err_msg = self._check_values(key, value)
                 if err_msg:
-                    print(err_msg.format("{0}: '{1}'".format(context, key)))
+                    err(err_msg.format("{0}: '{1}'".format(context, key)))
                     errors += 1
 
         if errors > 0:
@@ -633,7 +642,7 @@ class ProfileConfigFile(ConfigFile):
                         usr_input = self.subs[key]
                     err_msg = self._check_values(key, usr_input)
                     if err_msg:
-                        print(err_msg.format("this value"))
+                        err(err_msg.format("this value"))
                     else:
                         break
                 if key == "RemoteHost" and usr_input in self.host_synonyms:

@@ -1,4 +1,5 @@
-"""
+"""The main module for the client.
+
 Copyright © 2016 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
@@ -26,6 +27,7 @@ from retainsync.util.input import parse_args
 from retainsync.util.misc import err
 from retainsync.io.program import NotMountedError
 from retainsync.commands.initialize import InitializeCommand
+from retainsync.commands.sync import SyncCommand
 
 
 def main() -> None:
@@ -47,7 +49,7 @@ def main() -> None:
             cmd_args["profile"], cmd_args["exclude"], cmd_args["template"],
             cmd_args["add_remote"])
     elif cmd_args["command"] == "sync":
-        pass
+        command = SyncCommand(cmd_args["profile"])
     elif cmd_args["command"] == "reset":
         pass
     elif cmd_args["command"] == "list":
