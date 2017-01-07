@@ -17,17 +17,20 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
-
-import os
 import sys
 import signal
-import time
+from typing import Union
 
-from retainsync.util.input import parse_args
-from retainsync.util.misc import err
-from retainsync.io.program import NotMountedError
+from retainsync.exceptions import ProgramError
+from retainsync.basecommand import Command
 from retainsync.commands.initialize import InitializeCommand
 from retainsync.commands.sync import SyncCommand
+from retainsync.util.input import parse_args
+from retainsync.util.misc import err
+
+CommandInstance = Union[
+    InitializeCommand, SyncCommand
+    ]
 
 
 def main() -> None:
@@ -37,19 +40,25 @@ def main() -> None:
     signal.signal(signal.SIGHUP, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Read command-line arguments.
-    cmd_args = parse_args()
+    try:
+        cmd_args = parse_args()
+        command = def_command(cmd_args)
+        command.main()
+    except ProgramError as e:
+        for message in e.args:
+            err("Error: {}".format(message))
+        sys.exit(1)
 
-    # Implement the '--quiet' flag.
-    if cmd_args["quiet"]:
-        sys.stdout = open(os.devnull, "a")
 
+def def_command(cmd_args: dict) -> CommandInstance:
+    """Get an Command subclass instance from the command-line input."""
     if cmd_args["command"] == "initialize":
-        command = InitializeCommand(
+        return InitializeCommand(
             cmd_args["profile"], cmd_args["exclude"], cmd_args["template"],
-            cmd_args["add_remote"])
+            cmd_args["add_remote"]
+            )
     elif cmd_args["command"] == "sync":
-        command = SyncCommand(cmd_args["profile"])
+        return SyncCommand(cmd_args["profile"])
     elif cmd_args["command"] == "reset":
         pass
     elif cmd_args["command"] == "list":
@@ -57,17 +66,8 @@ def main() -> None:
     elif cmd_args["command"] == "empty-trash":
         pass
 
-    try:
-        command.main()
-    except NotMountedError:
-        err("Error: the connection to the remote directory was lost")
-        sys.exit(1)
-
 
 def signal_handler(signum: int, frame) -> None:
     """Print an appropriate error message for an interruption by signal."""
     err("Error: program received", signal.Signals(signum).name)
     sys.exit(1)
-
-if __name__ == "__main__":
-    main()

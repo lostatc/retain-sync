@@ -21,11 +21,10 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import shutil
 import datetime
-import sys
 
+from retainsync.exceptions import UserInputError, ServerError
 from retainsync.basecommand import Command
 from retainsync.util.ssh import SSHConnection, ssh_env
-from retainsync.io.program import NotMountedError
 from retainsync.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
 
 
@@ -36,7 +35,12 @@ class SyncCommand(Command):
         self.profile = self.select_profile(profile_input)
 
     def main(self) -> None:
-        """Run the command."""
+        """Run the command.
+
+        Raises:
+            UserInputError: The specified profile has already been initialized.
+            ServerError:    The connection to the remote directory was lost.
+        """
         self.profile.info_file.read()
 
         # Lock profile if not already locked.
@@ -45,7 +49,7 @@ class SyncCommand(Command):
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
             self.interrupt_msg()
-            sys.exit(1)
+            raise UserInputError
 
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
@@ -73,7 +77,8 @@ class SyncCommand(Command):
             shutil.copy(self.profile.ex_file.path, os.path.join(
                 dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
         except FileNotFoundError:
-            raise NotMountedError
+            raise ServerError(
+                "the connection to the remote directory was lost")
 
         # Expand globbing patterns.
         self.profile.ex_file.glob(local_dir.path)

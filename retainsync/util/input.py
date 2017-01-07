@@ -18,12 +18,13 @@ You should have received a copy of the GNU General Public License
 along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import argparse
 import sys
+import os
+import argparse
 import pkg_resources
 from textwrap import dedent
 
-from retainsync.util.misc import err
+from retainsync.exceptions import UserInputError
 
 
 def usage(command: str) -> None:
@@ -124,8 +125,7 @@ def usage(command: str) -> None:
 class CustomArgumentParser(argparse.ArgumentParser):
     """Set custom formatting of error messages for argparse."""
     def error(self, message) -> None:
-        err("Error:", message)
-        sys.exit(2)
+        raise UserInputError(message)
 
 
 class HelpAction(argparse.Action):
@@ -150,13 +150,26 @@ class VersionAction(argparse.Action):
         parser.exit()
 
 
+class QuietAction(argparse.Action):
+    """Handle the '--quiet' flag."""
+    def __init__(self, nargs=0, **kwargs) -> None:
+        super().__init__(nargs=nargs, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        sys.stdout = open(os.devnull, "a")
+
+
 def parse_args() -> dict:
-    """Create a global dictionary of parsed command-line arguments."""
+    """Create a dictionary of parsed command-line arguments.
+
+    Returns:
+        A dict of command-line argument names and their values.
+    """
 
     parser = CustomArgumentParser(add_help=False)
     parser.add_argument("--help", action=HelpAction)
     parser.add_argument("--version", action=VersionAction)
-    parser.add_argument("--quiet", "-q", action="store_true")
+    parser.add_argument("--quiet", "-q", action=QuietAction)
 
     subparsers = parser.add_subparsers(dest="command")
     subparsers.required = True

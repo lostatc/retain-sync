@@ -18,13 +18,13 @@ You should have received a copy of the GNU General Public License
 along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import sys
 import os
 import re
 import json
 from typing import List
 
-from retainsync.util.misc import err, env
+from retainsync.exceptions import FileParseError
+from retainsync.util.misc import env
 
 
 class ProgramDir:
@@ -70,16 +70,15 @@ class ConfigFile:
     def read(self) -> None:
         """Parse file for key-value pairs and save in a dictionary."""
         try:
-        with open(self.path) as file:
-            for line in file:
-                # Skip line if it is a comment.
-                if (not self.comment_reg.search(line)
-                        and re.search("=", line)):
-                    key, value = line.partition("=")[::2]
-                    self.raw_vals[key.strip()] = value.strip()
-        except IOError:
-            err("Error: could not open configuration file")
-            sys.exit(1)
+            with open(self.path) as file:
+                for line in file:
+                    # Skip line if it is a comment.
+                    if (not self.comment_reg.search(line)
+                            and re.search("=", line)):
+                        key, value = line.partition("=")[::2]
+                        self.raw_vals[key.strip()] = value.strip()
+        except OSError:
+            raise FileParseError("could not open the configuration file")
 
     def write(self, infile: str) -> None:
         """Generate a new config file based on the input file."""
@@ -104,9 +103,8 @@ class ConfigFile:
                                 pass
                         outfile.write(line)
 
-        except IOError:
-            err("Error: could not open configuration file")
-            sys.exit(1)
+        except OSError:
+            raise FileParseError("could not open the configuration file")
 
 
 class JSONFile:

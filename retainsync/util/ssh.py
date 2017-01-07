@@ -18,7 +18,6 @@ You should have received a copy of the GNU General Public License
 along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import sys
 import os
 import shlex
 import subprocess
@@ -27,7 +26,8 @@ import stat
 import tempfile
 from textwrap import indent
 
-from retainsync.util.misc import err, env, shell_cmd
+from retainsync.exceptions import ServerError
+from retainsync.util.misc import env, shell_cmd
 
 
 class SSHConnection:
@@ -53,7 +53,7 @@ class SSHConnection:
         runtime_dir = os.path.join(env("XDG_RUNTIME_DIR"), "retain-sync")
         os.makedirs(runtime_dir, exist_ok=True)
         self._ssh_args.extend(["-S", os.path.join(runtime_dir, "%C")])
-        ssh_cmd = shell_cmd(self._ssh_args + ["-NM"])
+        shell_cmd(self._ssh_args + ["-NM"])
 
     def disconnect(self) -> None:
         """Stop the ssh master connection."""
@@ -71,17 +71,27 @@ class SSHConnection:
                         parameters.
         Returns:
             A subprocess.Popen object for the command.
+
+        Raises:
+            ServerError:    The ssh connection timed out.
         """
         ssh_cmd = shell_cmd(self._ssh_args + ["--"] + remote_cmd)
         try:
             ssh_cmd.wait(timeout=20)
         except subprocess.TimeoutExpired:
-            err("Error: ssh connection timed out")
-            sys.exit(1)
+            raise ServerError("ssh connection timed out")
         return ssh_cmd
 
     def mount(self, mountpoint: str) -> None:
-        """Mount remote directory using sshfs."""
+        """Mount remote directory using sshfs.
+
+        Args:
+            mountpoint: The local sshfs mount point.
+
+        Raises:
+            ServerError:    The connection timed out or the mount otherwise
+                            failed.
+        """
         sshfs_args = [
             "sshfs", self._id_str + ":" + self._remote_dir, mountpoint]
         if self._port:
@@ -95,28 +105,36 @@ class SSHConnection:
         try:
             stdout, stderr = sshfs_cmd.communicate(timeout=20)
         except subprocess.TimeoutExpired:
-            err("Error: ssh connection timed out")
-            sys.exit(1)
+            raise ServerError("ssh connection timed out")
         if sshfs_cmd.returncode != 0:
-            err("Error: failed to mount remote directory over ssh")
             # Print the last three lines of stderr.
-            print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
-            sys.exit(1)
+            raise ServerError(
+                "failed to mount remote directory over ssh\n"
+                + indent("\n".join(stderr.splitlines()[-3:]), "    ")
+                )
 
     def unmount(self, mountpoint: str) -> None:
-        """Unmount remote directory."""
+        """Unmount remote directory.
+
+        Args:
+            mountpoint: The local sshfs mount point.
+
+        Raises:
+            ServerError:    The connection timed out or the unmount otherwise
+                            failed.
+        """
         if os.path.ismount(mountpoint):
             unmount_cmd = shell_cmd(["fusermount", "-u", mountpoint])
             try:
                 stdout, stderr = unmount_cmd.communicate(timeout=10)
             except subprocess.TimeoutExpired:
-                err("Error: timed out unmounting remote directory")
-                sys.exit(1)
+                raise ServerError("timed out unmounting remote directory")
             if unmount_cmd.returncode != 0:
-                err("Error: failed to unmount remote directory")
                 # Print the last three lines of stderr.
-                print(indent("\n".join(stderr.splitlines()[-3:]), "    "))
-                sys.exit(1)
+                raise ServerError(
+                    "failed to unmount remote directory\n"
+                    + indent("\n".join(stderr.splitlines()[-3:]), "    ")
+                    )
 
     def check_exists(self) -> bool:
         """Check if the remote directory exists."""

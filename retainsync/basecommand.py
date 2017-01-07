@@ -19,11 +19,11 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
-import sys
 import atexit
 from typing import Dict
 from textwrap import dedent
 
+from retainsync.exceptions import UserInputError, LockError
 from retainsync.io.program import ProgramDir
 from retainsync.io.profile import Profile
 from retainsync.util.misc import err
@@ -42,12 +42,25 @@ class Command:
 
     @property
     def profiles(self) -> Dict[str, Profile]:
+        """Create Profile instances for each of the user's profiles.
+
+        Returns:
+            A dict containing a Profile object for each profile.
+        """
         if not self._profiles:
             self._profiles = {name: Profile(name) for name in
                               ProgramDir.list_profiles()}
         return self._profiles
 
     def select_profile(self, input_str: str) -> Profile:
+        """Select the proper profile based on a name or local dir path.
+
+        Returns:
+            A Profile object for the selected profile.
+
+        Raises:
+            UserInputError: The input doesn't refer to any profile.
+        """
         # Check if input is the name of an existing profile.
         if input_str in self.profiles:
             return self.profiles[input_str]
@@ -60,13 +73,17 @@ class Command:
                 if os.path.samefile(
                         input_path, profile.cfg_file.vals["LocalDir"]):
                     return profile
-        err("Error: argument is not a profile name or initialized directory")
-        sys.exit(1)
+        raise UserInputError(
+            "argument is not a profile name or initialized directory")
 
     def lock(self) -> None:
         """Lock the profile if not already locked."""
         def unlock() -> None:
-            """Release the lock on the profile."""
+            """Release the lock on the profile.
+
+            Raises:
+                LockError:  The selected profile is already locked.
+            """
             self.profile.info_file.raw_vals["Locked"] = False
             if os.path.isfile(self.profile.info_file.path):
                 self.profile.info_file.write()
@@ -75,9 +92,9 @@ class Command:
             if os.path.isfile(self.profile.info_file.path):
                 self.profile.info_file.read()
             if self.profile.info_file.vals["Locked"] is True:
-                err("Error: another operation on this profile is already "
-                    "taking place")
-                sys.exit(1)
+                raise LockError(
+                    "another operation on this profile is already taking "
+                    "place")
             self.profile.info_file.raw_vals["Locked"] = True
             self.profile.info_file.write()
             atexit.register(unlock)

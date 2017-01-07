@@ -192,7 +192,7 @@ class SyncDir:
 
 class LocalSyncDir(SyncDir):
     """Perform operations on a local sync directory."""
-    def  __init__(self, path):
+    def __init__(self, path):
         super().__init__(path)
         os.makedirs(path, exist_ok=True)
 
@@ -252,6 +252,9 @@ class DestDBFile:
                         by a sync in seconds since the epoch.
             trash:      A boolean representing whether the file is considered
                         to be in the trash.
+
+        Raises:
+            FileExistsError:    The database file already exists.
         """
         if os.path.isfile(self.path):
             raise FileExistsError

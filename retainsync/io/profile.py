@@ -30,6 +30,7 @@ from textwrap import dedent
 from collections import defaultdict
 from typing import Dict, Any, Iterable, Set
 
+from retainsync.exceptions import FileParseError
 from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
 from retainsync.util.misc import err, env
 
@@ -234,6 +235,9 @@ class ProfileDBFile:
         Database Columns:
             path:       The relative path to the file.
             priority:   The priority value of the file.
+
+        Raises:
+            FileExistsError:    The database file already exists.
         """
         if os.path.isfile(self.path):
             raise FileExistsError
@@ -408,23 +412,23 @@ class ProfileConfigFile(ConfigFile):
             value:  The value of the config option to check.
 
         Returns:
-            An unformatted string corresponding to the syntax error (if any).
+            A string corresponding to the syntax error (if any).
         """
         # Check if required values are blank.
         if key in self.req_keys and not value:
-            return "Error: {} must not be blank"
+            return "must not be blank"
 
         # Check boolean values.
         if key in self.bool_keys and value:
             if value.lower() not in (self.true_vals + self.false_vals):
-                return "Error: {} must have a boolean value"
+                return "must have a boolean value"
 
         if key == "LocalDir":
             if not re.search("^~?/", value):
-                return "Error: {} must be an absolute path"
+                return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
             if os.path.commonpath([value, ProgramDir.path]) == value:
-                return "Error: {} must not contain retain-sync config files"
+                return "must not contain retain-sync config files"
             overlap_profiles = []
             for instance in self.instances:
                 # Check if value overlaps with the 'LocalDir' of another
@@ -442,26 +446,20 @@ class ProfileConfigFile(ConfigFile):
                 if common in [instance.vals["LocalDir"], value]:
                     overlap_profiles.append(name)
             if overlap_profiles:
-                if len(overlap_profiles) > 1:
-                    suffix = "s"
-                else:
-                    suffix = ""
                 # Print a comma-separated list of conflicting profile names
                 # after the error message.
-                return (
-                    "Error: {} "
-                    "overlaps with the profile{0} {1}".format(
-                        suffix,
-                        ", ".join("'{}'".format(x) for x in overlap_profiles)))
+                suffix = "s" if len(overlap_profiles) > 1 else ""
+                return ("overlaps with the profile{0} {1}".format(
+                    suffix,
+                    ", ".join("'{}'".format(x) for x in overlap_profiles)))
             elif os.path.exists(value):
                 if os.path.isdir(value):
                     if not os.access(value, os.W_OK):
-                        return ("Error: {} must be a directory with write "
-                                "access")
+                        return "must be a directory with write access"
                     elif self.add_remote and os.stat(value).st_size > 0:
-                        return "Error: {} must be an empty directory"
+                        return "must be an empty directory"
                 else:
-                    return "Error: {} must be a directory"
+                    return "must be a directory"
             else:
                 if self.add_remote:
                     check_path = value
@@ -470,61 +468,63 @@ class ProfileConfigFile(ConfigFile):
                             break
                         check_path = os.path.dirname(check_path)
                     else:
-                        return ("Error: {} must be a directory with write "
-                                "access")
+                        return "must be a directory with write access"
                 else:
-                    return "Error: {} must be an existing directory"
+                    return "must be an existing directory"
         elif key == "RemoteHost":
+            if not value:
+                return "must not be blank"
             if re.search("\s+", value):
-                return "Error: {} must not contain spaces"
+                return "must not contain spaces"
         elif key == "RemoteUser":
+            if not value:
+                return "must not be blank"
             if re.search("\s+", value):
-                return "Error: {} must not contain spaces"
+                return "must not contain spaces"
         elif key == "Port":
+            if not value:
+                return "must not be blank"
             if (not re.search("^[0-9]+$", value)
                     or int(value) < 1
                     or int(value) > 65535):
-                return "Error: {} must be an integer in the range 1-65535"
+                return "must be an integer in the range 1-65535"
         elif key == "RemoteDir":
             # In order to keep the interactive interface responsive, we don't
             # do any checking of the remote directory that requires connecting
             # over ssh.
             if not re.search("^~?/", value):
-                return "Error: {} must be an absolute path"
+                return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
             if self.raw_vals["RemoteHost"] in self.host_synonyms:
                 if os.path.exists(value):
                     if os.path.isdir(value):
                         if not os.access(value, os.W_OK):
-                            return ("Error: {} must be a directory with write "
-                                    "access")
+                            return "must be a directory with write access"
                         elif (self.add_remote is False
                                 and os.stat(value).st_size > 0):
-                            return "Error: {} must be an empty directory"
+                            return "must be an empty directory"
                     else:
-                        return "Error: {} must be a directory"
+                        return "must be a directory"
                 else:
                     if self.add_remote:
-                        return "Error: {} must be an existing directory"
+                        return "must be an existing directory"
                     else:
                         try:
                             os.makedirs(value)
                         except PermissionError:
-                            return ("Error: {} must be in a directory with "
-                                    "write access")
+                            return "must be in a directory with write access"
 
         elif key == "StorageLimit":
             if not re.search("^[0-9]+\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
-                return ("Error: {} must be an integer followed by a unit "
-                        "(e.g. 10GB)")
+                return "must be an integer followed by a unit (e.g. 10GB)"
         elif key == "SshfsOptions":
             if value:
                 if re.search("\s+", value):
-                    return "Error: {} must not contain spaces"
+                    return "must not contain spaces"
         elif key == "TrashDirs":
             if value:
                 if re.search("(^|:)(?!~?/)", value):
-                    return "Error: {} only accepts absolute paths"
+                    return "only accepts absolute paths"
 
     def check_all(self, check_empty=True, context="config file") -> None:
         """Check that file is valid and syntactically correct.
@@ -532,20 +532,23 @@ class ProfileConfigFile(ConfigFile):
         Args:
             check_empty:    Check empty/unset values.
             context:        The context to show in the error messages.
+
+        Raises:
+            FileParseError: There were missing, unrecognized or invalid options
+                            in the config file.
         """
-        errors = 0
+        errors = []
 
         # Check that all key names are valid.
         missing_keys = self.req_keys - self.raw_vals.keys()
         unrecognized_keys = self.raw_vals.keys() - self.all_keys
         if unrecognized_keys or missing_keys:
             for key in missing_keys:
-                err("Error: config file: missing required option '{}'".format(
-                    key))
-                errors += 1
+                errors.append(
+                    "{0}: missing required option '{1}'".format(context, key))
             for key in unrecognized_keys:
-                err("Error: config file: unrecognized option '{}'".format(key))
-                errors += 1
+                errors.append(
+                    "{0}: unrecognized option '{1}'".format(context, key))
 
         # Check values for valid syntax.
         check_vals = self.raw_vals.copy()
@@ -558,15 +561,14 @@ class ProfileConfigFile(ConfigFile):
             if check_empty or not check_empty and value:
                 err_msg = self._check_values(key, value)
                 if err_msg:
-                    err(err_msg.format("{0}: '{1}'".format(context, key)))
-                    errors += 1
+                    errors.append("{0}: '{1}' ".format(context, key) + err_msg)
 
-        if errors > 0:
-            sys.exit(1)
+        if errors:
+            raise FileParseError(*errors)
 
     @property
     def vals(self) -> Dict[str, Any]:
-        """Create a new dict with more computer-friendly config values."""
+        """Parse individual config values."""
         output = {}
         if self.raw_vals:
             # Set default values.
@@ -620,12 +622,9 @@ class ProfileConfigFile(ConfigFile):
         prompt_msg = {
             "LocalDir":     "Enter the local directory path: ",
             "RemoteHost":   ("Enter the hostname, IP address or domain name "
-                             "of the remote ({}): ".format(
-                                self.subs["RemoteHost"])),
-            "RemoteUser":   ("Enter your user name on the server "
-                             "({}): ".format(self.subs["RemoteUser"])),
-            "Port":         ("Enter the port number for the connection "
-                             "({}): ".format(self.subs["Port"])),
+                             "of the remote: "),
+            "RemoteUser":   "Enter your user name on the server: ",
+            "Port":         "Enter the port number for the connection: ",
             "RemoteDir":    "Enter the remote directory path: ",
             "StorageLimit": ("Enter the amount of data to keep synced "
                              "locally: ")
@@ -633,6 +632,16 @@ class ProfileConfigFile(ConfigFile):
 
         prompt_keys = self.req_keys.copy()
         for key in prompt_keys:
+            # Add default value to the end of the prompt message, before the
+            # colon.
+            if key in self.subs:
+                insert_pos = prompt_msg[key].rfind(":")
+                prompt_msg[key] = (
+                    prompt_msg[key][:insert_pos]
+                    + " ({})".format(self.subs[key])
+                    + prompt_msg[key][insert_pos:]
+                    )
+
             # We don't use a defaultdict for this so that we can know if a
             # config file has been read based on whether raw_vals is empty.
             if not self.raw_vals.get(key, None):
@@ -642,7 +651,7 @@ class ProfileConfigFile(ConfigFile):
                         usr_input = self.subs[key]
                     err_msg = self._check_values(key, usr_input)
                     if err_msg:
-                        err(err_msg.format("this value"))
+                        err("Error: this value " + err_msg)
                     else:
                         break
                 if key == "RemoteHost" and usr_input in self.host_synonyms:

@@ -22,7 +22,8 @@ import sys
 import tempfile
 from textwrap import indent
 
-from retainsync.util.misc import err, progress_bar, shell_cmd
+from retainsync.exceptions import FileTransferError
+from retainsync.util.misc import progress_bar, shell_cmd
 
 
 def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
@@ -66,10 +67,11 @@ def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
 
     stdout, stderr = cmd.communicate()
     if cmd.returncode != 0:
-        err("Error: the file transfer failed to complete")
         # Print the last five lines of rsync's stderr.
-        print(indent("\n".join(stderr.splitlines()[-5:]), "    "))
-        sys.exit(1)
+        raise FileTransferError(
+            "the file transfer failed to complete\n"
+            + indent("\n".join(stderr.splitlines()[-5:]), "    ")
+            )
 
     if exclude:
         ex_file.close()
