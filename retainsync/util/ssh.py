@@ -167,9 +167,10 @@ class SSHConnection:
         return not bool(cmd.returncode)
 
 
-def ssh_env(self) -> bool:
+def ssh_env() -> bool:
     """Guess environment variables for ssh-agent."""
     if not os.environ["SSH_AUTH_SOCK"]:
+        # Search for ssh-agent socket in it's default location.
         for entry in os.scandir(tempfile.gettempdir()):
             if (re.search("^ssh-", entry.name)
                     and entry.is_dir

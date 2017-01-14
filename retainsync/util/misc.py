@@ -26,6 +26,7 @@ import shutil
 import readline
 import pwd
 import hashlib
+import datetime
 from collections import defaultdict
 from types import FunctionType
 
@@ -134,3 +135,20 @@ def md5sum(path) -> str:
         for chunk in iter(lambda: file.read(4096), b""):
             md5_hash.update(chunk)
     return md5_hash.hexdigest()
+
+
+def timestamp_path(path: str, keyword="") -> str:
+    """Return a timestamped version of a file path.
+
+    Args:
+        path:       The file path on which to base the new file path.
+        keyword:    A string to include in the new file path before the
+                    timestamp.
+    """
+    keyword += "-" if keyword else keyword
+    return (
+        os.path.splitext(path)[0]
+        + "_"
+        + keyword
+        + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        + os.path.splitext(path)[1])

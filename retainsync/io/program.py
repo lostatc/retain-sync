@@ -84,24 +84,23 @@ class ConfigFile:
         """Generate a new config file based on the input file."""
 
         try:
-            with open(infile) as infile:
-                with open(self.path, "w") as outfile:
-                    for line in infile:
-                        # Skip line if it is a comment.
-                        if (not self.comment_reg.search(line)
-                                and re.search("=", line)):
-                            key, value = line.partition("=")[::2]
-                            key = key.strip()
-                            value = value.strip()
-                            if key not in self.all_keys:
-                                continue
-                            try:
-                                # Substitute value in the input file with the
-                                # value in self.raw_vals.
-                                line = key + "=" + self.raw_vals[key] + "\n"
-                            except KeyError:
-                                pass
-                        outfile.write(line)
+            with open(infile) as infile, open(self.path, "w") as outfile:
+                for line in infile:
+                    # Skip line if it is a comment.
+                    if (not self.comment_reg.search(line)
+                            and re.search("=", line)):
+                        key, value = line.partition("=")[::2]
+                        key = key.strip()
+                        value = value.strip()
+                        if key not in self.all_keys:
+                            continue
+                        try:
+                            # Substitute value in the input file with the
+                            # value in self.raw_vals.
+                            line = key + "=" + self.raw_vals[key] + "\n"
+                        except KeyError:
+                            pass
+                    outfile.write(line)
 
         except OSError:
             raise FileParseError("could not open the configuration file")

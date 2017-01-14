@@ -20,19 +20,31 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import shutil
-import datetime
+import atexit
+from typing import Iterable, Tuple, Set
 
 from retainsync.exceptions import UserInputError, ServerError
 from retainsync.basecommand import Command
 from retainsync.util.ssh import SSHConnection, ssh_env
+from retainsync.util.misc import err, timestamp_path
 from retainsync.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
 
 
 class SyncCommand(Command):
-    """Redistribute files between the local and remote directories."""
-    def __init__(self, profile_input: str) -> None:
+    """Redistribute files between the local and remote directories.
+
+    Attributes:
+        local_dir:  A LocalSyncDir object representing the local directory.
+        dest_dir:   A DestSyncDir object representing the destination
+                    directory.
+        ssh_conn:   An SSHConnection object representing the ssh connection.
+    """
+    def __init__(self, profile_in: str) -> None:
         super().__init__()
-        self.profile = self.select_profile(profile_input)
+        self.profile = self.select_profile(profile_in)
+        self.local_dir = None
+        self.dest_dir = None
+        self.ssh_conn = None
 
     def main(self) -> None:
         """Run the command.
@@ -48,92 +60,126 @@ class SyncCommand(Command):
 
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
-            self.interrupt_msg()
-            raise UserInputError
+            atexit.register(err, self.interrupt_msg)
+            raise UserInputError("invalid profile")
 
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
 
-        local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
+        self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
         if self.profile.cfg_file.vals["RemoteHost"]:
-            dest_dir = DestSyncDir(self.profile.mnt_dir)
+            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
             ssh_env()
-            ssh_conn = SSHConnection(
+            self.ssh_conn = SSHConnection(
                 self.profile.cfg_file.vals["RemoteHost"],
                 self.profile.cfg_file.vals["RemoteDir"],
                 self.profile.cfg_file.vals["SshfsOptions"],
                 self.profile.cfg_file.vals["RemoteUser"],
                 self.profile.cfg_file.vals["Port"])
-            if not os.isdir(dest_dir.path):
+            if not os.path.isdir(self.dest_dir.path):
                 # Unmount if mountpoint is broken.
-                ssh_conn.unmount(dest_dir.path)
-            if not os.ismount(dest_dir.path):
-                ssh_conn.mount(dest_dir.path)
+                self.ssh_conn.unmount(self.dest_dir.path)
+            if not os.path.ismount(self.dest_dir.path):
+                self.ssh_conn.mount(self.dest_dir.path)
         else:
-            dest_dir = DestSyncDir(self.profile.cfg_file.vals["RemoteDir"])
+            self.dest_dir = DestSyncDir(
+                self.profile.cfg_file.vals["RemoteDir"])
 
         # Copy exclude pattern file to the remote.
         try:
             shutil.copy(self.profile.ex_file.path, os.path.join(
-                dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
+                self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
         # Expand globbing patterns.
-        self.profile.ex_file.glob(local_dir.path)
+        self.profile.ex_file.glob(self.local_dir.path)
 
         # Begin syncing local and remote directories.
-        local_files = set(local_dir.list_files(rel=True, symlinks=True))
-        remote_files = set(dest_dir.list_files(rel=True))
+        (local_del_files, remote_del_files,
+            remote_trash_files) = self._sync_deletions()
+        self._rm_local_files(local_del_files)
+        self._rm_remote_files(remote_del_files)
+        self._trash_files(remote_trash_files)
+
+    def _sync_deletions(self) -> Tuple[Set[str]]:
+        """Compute file paths to sync deletions across the two directories.
+
+        Returns:
+            A tuple containing three sets of relative file paths. The first is
+            local files to be deleted, the second is remote files to be deleted
+            and the third is remote files to be marked for deletion.
+        """
+        local_files = set(self.local_dir.list_files(rel=True, symlinks=True))
+        remote_files = set(self.dest_dir.list_files(rel=True))
         known_files = set(self.profile.db_file.prioritize())
 
         local_del_files = known_files - remote_files
         remote_del_files = known_files - local_files
-
-        # Delete files in the local directory that were deleted in the remote
-        # directory since the last sync.
-        for rel_path in local_del_files:
-            full_path = os.path.join(local_dir.path, rel_path)
-            os.remove(full_path)
-            # If the file was the only file in its directory, delete the
-            # directory.
-            if os.path.dirname(full_path) != local_dir.path:
-                try:
-                    os.rmdir(os.path.dirname(full_path))
-                except OSError:
-                    pass
-        self.profile.db_file.rm_files(list(local_del_files))
-
-        # Delete or trash files in the remote directory that were deleted in
-        # the local directory since the last sync.
         if not self.profile.cfg_file.vals["DeleteAlways"]:
             trash_dir = TrashDir(self.profile.cfg_file.vals["TrashDirs"])
-        trashed_files = []
-        for rel_path in remote_del_files:
-            full_path = os.path.join(dest_dir.safe_path, rel_path)
-            if not self.profile.cfg_file.vals["DeleteAlways"]:
-                if trash_dir.check_file(full_path):
-                    # The file is in the trash. Delete the corresponding file
-                    # in the remote directory.
-                    os.remove(full_path)
-                    if os.path.dirname(full_path) != dest_dir.path:
-                        try:
-                            os.rmdir(os.path.dirname(full_path))
-                        except OSError:
-                            pass
-                else:
-                    # The file is not in the trash. Mark the corresponding file
-                    # in the remote directory for deletion.
-                    new_rel_path = (
-                        os.path.splitext(rel_path)[0]
-                        + datetime.datetime.now().strftime(
-                            "_deleted-%Y%m%d-%H%M%S")
-                        + os.path.splitext(rel_path)[1])
-                    trashed_files.append(new_rel_path)
-                    new_full_path = os.path.join(
-                        dest_dir.safe_path, new_rel_path)
-                    shutil.move(full_path, new_full_path)
-        self.profile.db_file.rm_files(list(remote_del_files))
-        dest_dir.db_file.rm_files(list(remote_del_files))
-        dest_dir.db_file.add_files(trashed_files, deleted=True)
+        remote_trash_files = {
+            path for path in remote_del_files
+            if self.profile.cfg_file.vals["DeleteAlways"]
+            or not trash_dir.check_file(os.path.join(
+                self.dest_dir.safe_path, path))}
+        remote_del_files -= remote_trash_files
+
+        return local_del_files, remote_del_files, remote_trash_files
+
+    def _rm_local_files(self, paths: Iterable[str]) -> None:
+        """Delete local files and remove them from both databases.
+
+        Args:
+            paths:  The relative paths of files to remove.
+        """
+        full_paths = [
+            os.path.join(self.local_dir.path, path) for path in paths]
+        for path in full_paths:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                # This could happen in a situation where the program was
+                # interrupted before the database could be updated.
+                pass
+        # If a deletion from another client was already synced to the server,
+        # then that file path will have already been removed from the remote
+        # database.
+        self.profile.db_file.rm_files(paths)
+
+    def _rm_remote_files(self, paths: Iterable[str]) -> None:
+        """Delete remote files and remove them from the local database.
+
+        Args:
+            paths:  The relative paths of files to remove.
+        """
+        full_paths = [
+            os.path.join(self.dest_dir.safe_path, path) for path in paths]
+        for path in full_paths:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                # This could happen in a situation where the program was
+                # interrupted before the database could be updated.
+                pass
+        self.profile.db_file.rm_files(paths)
+        self.dest_dir.db_file.rm_files(paths)
+
+    def _trash_files(self, paths: Iterable[str]) -> None:
+        """Mark files in the remote directory for deletion.
+
+        Args:
+            paths:  The relative paths of files to mark for deletion.
+        """
+        new_paths = [
+            timestamp_path(path, keyword="deleted") for path in paths]
+        full_paths = [
+            os.path.join(self.dest_dir.safe_path, path) for path in paths]
+        new_full_paths = [
+            os.path.join(self.dest_dir.safe_path, path) for path in new_paths]
+        for pair in zip(full_paths, new_full_paths):
+            os.rename(pair[0], pair[1])
+        self.profile.db_file.rm_files(paths)
+        self.dest_dir.db_file.rm_files(paths)
+        self.dest_dir.db_file.add_files(new_paths, deleted=True)

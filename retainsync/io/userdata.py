@@ -30,7 +30,7 @@ class TrashDir:
     """Get information about the user's local trash directory.
 
     Attributes:
-        path:   The paths to the trash directories.
+        paths:  The paths to the trash directories.
         sizes:  A list of tuples containing the paths and sizes of every file
                 in the trash.
     """
@@ -43,7 +43,7 @@ class TrashDir:
         """Get the sizes of every file in the trash directory.
 
         Returns:
-            A list of file sizes in bytes.
+            A list of file paths and sizes in bytes.
         """
         if not self._sizes:
             output = []
@@ -56,12 +56,12 @@ class TrashDir:
             self._sizes = output
         return self._sizes
 
-    def check_file(self, path) -> bool:
+    def check_file(self, path: str) -> bool:
         """Check if a file is in the trash by comparing sizes and checksums."""
         overlap_files = [item[0] for item in self.sizes if
                          os.stat(path).st_size == item[1]]
         if overlap_files:
-            overlap_sums = [md5sum(path) for path in overlap_files]
+            overlap_sums = [md5sum(item) for item in overlap_files]
             if md5sum(path) in overlap_sums:
                 return True
         return False
@@ -205,7 +205,7 @@ class DestSyncDir(SyncDir):
         safe_path:  Defined relative to prgm_dir in order to prevent access
                     when prgm_dir is missing.
         ex_dir:     Contains copies of each client's exclude pattern file.
-        db_file:    Contains a list of deleted files in the remote.
+        db_file:    Contains information on files in the remote.
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)

@@ -33,26 +33,32 @@ from retainsync.io.profile import Profile, ProfileConfigFile
 from retainsync.io.userdata import LocalSyncDir, DestSyncDir
 from retainsync.io.transfer import rsync_cmd
 from retainsync.util.ssh import SSHConnection
+from retainsync.util.misc import err
 
 
 class InitializeCommand(Command):
-    """Create a new profile for a pair of directories to sync."""
-    def __init__(self, profile_input: str, exclude=None, template=None,
+    """Create a new profile for a pair of directories to sync.
+
+    Attributes:
+        profile_in: A string representing the selected profile.
+        exclude:    The path to a file containing exclude patterns.
+        template:   The path to a template configuration file.
+        add_remote: Start with a set of existing remote files.
+        local_dir:  A LocalSyncDir object representing the local directory.
+        dest_dir:   A DestSyncDir object representing the destination
+                    directory.
+        ssh_conn:   An SSHConnection object representing the ssh connection.
+    """
+    def __init__(self, profile_in: str, exclude=None, template=None,
                  add_remote=False) -> None:
-        """
-        Args:
-            profile_input:  A string representing the selected profile.
-            profile:        A Profile object for the selected profile.
-            exclude:        The path to a file containing exclude patterns.
-            template:       The path to a template configuration file.
-            add_remote:     Start with a set of existing remote files.
-        """
         super().__init__()
-        self.profile_input = profile_input
-        self.profile = None
+        self.profile_in = profile_in
         self.exclude = exclude
         self.template = template
         self.add_remote = add_remote
+        self.local_dir = None
+        self.dest_dir = None
+        self.ssh_conn = None
 
     def main(self) -> None:
         """Run the command.
@@ -80,9 +86,9 @@ class InitializeCommand(Command):
                 pass
 
         # Check that value of profile name is valid.
-        if re.search(r"\s+", self.profile_input):
+        if re.search(r"\s+", self.profile_in):
             raise UserInputError("profile name must not contain spaces")
-        elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_input):
+        elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_in):
             raise UserInputError(
                 "profile name must not contain special symbols")
 
@@ -96,7 +102,7 @@ class InitializeCommand(Command):
                 raise UserInputError(
                     "argument for '--template' is not a valid file")
 
-        self.profile = Profile(self.profile_input)
+        self.profile = Profile(self.profile_in)
         atexit.register(cleanup_profile)
         if os.path.isfile(self.profile.info_file.path):
             self.profile.info_file.read()
@@ -112,7 +118,7 @@ class InitializeCommand(Command):
         if self.profile.info_file.vals["Status"] == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
-            atexit.register(self.interrupt_msg)
+            atexit.register(err, self.interrupt_msg)
 
             self.profile.cfg_file.read()
             self.profile.cfg_file.check_all()
@@ -122,21 +128,23 @@ class InitializeCommand(Command):
             self.add_remote = (
                 self.profile.info_file.vals["InitOpts"]["add_remote"])
 
-            local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
+            self.local_dir = LocalSyncDir(
+                self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
-                dest_dir = DestSyncDir(self.profile.mnt_dir)
-                ssh_conn = SSHConnection(
+                self.dest_dir = DestSyncDir(self.profile.mnt_dir)
+                self.ssh_conn = SSHConnection(
                     self.profile.cfg_file.vals["RemoteHost"],
                     self.profile.cfg_file.vals["RemoteDir"],
                     self.profile.cfg_file.vals["SshfsOptions"],
                     self.profile.cfg_file.vals["RemoteUser"],
                     self.profile.cfg_file.vals["Port"])
                 if not self.add_remote:
-                    if not ssh_conn.mkdir():
+                    if not self.ssh_conn.mkdir():
                         raise ServerError(
                             "failed creating the remote directory")
             else:
-                dest_dir = DestSyncDir(self.profile.cfg_file.vals["RemoteDir"])
+                self.dest_dir = DestSyncDir(
+                    self.profile.cfg_file.vals["RemoteDir"])
         else:
             # Start a new initialization.
             atexit.register(delete_profile)
@@ -156,7 +164,7 @@ class InitializeCommand(Command):
             # This final check is necessary for cases where a template was used
             # that contained values dependent on other unspecified values for
             # validity checking (e.g. 'RemoteDir' and 'RemoteHost').
-            self.profile.cfg_file.check_all()
+            self.profile.cfg_file.check_all(context="template file")
 
             # Write config values to file.
             if self.template:
@@ -167,23 +175,24 @@ class InitializeCommand(Command):
                 self.profile.cfg_file.write(os.path.join(
                     sys.prefix, "share/retain-sync/config-template"))
 
-            local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
+            self.local_dir = LocalSyncDir(
+                self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
-                dest_dir = DestSyncDir(self.profile.mnt_dir)
-                ssh_conn = SSHConnection(
+                self.dest_dir = DestSyncDir(self.profile.mnt_dir)
+                self.ssh_conn = SSHConnection(
                     self.profile.cfg_file.vals["RemoteHost"],
                     self.profile.cfg_file.vals["RemoteDir"],
                     self.profile.cfg_file.vals["SshfsOptions"],
                     self.profile.cfg_file.vals["RemoteUser"],
                     self.profile.cfg_file.vals["Port"])
-                ssh_conn.connect()
-                if ssh_conn.check_exists():
-                    if ssh_conn.check_isdir():
-                        if not ssh_conn.check_iswritable():
+                self.ssh_conn.connect()
+                if self.ssh_conn.check_exists():
+                    if self.ssh_conn.check_isdir():
+                        if not self.ssh_conn.check_iswritable():
                             raise UserInputError(
                                 "remote directory must be writable")
                         elif (not self.add_remote
-                                and not ssh_conn.check_isempty()):
+                                and not self.ssh_conn.check_isempty()):
                             raise UserInputError(
                                 "remote directory must be empty")
                     else:
@@ -193,11 +202,12 @@ class InitializeCommand(Command):
                     if self.add_remote:
                         raise UserInputError(
                             "remote directory must be an existing directory")
-                    elif not ssh_conn.mkdir():
+                    elif not self.ssh_conn.mkdir():
                         raise UserInputError(
                             "remote directory must be writable")
             else:
-                dest_dir = DestSyncDir(self.profile.cfg_file.vals["RemoteDir"])
+                self.dest_dir = DestSyncDir(
+                    self.profile.cfg_file.vals["RemoteDir"])
 
             # Generate the exclude pattern file.
             self.profile.ex_file.generate(self.exclude)
@@ -206,44 +216,62 @@ class InitializeCommand(Command):
             # interrupted from this point, it can be resumed.
             self.profile.info_file.generate(
                 self.profile.name, add_remote=self.add_remote)
-            atexit.register(self.interrupt_msg)
+            atexit.register(err, self.interrupt_msg)
             atexit.unregister(delete_profile)
 
-        if self.profile.cfg_file.vals["RemoteHost"]:
-            atexit.register(ssh_conn.unmount, dest_dir.path)
-            ssh_conn.mount(dest_dir.path)
+        self._setup_remote()
 
-        os.makedirs(dest_dir.ex_dir, exist_ok=True)
-        user_symlinks = set(local_dir.list_files(
+        # The profile is now fully initialized. Update the info file.
+        if self.profile.cfg_file.vals["RemoteHost"]:
+            atexit.unregister(self.ssh_conn.unmount)
+        self.profile.info_file.raw_vals["Status"] = "initialized"
+        self.profile.info_file.update_synctime()
+        self.profile.info_file.write()
+        atexit.unregister(err)
+
+        # Advise user to start/enable the daemon.
+        print(dedent("""
+            Run 'systemctl --user start retain-sync@{0}.service' to start the daemon.
+            Run 'systemctl --user enable retain-sync@{0}.service' to start the daemon
+            automatically on login.""".format(self.profile.name)))
+
+    def _setup_remote(self):
+        """Set up the remote directory and transfer files."""
+        if self.profile.cfg_file.vals["RemoteHost"]:
+            atexit.register(self.ssh_conn.unmount, self.dest_dir.path)
+            self.ssh_conn.mount(self.dest_dir.path)
+
+        os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
+        user_symlinks = set(self.local_dir.list_files(
             rel=True, files=False, symlinks=True))
 
         if self.add_remote:
             try:
                 # Expand exclude globbing patterns.
-                self.profile.ex_file.glob(dest_dir.safe_path)
+                self.profile.ex_file.glob(self.dest_dir.safe_path)
             except FileNotFoundError:
                 raise ServerError(
                     "the connection to the remote directory was lost")
 
             # Check that there is enough local space to accomodate remote
             # files.
-            if dest_dir.total_size() > local_dir.space_avail():
+            if self.dest_dir.total_size() > self.local_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough local space to accomodate remote files")
         else:
             # Expand exclude globbing patterns.
-            self.profile.ex_file.glob(local_dir.path)
+            self.profile.ex_file.glob(self.local_dir.path)
 
             # Check that there is enough remote space to accomodate local
             # files.
-            if local_dir.total_size() > dest_dir.space_avail():
+            if self.local_dir.total_size() > self.dest_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough space in remote to accomodate local files")
 
             # Copy local files to the server.
             try:
                 rsync_cmd(
-                    ["-asHAXS", local_dir.tpath, dest_dir.safe_path],
+                    ["-asHAXS", self.local_dir.tpath, self.dest_dir.safe_path],
                     exclude=self.profile.ex_file.rel_files | user_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
@@ -252,9 +280,9 @@ class InitializeCommand(Command):
 
         # Overwrite local files with symlinks to the corresponding files in the
         # remote dir.
-        dest_dir.symlink_tree(local_dir.path, overwrite=True)
+        self.dest_dir.symlink_tree(self.local_dir.path, overwrite=True)
 
-        remote_files = list(dest_dir.list_files(rel=True))
+        remote_files = set(self.dest_dir.list_files(rel=True))
 
         # Generate the local file priority database.
         if not os.path.isfile(self.profile.db_file.path):
@@ -263,9 +291,9 @@ class InitializeCommand(Command):
 
         # Generate the remote file priority database.
         try:
-            if not os.path.isfile(dest_dir.db_file.path):
-                dest_dir.db_file.create()
-            dest_dir.db_file.add_files(remote_files)
+            if not os.path.isfile(self.dest_dir.db_file.path):
+                self.dest_dir.db_file.create()
+            self.dest_dir.db_file.add_files(remote_files)
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")
@@ -274,20 +302,7 @@ class InitializeCommand(Command):
         # is shared.
         try:
             shutil.copy(self.profile.ex_file.path, os.path.join(
-                dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
+                self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
-
-        # The profile is now fully initialized. Update the info file.
-        self.profile.info_file.raw_vals["Status"] = "initialized"
-        self.profile.info_file.update_synctime()
-        self.profile.info_file.write()
-        atexit.unregister(ssh_conn.unmount, dest_dir.path)
-        atexit.unregister(self.interrupt_msg)
-
-        # Advise user to start/enable the daemon.
-        print(dedent("""
-            Run 'systemctl --user start retain-sync@{0}.service' to start the daemon.
-            Run 'systemctl --user enable retain-sync@{0}.service' to start the daemon
-            automatically on login.""".format(self.profile.name)))

@@ -32,7 +32,8 @@ def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
     Args:
         files:      A list of relative file paths to sync.
         exclude:    A list of relative file paths to exclude from syncing.
-        msg:        A message to display opposite the progress bar.
+        msg:        A message to display opposite the progress bar. If empty,
+                    the bar won't appear.
     """
     cmd_args = ["rsync", "--info=progress2"]
 
@@ -51,8 +52,8 @@ def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
 
     cmd = shell_cmd(cmd_args + add_args)
 
-    # Print status bar if stdout is a tty.
-    if sys.stdout.isatty():
+    if msg and sys.stdout.isatty():
+        # Print status bar.
         rsync_bar = progress_bar(0.35, msg)
         for line in cmd.stdout:
             if not line.strip():

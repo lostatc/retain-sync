@@ -357,6 +357,8 @@ class ProfileConfigFile(ConfigFile):
                         keys.
         subs:           A dictionary of default values for required config
                         keys.
+        prompt_msgs:    The messages to use when prompting the user for
+                        required config values.
         path:           The path to the configuration file.
         profile:        The Profile object that the config file belongs to.
         add_remote:     Flip-flop the requirements of 'LocalDir' and
@@ -396,6 +398,17 @@ class ProfileConfigFile(ConfigFile):
         "RemoteHost":   host_synonyms[0],
         "RemoteUser":   env("USER"),
         "Port":         "22"
+        }
+
+    prompt_msgs = {
+        "LocalDir":     "Enter the local directory path: ",
+        "RemoteHost":   ("Enter the hostname, IP address or domain name "
+                         "of the remote: "),
+        "RemoteUser":   "Enter your user name on the server: ",
+        "Port":         "Enter the port number for the connection: ",
+        "RemoteDir":    "Enter the remote directory path: ",
+        "StorageLimit": ("Enter the amount of data to keep synced "
+                         "locally: ")
         }
 
     def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
@@ -618,35 +631,23 @@ class ProfileConfigFile(ConfigFile):
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
-
-        prompt_msg = {
-            "LocalDir":     "Enter the local directory path: ",
-            "RemoteHost":   ("Enter the hostname, IP address or domain name "
-                             "of the remote: "),
-            "RemoteUser":   "Enter your user name on the server: ",
-            "Port":         "Enter the port number for the connection: ",
-            "RemoteDir":    "Enter the remote directory path: ",
-            "StorageLimit": ("Enter the amount of data to keep synced "
-                             "locally: ")
-            }
-
         prompt_keys = self.req_keys.copy()
         for key in prompt_keys:
             # Add default value to the end of the prompt message, before the
             # colon.
             if key in self.subs:
-                insert_pos = prompt_msg[key].rfind(":")
-                prompt_msg[key] = (
-                    prompt_msg[key][:insert_pos]
+                insert_pos = self.prompt_msgs[key].rfind(":")
+                self.prompt_msgs[key] = (
+                    self.prompt_msgs[key][:insert_pos]
                     + " ({})".format(self.subs[key])
-                    + prompt_msg[key][insert_pos:]
+                    + self.prompt_msgs[key][insert_pos:]
                     )
 
             # We don't use a defaultdict for this so that we can know if a
             # config file has been read based on whether raw_vals is empty.
             if not self.raw_vals.get(key, None):
                 while True:
-                    usr_input = input(prompt_msg[key]).strip()
+                    usr_input = input(self.prompt_msgs[key]).strip()
                     if not usr_input and key in self.subs:
                         usr_input = self.subs[key]
                     err_msg = self._check_values(key, usr_input)

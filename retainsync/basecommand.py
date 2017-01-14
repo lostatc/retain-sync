@@ -33,9 +33,16 @@ class Command:
     """Base class for program commands.
 
     Attributes:
-        profiles:   A dictionary of Profile instances.
-        profile:    The currently selected profile.
+        interrupt_msg:  A message warning the user if the profile was only
+                        partially initialized.
+        profiles:       A dictionary of Profile instances.
+        profile:        The currently selected profile.
     """
+    interrupt_msg = dedent("""
+        Initialization was interrupted.
+        Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
+        cancel it.""")
+
     def __init__(self) -> None:
         self._profiles = {}
         self.profile = None
@@ -98,10 +105,3 @@ class Command:
             self.profile.info_file.raw_vals["Locked"] = True
             self.profile.info_file.write()
             atexit.register(unlock)
-
-    def interrupt_msg(sefl) -> None:
-        """Warn user that initialization was interrupted."""
-        err(dedent("""
-            Initialization was interrupted.
-            Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
-            cancel it."""))
