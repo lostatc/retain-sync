@@ -1,6 +1,6 @@
 """A class for the 'sync' command.
 
-Copyright © 2016 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
 
@@ -96,7 +96,7 @@ class SyncCommand(Command):
         # Expand globbing patterns.
         self.profile.ex_file.glob(self.local_dir.path)
 
-        # Begin syncing local and remote directories.
+        # Sync deletions between the local and remote directories.
         (local_del_files, remote_del_files,
             remote_trash_files) = self._sync_deletions()
         self._rm_local_files(local_del_files)

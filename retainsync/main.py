@@ -1,6 +1,6 @@
 """The main module for the client.
 
-Copyright © 2016 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
 
@@ -22,7 +22,6 @@ import signal
 from typing import Union
 
 from retainsync.exceptions import ProgramError
-from retainsync.basecommand import Command
 from retainsync.commands.initialize import InitializeCommand
 from retainsync.commands.sync import SyncCommand
 from retainsync.util.input import parse_args
@@ -55,8 +54,7 @@ def def_command(cmd_args: dict) -> CommandInstance:
     if cmd_args["command"] == "initialize":
         return InitializeCommand(
             cmd_args["profile"], cmd_args["exclude"], cmd_args["template"],
-            cmd_args["add_remote"]
-            )
+            cmd_args["add_remote"])
     elif cmd_args["command"] == "sync":
         return SyncCommand(cmd_args["profile"])
     elif cmd_args["command"] == "reset":

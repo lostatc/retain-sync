@@ -1,6 +1,6 @@
 """Define base class for program commands.
 
-Copyright © 2016 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
 

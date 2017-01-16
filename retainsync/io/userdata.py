@@ -1,6 +1,6 @@
 """Perform operations on the user's files and directories.
 
-Copyright © 2016 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
 
@@ -79,8 +79,32 @@ class SyncDir:
         self.path = path.rstrip("/")
         self.tpath = os.path.join(path, "")
 
+    def _list_entries(self, rel=False, files=True, symlinks=False, dirs=False,
+                      exclude=None):
+        """Yield a DirEntry object for each file meeting certain criteria."""
+        if exclude is None:
+            exclude = set()
+        else:
+            exclude = set(exclude)
+
+        for entry in rec_scan(self.path):
+            if entry.is_file(follow_symlinks=False) and files is False:
+                continue
+            elif entry.is_dir(follow_symlinks=False) and dirs is False:
+                continue
+            elif entry.is_symlink() and symlinks is False:
+                continue
+            else:
+                common = {
+                    os.path.commonpath([path, entry.path]) for path in exclude}
+                if common & exclude:
+                    # File is excluded or is in an excluded directory.
+                    continue
+                else:
+                    yield entry
+
     def list_files(self, rel=False, files=True, symlinks=False,
-                   dirs=False) -> str:
+                   dirs=False, exclude=None) -> str:
         """Get the paths of files in the directory.
 
         Args:
@@ -88,25 +112,21 @@ class SyncDir:
             files:      Include regular files.
             symlinks:   Include symbolic links.
             dirs:       Include directories.
+            exclude:    A list of absolute paths of files to not include.
 
         Yields:
-            A file path for each file in the directory.
+            A file path for each file in the directory that meets the criteria.
         """
-        for entry in rec_scan(self.path):
-            if entry.is_file(follow_symlinks=False) and files is False:
-                continue
-            elif entry.is_dir(follow_symlinks=False) and dirs is False:
-                continue
-            elif entry.is_symlink() and symlinks is False:
-                continue
+        for entry in self._list_entries(
+                rel=rel, files=files, symlinks=symlinks, dirs=dirs,
+                exclude=exclude):
+            if rel:
+                yield os.path.relpath(entry.path, self.path)
             else:
-                if rel:
-                    yield os.path.relpath(entry.path, self.path)
-                else:
-                    yield entry.path
+                yield entry.path
 
     def list_mtimes(self, rel=False, files=True, symlinks=False,
-                    dirs=False) -> Tuple[str, float]:
+                    dirs=False, exclude=None) -> Tuple[str, float]:
         """Get the paths and mtimes of files in the directory.
 
         Args:
@@ -114,23 +134,20 @@ class SyncDir:
             files:      Include regular files.
             symlinks:   Include symbolic links.
             dirs:       Include directories.
+            exclude:    A list of absolute paths of files to not include.
 
         Yields:
-            A file path and an mtime for each file in the directory.
+            A file path and mtime for each file in the directory that meets the
+            criteria.
         """
-        for entry in rec_scan(self.path):
-            if entry.is_file(follow_symlinks=False) and files is False:
-                continue
-            elif entry.is_dir(follow_symlinks=False) and dirs is False:
-                continue
-            elif entry.is_symlink() and symlinks is False:
-                continue
+        for entry in self._list_entries(
+                rel=rel, files=files, symlinks=symlinks, dirs=dirs,
+                exclude=exclude):
+            mtime = entry.stat(follow_symlinks=False).st_mtime
+            if rel:
+                yield os.path.relpath(entry.path, self.path), mtime
             else:
-                mtime = entry.stat(follow_symlinks=False).st_mtime
-                if rel:
-                    yield os.path.relpath(entry.path, self.path), mtime
-                else:
-                    yield entry.path, mtime
+                yield entry.path, mtime
 
     def total_size(self) -> int:
         """Get the total size of the directory and all of its contents.
@@ -200,6 +217,11 @@ class LocalSyncDir(SyncDir):
 class DestSyncDir(SyncDir):
     """Perform operations on a remote sync directory.
 
+    The "destination directory" is the location in the local filesystem where
+    remote files can be accessed. This distinction is important when the remote
+    directory is on another computer. In that case, the destination directory
+    is the mount point.
+
     Attributes:
         prgm_dir:   Contains special program files.
         safe_path:  Defined relative to prgm_dir in order to prevent access
@@ -214,13 +236,23 @@ class DestSyncDir(SyncDir):
         self.ex_dir = os.path.join(self.prgm_dir, "exclude")
         self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))
 
+    def _list_entries(self, rel=False, files=True, symlinks=False, dirs=False,
+                      exclude=None):
+        """Extend parent method to automatically exclude program directory."""
+        if exclude is None:
+            exclude = []
+        exclude.append(self.prgm_dir)
+        yield from super()._list_entries(
+            rel=rel, files=files, symlinks=symlinks, dirs=dirs,
+            exclude=exclude)
+
     def symlink_tree(self, destdir: str, exclude=None,
                      overwrite=False) -> None:
         """Extend parent method to automatically exclude program directory."""
         if exclude is None:
             exclude = []
         exclude.append(self.prgm_dir)
-        super().symlink_tree(destdir, exclude, overwrite)
+        super().symlink_tree(destdir, exclude=exclude, overwrite=overwrite)
 
 
 class DestDBFile:

@@ -14,7 +14,7 @@ setup(
         ("share/man/man1",
             ["docs/retain-sync.1"]),
         ("share/retain-sync",
-            ["docs/config/config-template"]),
+            ["docs/templates/config-template"]),
         ("share/licenses/retain-sync",
             ["LICENSE"]),
         ("lib/systemd/user",

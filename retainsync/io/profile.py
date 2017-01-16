@@ -1,6 +1,6 @@
 """Manipulate files in the profile directory.
 
-Copyright © 2016 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
 This file is part of retain-sync.
 
@@ -65,13 +65,13 @@ class ProfileExcludeFile:
     """Manipulate a file containing exclude patterns for the profile.
 
     Attributes:
-        path:       The path to the exclude pattern file.
-        files:      A set of absolute file paths that match the globbing
-                    patterns.
-        rel_files:  A set of relative file paths that match the globbing
-                    patterns.
+        comment_reg:    Regex that denotes a comment line.
+        path:           The path to the exclude pattern file.
+        files:          A set of absolute file paths that match the globbing
+                        patterns.
+        rel_files:      A set of relative file paths that match the globbing
+                        patterns.
     """
-    # This is regex that denotes a comment line.
     comment_reg = re.compile(r"^\s*#")
 
     def __init__(self, path: str) -> None:
