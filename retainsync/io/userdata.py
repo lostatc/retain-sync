@@ -58,10 +58,10 @@ class TrashDir:
 
     def check_file(self, path: str) -> bool:
         """Check if a file is in the trash by comparing sizes and checksums."""
-        overlap_files = [item[0] for item in self.sizes if
-                         os.stat(path).st_size == item[1]]
+        overlap_files = [filepath for filepath, size in self.sizes if
+                         os.stat(path).st_size == size]
         if overlap_files:
-            overlap_sums = [md5sum(item) for item in overlap_files]
+            overlap_sums = [md5sum(filepath) for filepath in overlap_files]
             if md5sum(path) in overlap_sums:
                 return True
         return False
@@ -318,6 +318,8 @@ class DestDBFile:
                     WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
                     """, (path, deleted, path))
 
+        self.update_synctime(paths)
+
     def rm_files(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
 
@@ -347,6 +349,23 @@ class DestDBFile:
                     WHERE path=?;
                     """, (time, path))
 
+    def get_mtime(self, path: str) -> float:
+        """Get the mtime of a file given the file path.
+
+        Args:
+            path: The path of the file to check.
+
+        Returns:
+            The time of the file's last modification in seconds since the
+            epoch.
+        """
+        with self.conn:
+            self.cur.execute("""\
+                SELECT lastsync FROM files
+                WHERE path=?;
+                """, (path,))
+        return self.cur.fetchone()[0]
+
     def list_files(self, deleted=None, min_lastsync=None) -> Set[str]:
         """Get a list of file paths that match certain constraints.
 
@@ -354,6 +373,9 @@ class DestDBFile:
             deleted:        Select files marked as deleted.
             min_lastsync:   Select files that were last synced more recently
                             than this time.
+
+        Returns:
+            A set of file paths that match the criteria.
         """
         sql_command = """\
             SELECT path

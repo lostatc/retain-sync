@@ -335,6 +335,25 @@ class ProfileDBFile:
                 SET priority=priority*?;
                 """, (adjustment,))
 
+    def check_exists(self, path) -> bool:
+        """Check if a record exists with a given file path.
+
+        Args:
+            path:   The relative file path to check the database for.
+
+        Returns:
+            A boolean value representing whether a record was found.
+        """
+        with self.conn:
+            self.cur.execute("""\
+                SELECT 1 FROM files
+                WHERE path=?;
+                """, (path,))
+        if self.cur.fetchone():
+            return True
+        else:
+            return False
+
 
 class ProfileConfigFile(ConfigFile):
     """Manipulate a profile configuration file.
