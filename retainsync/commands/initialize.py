@@ -31,7 +31,7 @@ from retainsync.exceptions import (
 from retainsync.basecommand import Command
 from retainsync.io.profile import Profile, ProfileConfigFile
 from retainsync.io.userdata import LocalSyncDir, DestSyncDir
-from retainsync.io.transfer import rsync_cmd
+from retainsync.io.transfer import rclone
 from retainsync.util.ssh import SSHConnection
 from retainsync.util.misc import err
 
@@ -270,8 +270,8 @@ class InitializeCommand(Command):
 
             # Copy local files to the server.
             try:
-                rsync_cmd(
-                    ["-asHAXS", self.local_dir.tpath, self.dest_dir.safe_path],
+                rclone(
+                    self.local_dir.path, self.dest_dir.safe_path,
                     exclude=self.profile.ex_file.rel_files | user_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
