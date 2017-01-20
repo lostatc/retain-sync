@@ -1,10 +1,10 @@
 .TH RETAIN-SYNC 1 "2016-10-29" "" ""
 .SH NAME
-retain-sync \- distribute files based on how frequently they are accessed
+zielen \- distribute files based on how frequently they are accessed
 .SH SYNOPSIS
-\fBretain-sync\fR [\fIglobal_options\fR] \fIcommand\fR [\fIcommand_options\fR] [\fIcommand_arg\fR]
+\fBzielen\fR [\fIglobal_options\fR] \fIcommand\fR [\fIcommand_options\fR] [\fIcommand_arg\fR]
 .SH DESCRIPTION
-\fBretain-sync\fR is a program that distributes files between a local and
+\fBzielen\fR is a program that distributes files between a local and
 remote directory based on how frequently they're accessed with the intent of
 conserving disk space. This remote directory can be on a separate hard drive or
 a seprate machine entirely (using sshfs). Files are prioritized based on how
@@ -16,15 +16,15 @@ from the local one. The user can specify how much data they want to remain in
 the local directory at any given point in time (referred to as the "storage
 limit"). Multiple local directories can be synced concurrently with either
 different remote directories or the same one. Since local directories on
-different machines can pair with the same remote directory, \fBretain-sync\fR
+different machines can pair with the same remote directory, \fBzielen\fR
 can be used to sync files between machines.
 .sp
-\fBretain-sync\fR deliberately ignores hidden files and directories, meaning
+\fBzielen\fR deliberately ignores hidden files and directories, meaning
 that they never leave the local directory. The program currently does not
 support file names containing newlines, but other characters should work fine.
-\fBretain-sync\fR does not require root access, and is meant to run as an
+\fBzielen\fR does not require root access, and is meant to run as an
 unprivileged user. If the remote directory is located on a separate machine,
-\fBretain-sync\fR does not need to be installed on that machine to function,
+\fBzielen\fR does not need to be installed on that machine to function,
 although you do need to have passwordless ssh access to it (i.e. via public key
 authentication with an ssh agent). For the sake of redundancy, files stay in
 the remote directory and are copied, not moved, to the local directory as space
@@ -69,7 +69,7 @@ the 'exclude' file automatically once it is generated.
 Get settings for the configuration from the template \fIfile\fR instead of
 prompting the user interactively. The user will still be prompted for any
 mandatory information that is missing from the template. A blank template can
-usually be found at /usr/local/share/retain-sync/config-template.
+usually be found at /usr/local/share/zielen/config-template.
 .RE 2
 .PP
 \fB-a\fR, \fB--add-remote\fR
@@ -77,7 +77,7 @@ usually be found at /usr/local/share/retain-sync/config-template.
 Instead of moving local files to an empty remote directory, start with an
 existing remote directory and an empty local directory. Using this option, it
 is possible for two or more configurations to share a remote directory, which
-means that \fBretain-sync\fR can be used to sync files between machines.
+means that \fBzielen\fR can be used to sync files between machines.
 .RE 1
 .PP
 \fBsync\fR \fIconfig\fR|\fIpath\fR
@@ -124,39 +124,39 @@ Permanently delete all files in the remote directory that are marked for deletio
 (see \fBTRASH\fR). This command accepts the absolute path of a local initialized
 directory or the name of its configuration.
 .SH SYNCING
-Whenever a directory is initialized, \fBretain-sync\fR will direct the user to
+Whenever a directory is initialized, \fBzielen\fR will direct the user to
 start the daemon for that directory. This daemon keeps track of file access
 within the initialized directory tree, adjusts file priority for time, keeps
 the remote directory mounted over sshfs and runs the \fBsync\fR command hourly
 by default, although this frequency can be configured in the systemd unit file
-\'retain-sync-resync@.timer'. To make this change without root privileges and
+\'zielen-resync@.timer'. To make this change without root privileges and
 only for a specific user, copy the unit file into ~/.config/systemd/user/
 before editing it.
 .sp
-Whenever the \fBsync\fR command is run, \fBretain-sync\fR first tries to sync
+Whenever the \fBsync\fR command is run, \fBzielen\fR first tries to sync
 the highest-priority whole subdirectories to the local directory. Directories
 are synced recursively, meaning that all subdirectories are included when a
 directory is synced. Once no more whole directories can fit within the
-user-defined storage limit, \fBretain-sync\fR will try to sync individual files
+user-defined storage limit, \fBzielen\fR will try to sync individual files
 until the storage limit is reached. This behavior can be overridden by setting
-\fBsyncExtraFiles\fR to 'no' in the \fBretain-sync\fR config. Any files that
+\fBsyncExtraFiles\fR to 'no' in the \fBzielen\fR config. Any files that
 have been added since the last sync are copied to the remote directory and have
 their priority artifically inflated so that they're more likely to stay in the
 local directory for a while. This behavior can be overridden by setting
-\fBinflatePriority\fR to 'no' in the \fBretain-sync\fR config. Any files that
+\fBinflatePriority\fR to 'no' in the \fBzielen\fR config. Any files that
 have been deleted since the last sync are either removed from or marked for
 deletion in the remote directory (see \fBTRASH\fR).
 .sp
-\fBretain-sync\fR uses \fBrsync\fR for copying files between the local and
+\fBzielen\fR uses \fBrsync\fR for copying files between the local and
 remote directories, and should preserve symbolic links, permissions,
 modification times, ownership, hard links, ACLs, extended attributes and sparse
 files as long as the remote filesystem supports them.
 .SH EXCLUDING
-\fBretain-sync\fR allows the user to define certain files or directories to be
+\fBzielen\fR allows the user to define certain files or directories to be
 excluded from syncing, meaning that they will never leave the local directory.
 This is done in the 'exclude' file for that configuration (see \fBFILES\fR).
 To keep user-created symbolic links from being clobbered, all symbolic links
-found in the local initialized directory that \fBretain-sync\fR didn't put
+found in the local initialized directory that \fBzielen\fR didn't put
 there are added to the exclude file automatically.  The root of each
 file/directory path in the exclude file is anchored to the local initialized
 directory. Another way to think of it: each file/directory path in the exclude
@@ -175,25 +175,25 @@ symbolic links.  Whenever the \fBsync\fR command is run, local files (including
 these symbolic links) that were deleted since the last sync operation are
 removed from the remote directory. If the user deletes a local symbolic link,
 the file it points to won't appear in their local trash, making the file
-unrecoverable. For this reason, \fBretain-sync\fR implements a simple trash
+unrecoverable. For this reason, \fBzielen\fR implements a simple trash
 system.
 .sp
-Before \fBretain-sync\fR deletes a file in the remote directory, it first
+Before \fBzielen\fR deletes a file in the remote directory, it first
 searches for the file in the user's local trash directory by comparing file
 sizes first and then checksums. If it finds a copy of the file in the user's
 trash, it permanently deletes the file in the remote directory. Otherwise, it
 only marks the file for deletion.  Files marked for deletion are made hidden
 and have \'.trash' appended to the end of the file name. This behavior can be
-overridden by setting \fBdeleteAlways\fR to \'yes' in the \fBretain-sync\fR
+overridden by setting \fBdeleteAlways\fR to \'yes' in the \fBzielen\fR
 config. The command \fBempty-trash\fR can be used to permanently delete all
 files in the remote directory that are marked for deletion. Note that when a
 file is marked for deletion, it will override any previously marked file with
 the same name.  The list of directories that are searched for deleted files can
 be altered in the config file.
 .SH FILES
-~/.config/retain-sync/
+~/.config/zielen/
 .RS 4
-This is the \fBretain-sync\fR config directory. \fBretain-sync\fR will respect
+This is the \fBzielen\fR config directory. \fBzielen\fR will respect
 XDG_CONFIG_HOME, and if it is set, put the directory there instead.
 .sp
 configs/<config_name>/

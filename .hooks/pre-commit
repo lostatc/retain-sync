@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Generate html documentation.
-in_files=("${PWD}/docs/retain-sync.1")
+in_files=("${PWD}/docs/zielen.1")
 for file in "${in_files[@]}"; do
     groff -mandoc -Thtml < "$file" > "$file.html"
     python "${PWD}/scripts/man-format.py" "$file.html"

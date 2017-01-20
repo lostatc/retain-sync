@@ -1,27 +1,26 @@
 from setuptools import setup
 
 setup(
-    name="retain-sync",
+    name="zielen",
     version="0.1",
     description="Distribute files based on how frequently they are accessed.",
-    url="https://github.com/lostatc/retain-sync",
+    url="https://github.com/lostatc/zielen",
     author="Garrett Powell",
     author_email="garrett@gpowell.net",
     license="GPLv3",
     data_files=[
         ("bin",
-            ["scripts/retain-sync"]),
+            ["scripts/zielen"]),
         ("share/man/man1",
-            ["docs/retain-sync.1"]),
-        ("share/retain-sync",
+            ["docs/zielen.1"]),
+        ("share/zielen",
             ["docs/templates/config-template"]),
-        ("share/licenses/retain-sync",
+        ("share/licenses/zielen",
             ["LICENSE"]),
         ("lib/systemd/user",
-            ["docs/unit/retain-sync@.service"])
+            ["docs/unit/zielen@.service"])
         ],
     packages=[
-        "retainsync", "retainsync.io", "retainsync.util",
-        "retainsync.commands"
+        "zielen", "zielen.io", "zielen.util", "zielen.commands"
         ]
     )

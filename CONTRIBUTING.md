@@ -10,5 +10,5 @@ git config --local core.hooksPath ".hooks"
 * lxml
 
 ####Style
-This project follows the style guidelines outlined in PEP8 with Google-style
-docstrings.
+This project follows the style guidelines outlined in PEP8 with docstrings
+according to Google's style guide.

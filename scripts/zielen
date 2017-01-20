@@ -2,7 +2,7 @@
 
 # import profile
 
-from retainsync.main import main
+from zielen.main import main
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 [Unit]
 Description=Watch for file access in a specific directory
-Documentation=man:retain-sync(1)
+Documentation=man:zielen(1)
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/env python3 -c "from retainsync.deamon import main; main()" %i
+ExecStart=/usr/bin/env python3 -c "from zielen.deamon import main; main()" %i
 StandardOutput=journal
 StandardError=journal
 

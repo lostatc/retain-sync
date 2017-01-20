@@ -2,20 +2,20 @@
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
-This file is part of retain-sync.
+This file is part of zielen.
 
-retain-sync is free software: you can redistribute it and/or modify
+zielen is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-retain-sync is distributed in the hope that it will be useful,
+zielen is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
+along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import sys
@@ -30,9 +30,9 @@ from textwrap import dedent
 from collections import defaultdict
 from typing import Dict, Any, Iterable, Set
 
-from retainsync.exceptions import FileParseError
-from retainsync.io.program import JSONFile, ConfigFile, ProgramDir
-from retainsync.util.misc import err, env
+from zielen.exceptions import FileParseError
+from zielen.io.program import JSONFile, ConfigFile, ProgramDir
+from zielen.util.misc import err, env
 
 
 class Profile:
@@ -90,7 +90,7 @@ class ProfileExcludeFile:
                 # This file contians patterns representing files and directories to exclude
                 # from syncing.
                 #
-                # The patterns follow shell globbing rules as described in retain-sync(1).
+                # The patterns follow shell globbing rules as described in zielen(1).
                 #
                 # Lines with a leading slash are patterns that match relative to the root of
                 # the sync directory. Lines without a leading slash are patterns that match
@@ -186,7 +186,7 @@ class ProfileInfoFile(JSONFile):
         """
         with open("/etc/machine-id") as id_file:
             unique_id = "-".join([id_file.read(8), env("USER"), name])
-        version = float(pkg_resources.get_distribution("retain-sync").version)
+        version = float(pkg_resources.get_distribution("zielen").version)
         self.raw_vals.update({
             "Status":   "partial",
             "Locked":   True,
@@ -460,7 +460,7 @@ class ProfileConfigFile(ConfigFile):
                 return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
             if os.path.commonpath([value, ProgramDir.path]) == value:
-                return "must not contain retain-sync config files"
+                return "must not contain zielen config files"
             overlap_profiles = []
             for instance in self.instances:
                 # Check if value overlaps with the 'LocalDir' of another

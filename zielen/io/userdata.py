@@ -2,20 +2,20 @@
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
-This file is part of retain-sync.
+This file is part of zielen.
 
-retain-sync is free software: you can redistribute it and/or modify
+zielen is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-retain-sync is distributed in the hope that it will be useful,
+zielen is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
+along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
@@ -24,8 +24,8 @@ import datetime
 from contextlib import contextmanager
 from typing import Tuple, Iterable, List, Set
 
-from retainsync.exceptions import ServerError
-from retainsync.util.misc import rec_scan, md5sum
+from zielen.exceptions import ServerError
+from zielen.util.misc import rec_scan, md5sum
 
 
 class TrashDir:
@@ -233,7 +233,7 @@ class DestSyncDir(SyncDir):
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)
-        self.prgm_dir = os.path.join(self.path, ".retain-sync")
+        self.prgm_dir = os.path.join(self.path, ".zielen")
         self.safe_path = os.path.join(self.prgm_dir, "..")
         self.ex_dir = os.path.join(self.prgm_dir, "exclude")
         self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))

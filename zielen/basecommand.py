@@ -2,20 +2,20 @@
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
-This file is part of retain-sync.
+This file is part of zielen.
 
-retain-sync is free software: you can redistribute it and/or modify
+zielen is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-retain-sync is distributed in the hope that it will be useful,
+zielen is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
+along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
@@ -23,10 +23,10 @@ import atexit
 from typing import Dict
 from textwrap import dedent
 
-from retainsync.exceptions import UserInputError, LockError
-from retainsync.io.program import ProgramDir
-from retainsync.io.profile import Profile
-from retainsync.util.misc import err
+from zielen.exceptions import UserInputError, LockError
+from zielen.io.program import ProgramDir
+from zielen.io.profile import Profile
+from zielen.util.misc import err
 
 
 class Command:
@@ -40,7 +40,7 @@ class Command:
     """
     interrupt_msg = dedent("""
         Initialization was interrupted.
-        Please run 'retain-sync initialize' to complete it or 'retain-sync reset' to
+        Please run 'zielen initialize' to complete it or 'zielen reset' to
         cancel it.""")
 
     def __init__(self) -> None:

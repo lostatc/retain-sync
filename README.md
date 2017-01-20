@@ -1,30 +1,25 @@
-# retain-sync
-retain-sync is a program that helps you conserve disk space by automatically
-offloading the files you don't use as often to a local or remote destination.
-This can be a slower, higher-capacity hard drive or a remote file server (using
-sshfs). Files are prioritized based on how frequently and recently they've been
-accessed as well as the file size. The highest-priority files are kept in the
-local directory for quick access, while lower priority files are moved to the
-remote directory to conserve disk space. The program uses symbolic links to
-allow files in the remote directory to be accessible from the local one. The
-user can specify how much data they want to remain in the local directory at
-any given point in time. Multiple concurrent pairs of directories can be
-synced, and since they can overlap, retain-sync allows you to store your files
+# zielen
+This program is still in active development, and is not yet in a usable state.
+
+zielen is a program that tries to conserve disk space by redistributing your
+files based on their size and how frequently you access them. Your most
+frequently-used files stay local for quick access, while files used less
+frequently are pushed to a remote destination to conserve disk space. This can
+be a slower, higher-capacity hard drive or another computer (using ssh).
+Symbolic links are used to allow you to access those remote files as if they
+were still where you left them.
+
+You can specify how much data you want the program to keep in the local
+directory vs the remote one. Multiple concurrent pairs of directories can be
+synced, and since they can overlap, zielen allows you to store your files
 centrally and sync them across multiple clients as storage space permits.
 
-Since this software is still in an immature state, it is recommended that you
-back up your data before testing it.
-
 ## Features
-* uses rsync for file transfers
-* doesn't require root privileges
-* doesn't have a server-side component
+* uses rsync's delta-transfer algorithm to only sync what has been modified
+* uses ssh for syncing between computers, which is secure and easy to set up
+* does not require root privileges
 * gives the user the ability to exclude files from syncing
 * handles interruptions and dropped connections
-* implements locking to prevent multiple operations from taking place on the
-  same directory tree
-* searches for deleted files in the user's local trash before deleting them on
-  the server
 * provides options for configuring syncing behavior
 * supports configuration file templates
 
@@ -37,16 +32,16 @@ back up your data before testing it.
 
 #### Installing from source
 ```
-git clone https://github.com/lostatc/retain-sync
-cd retain-sync
+git clone https://github.com/lostatc/zielen
+cd zielen
 python setup.py install
 ```
 
 ## Documentation
-[retain-sync(1)](https://lostatc.github.io/retain-sync/retain-sync.1.html)
+[zielen(1)](https://lostatc.github.io/zielen/zielen.1.html)
 
 ## Notes
-If you're using an ssh agent, retain-sync needs the location of the
+If you're using an ssh agent, zielen needs the location of the
 authenication socket in order to connect. The program will try to find this
 automatically, but if that doesn't work, add the following command to the
 bottom of your ~/.bashrc file.
