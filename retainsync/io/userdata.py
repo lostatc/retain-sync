@@ -21,8 +21,10 @@ along with retain-sync.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sqlite3
 import datetime
+from contextlib import contextmanager
 from typing import Tuple, Iterable, List, Set
 
+from retainsync.exceptions import ServerError
 from retainsync.util.misc import rec_scan, md5sum
 
 
@@ -275,6 +277,19 @@ class DestDBFile:
         sqlite3.register_adapter(bool, int)
         sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
+    @contextmanager
+    def transact(self) -> None:
+        """Check if database file exists and commit the transaction on exit.
+
+        Raises:
+            ServerError:  The database file wasn't found.
+        """
+        if not os.path.isfile(self.path):
+            raise ServerError(
+                "the connection to the remote directory was lost")
+        with self.conn:
+            yield
+
     def create(self) -> None:
         """Create a new empty database.
 
@@ -295,7 +310,7 @@ class DestDBFile:
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
 
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 CREATE TABLE files (
                     path text,
@@ -310,7 +325,7 @@ class DestDBFile:
         Args:
             paths:  The file paths to add.
         """
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     INSERT INTO files (path, deleted)
@@ -326,7 +341,7 @@ class DestDBFile:
         Args:
             paths:  The file paths to remove.
         """
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     DELETE FROM files
@@ -341,7 +356,7 @@ class DestDBFile:
         """
         time = datetime.datetime.utcnow().replace(
             tzinfo=datetime.timezone.utc).timestamp()
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     UPDATE files
@@ -359,7 +374,7 @@ class DestDBFile:
             The time of the file's last modification in seconds since the
             epoch.
         """
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 SELECT lastsync FROM files
                 WHERE path=?;
@@ -391,6 +406,6 @@ class DestDBFile:
             sql_args.append(min_lastsync)
         sql_command += ";"
 
-        with self.conn:
+        with self.transact():
             self.cur.execute(sql_command, sql_args)
         return {path for path, in self.cur.fetchall()}

@@ -86,12 +86,12 @@ class SyncCommand(Command):
                 self.profile.cfg_file.vals["RemoteDir"])
 
         # Copy exclude pattern file to the remote.
-        # try:
-        #     shutil.copy(self.profile.ex_file.path, os.path.join(
-        #         self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
-        # except FileNotFoundError:
-        #     raise ServerError(
-        #         "the connection to the remote directory was lost")
+        try:
+            shutil.copy(self.profile.ex_file.path, os.path.join(
+                self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
 
         # Expand globbing patterns.
         self.profile.ex_file.glob(self.local_dir.path)
@@ -144,9 +144,13 @@ class SyncCommand(Command):
                 local_out.remove(path)
                 local_out.add(new_path)
             elif remote_mtimes[path] < local_mtimes[path]:
-                os.rename(
-                    os.path.join(self.dest_dir.path, path),
-                    os.path.join(self.dest_dir.path, new_path))
+                try:
+                    os.rename(
+                        os.path.join(self.dest_dir.safe_path, path),
+                        os.path.join(self.dest_dir.safe_path, new_path))
+                except FileNotFoundError:
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
                 remote_out.remove(path)
                 remote_out.add(new_path)
 

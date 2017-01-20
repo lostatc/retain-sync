@@ -34,6 +34,9 @@ def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
         exclude:    A list of relative file paths to exclude from syncing.
         msg:        A message to display opposite the progress bar. If empty,
                     the bar won't appear.
+
+    Raises:
+        FileTransferError:  Rsync returned a non-zero exit code.
     """
     cmd_args = ["rsync", "--info=progress2"]
 
@@ -71,8 +74,7 @@ def rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
         # Print the last five lines of rsync's stderr.
         raise FileTransferError(
             "the file transfer failed to complete\n"
-            + indent("\n".join(stderr.splitlines()[-5:]), "    ")
-            )
+            + indent("\n".join(stderr.splitlines()[-5:]), "    "))
 
     if exclude:
         ex_file.close()
