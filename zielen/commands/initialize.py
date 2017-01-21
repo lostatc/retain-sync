@@ -32,8 +32,7 @@ from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
 from zielen.io.transfer import rclone
-from zielen.util.ssh import SSHConnection
-from zielen.util.misc import err
+from zielen.util.connect import SSHConnection
 
 
 class InitializeCommand(Command):
@@ -41,13 +40,15 @@ class InitializeCommand(Command):
 
     Attributes:
         profile_in: A string representing the selected profile.
+        profile:    The currently selected profile.
         exclude:    The path to a file containing exclude patterns.
         template:   The path to a template configuration file.
         add_remote: Start with a set of existing remote files.
         local_dir:  A LocalSyncDir object representing the local directory.
         dest_dir:   A DestSyncDir object representing the destination
                     directory.
-        ssh_conn:   An SSHConnection object representing the ssh connection.
+        connection: A Connection object representing the connection to the
+                    remote directory.
     """
     def __init__(self, profile_in: str, exclude=None, template=None,
                  add_remote=False) -> None:
@@ -58,7 +59,7 @@ class InitializeCommand(Command):
         self.add_remote = add_remote
         self.local_dir = None
         self.dest_dir = None
-        self.ssh_conn = None
+        self.connection = None
 
     def main(self) -> None:
         """Run the command.
@@ -118,7 +119,7 @@ class InitializeCommand(Command):
         if self.profile.info_file.vals["Status"] == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
-            atexit.register(err, self.interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
 
             self.profile.cfg_file.read()
             self.profile.cfg_file.check_all()
@@ -128,20 +129,17 @@ class InitializeCommand(Command):
             self.add_remote = (
                 self.profile.info_file.vals["InitOpts"]["add_remote"])
 
+            # TODO: Remove these repetitive assignments.
             self.local_dir = LocalSyncDir(
                 self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-                self.ssh_conn = SSHConnection(
+                self.connection = SSHConnection(
                     self.profile.cfg_file.vals["RemoteHost"],
-                    self.profile.cfg_file.vals["RemoteDir"],
-                    self.profile.cfg_file.vals["SshfsOptions"],
                     self.profile.cfg_file.vals["RemoteUser"],
-                    self.profile.cfg_file.vals["Port"])
-                if not self.add_remote:
-                    if not self.ssh_conn.mkdir():
-                        raise ServerError(
-                            "failed creating the remote directory")
+                    self.profile.cfg_file.vals["Port"],
+                    self.profile.cfg_file.vals["RemoteDir"],
+                    self.profile.cfg_file.vals["SshfsOptions"])
             else:
                 self.dest_dir = DestSyncDir(
                     self.profile.cfg_file.vals["RemoteDir"])
@@ -175,36 +173,18 @@ class InitializeCommand(Command):
                 self.profile.cfg_file.write(os.path.join(
                     sys.prefix, "share/zielen/config-template"))
 
+            # TODO: Remove these repetitive assignments.
             self.local_dir = LocalSyncDir(
                 self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-                self.ssh_conn = SSHConnection(
+                self.connection = SSHConnection(
                     self.profile.cfg_file.vals["RemoteHost"],
-                    self.profile.cfg_file.vals["RemoteDir"],
-                    self.profile.cfg_file.vals["SshfsOptions"],
                     self.profile.cfg_file.vals["RemoteUser"],
-                    self.profile.cfg_file.vals["Port"])
-                self.ssh_conn.connect()
-                if self.ssh_conn.check_exists():
-                    if self.ssh_conn.check_isdir():
-                        if not self.ssh_conn.check_iswritable():
-                            raise UserInputError(
-                                "remote directory must be writable")
-                        elif (not self.add_remote
-                                and not self.ssh_conn.check_isempty()):
-                            raise UserInputError(
-                                "remote directory must be empty")
-                    else:
-                        raise UserInputError(
-                            "remote directory must be a directory")
-                else:
-                    if self.add_remote:
-                        raise UserInputError(
-                            "remote directory must be an existing directory")
-                    elif not self.ssh_conn.mkdir():
-                        raise UserInputError(
-                            "remote directory must be writable")
+                    self.profile.cfg_file.vals["Port"],
+                    self.profile.cfg_file.vals["RemoteDir"],
+                    self.profile.cfg_file.vals["SshfsOptions"])
+                self.connection.check_remote(self.add_remote)
             else:
                 self.dest_dir = DestSyncDir(
                     self.profile.cfg_file.vals["RemoteDir"])
@@ -216,18 +196,18 @@ class InitializeCommand(Command):
             # interrupted from this point, it can be resumed.
             self.profile.info_file.generate(
                 self.profile.name, add_remote=self.add_remote)
-            atexit.register(err, self.interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
             atexit.unregister(delete_profile)
 
         self._setup_remote()
 
         # The profile is now fully initialized. Update the info file.
         if self.profile.cfg_file.vals["RemoteHost"]:
-            atexit.unregister(self.ssh_conn.unmount)
+            atexit.unregister(self.connection.unmount)
         self.profile.info_file.raw_vals["Status"] = "initialized"
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
-        atexit.unregister(err)
+        atexit.unregister(self.print_interrupt_msg)
 
         # Advise user to start/enable the daemon.
         print(dedent("""
@@ -238,8 +218,8 @@ class InitializeCommand(Command):
     def _setup_remote(self):
         """Set up the remote directory and transfer files."""
         if self.profile.cfg_file.vals["RemoteHost"]:
-            atexit.register(self.ssh_conn.unmount, self.dest_dir.path)
-            self.ssh_conn.mount(self.dest_dir.path)
+            atexit.register(self.connection.unmount, self.dest_dir.path)
+            self.connection.mount(self.dest_dir.path)
 
         os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
         user_symlinks = set(self.local_dir.list_files(

@@ -33,16 +33,9 @@ class Command:
     """Base class for program commands.
 
     Attributes:
-        interrupt_msg:  A message warning the user if the profile was only
-                        partially initialized.
         profiles:       A dictionary of Profile instances.
         profile:        The currently selected profile.
     """
-    interrupt_msg = dedent("""
-        Initialization was interrupted.
-        Please run 'zielen initialize' to complete it or 'zielen reset' to
-        cancel it.""")
-
     def __init__(self) -> None:
         self._profiles = {}
         self.profile = None
@@ -105,3 +98,9 @@ class Command:
             self.profile.info_file.raw_vals["Locked"] = True
             self.profile.info_file.write()
             atexit.register(unlock)
+
+    def print_interrupt_msg(self) -> None:
+        """Warn the user that the profile is only partially initialized."""
+        err(dedent("""
+            Initialization was interrupted.
+            Please run 'zielen initialize' to complete it or 'zielen reset' to cancel it."""))

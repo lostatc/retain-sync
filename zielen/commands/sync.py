@@ -25,7 +25,7 @@ from typing import Iterable, Tuple, Set
 
 from zielen.exceptions import UserInputError, ServerError
 from zielen.basecommand import Command
-from zielen.util.ssh import SSHConnection, ssh_env
+from zielen.util.connect import SSHConnection
 from zielen.util.misc import err, timestamp_path
 from zielen.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
 
@@ -34,17 +34,18 @@ class SyncCommand(Command):
     """Redistribute files between the local and remote directories.
 
     Attributes:
+        profile:    The currently selected profile.
         local_dir:  A LocalSyncDir object representing the local directory.
         dest_dir:   A DestSyncDir object representing the destination
                     directory.
-        ssh_conn:   An SSHConnection object representing the ssh connection.
+        connection: A Connection object representing the remote connection.
     """
     def __init__(self, profile_in: str) -> None:
         super().__init__()
         self.profile = self.select_profile(profile_in)
         self.local_dir = None
         self.dest_dir = None
-        self.ssh_conn = None
+        self.connection = None
 
     def main(self) -> None:
         """Run the command.
@@ -66,21 +67,21 @@ class SyncCommand(Command):
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
 
+        # TODO: Remove these repetitive assignments.
         self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
         if self.profile.cfg_file.vals["RemoteHost"]:
             self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-            ssh_env()
-            self.ssh_conn = SSHConnection(
+            self.connection = SSHConnection(
                 self.profile.cfg_file.vals["RemoteHost"],
-                self.profile.cfg_file.vals["RemoteDir"],
-                self.profile.cfg_file.vals["SshfsOptions"],
                 self.profile.cfg_file.vals["RemoteUser"],
-                self.profile.cfg_file.vals["Port"])
+                self.profile.cfg_file.vals["Port"],
+                self.profile.cfg_file.vals["RemoteDir"],
+                self.profile.cfg_file.vals["SshfsOptions"])
             if not os.path.isdir(self.dest_dir.path):
                 # Unmount if mountpoint is broken.
-                self.ssh_conn.unmount(self.dest_dir.path)
+                self.connection.unmount(self.dest_dir.path)
             if not os.path.ismount(self.dest_dir.path):
-                self.ssh_conn.mount(self.dest_dir.path)
+                self.connection.mount(self.dest_dir.path)
         else:
             self.dest_dir = DestSyncDir(
                 self.profile.cfg_file.vals["RemoteDir"])
