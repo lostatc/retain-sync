@@ -56,8 +56,8 @@ class ConfigFile:
     """Parse a configuration file.
 
     Attributes:
-        path:      The path to the configuration file.
-        raw_vals:  A dictionary of unmodified config value strings.
+        path:       The path to the configuration file.
+        raw_vals:   A dictionary of unmodified config value strings.
     """
 
     # This is regex that denotes a comment line.
@@ -80,11 +80,11 @@ class ConfigFile:
         except OSError:
             raise FileParseError("could not open the configuration file")
 
-    def write(self, infile: str) -> None:
+    def write(self, template_path: str) -> None:
         """Generate a new config file based on the input file."""
-
         try:
-            with open(infile) as infile, open(self.path, "w") as outfile:
+            with open(template_path) as infile, open(
+                    self.path, "w") as outfile:
                 for line in infile:
                     # Skip line if it is a comment.
                     if (not self.comment_reg.search(line)
@@ -92,14 +92,11 @@ class ConfigFile:
                         key, value = line.partition("=")[::2]
                         key = key.strip()
                         value = value.strip()
-                        if key not in self.all_keys:
+                        if key not in self.raw_vals:
                             continue
-                        try:
-                            # Substitute value in the input file with the
-                            # value in self.raw_vals.
-                            line = key + "=" + self.raw_vals[key] + "\n"
-                        except KeyError:
-                            pass
+                        # Substitute value in the input file with the value in
+                        # self.raw_vals.
+                        line = key + "=" + self.raw_vals.get(key, "") + "\n"
                     outfile.write(line)
 
         except OSError:

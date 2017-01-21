@@ -61,7 +61,7 @@ class SyncCommand(Command):
 
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
-            atexit.register(err, self.interrupt_msg)
+            atexit.register(self.interrupt_msg)
             raise UserInputError("invalid profile")
 
         self.profile.cfg_file.read()
@@ -109,7 +109,7 @@ class SyncCommand(Command):
             *self._compute_changes())
 
     def _handle_conflicts(self, local_in: Set[str],
-                          remote_in: Set[str]) -> Tuple[Set[str]]:
+                          remote_in: Set[str]) -> Tuple[Set[str], Set[str]]:
         """Handle sync conflicts between local and remote files.
 
         Conflicts are handled by renaming the file that was modified least
@@ -169,7 +169,7 @@ class SyncCommand(Command):
 
         return local_out, remote_out
 
-    def _compute_changes(self) -> Tuple[Set[str]]:
+    def _compute_changes(self) -> Tuple[Set[str], Set[str]]:
         """Compute files that have been modified since the last sync.
 
         For local files, this involves checking the mtime as well as looking up
@@ -195,7 +195,7 @@ class SyncCommand(Command):
 
         return local_mod_files, remote_mod_files
 
-    def _compute_deletions(self) -> Tuple[Set[str]]:
+    def _compute_deletions(self) -> Tuple[Set[str], Set[str], Set[str]]:
         """Compute files that need to be deleted to sync the two directories.
 
         A file needs to be deleted if it is found in the local database but not

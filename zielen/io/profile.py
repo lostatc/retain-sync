@@ -28,7 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from collections import defaultdict
-from typing import Dict, Any, Iterable, Set
+from typing import Dict, Any, Iterable, Set, Union, Generator
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -104,7 +104,7 @@ class ProfileExcludeFile:
                     for line in infile:
                         outfile.write(line)
 
-    def readlines(self) -> str:
+    def _readlines(self) -> Generator[str, None, None]:
         """Yield lines that are not comments.
 
         Yields:
@@ -121,7 +121,7 @@ class ProfileExcludeFile:
         Args:
             start_path: Search this path for files that match the patterns.
         """
-        for line in self.readlines():
+        for line in self._readlines():
             # This assumes that cases where the user may accidentally leave
             # leading/trailing whitespace are more common than cases where they
             # may actually need it. This also strips trailing newlines.
@@ -436,7 +436,7 @@ class ProfileConfigFile(ConfigFile):
         self.add_remote = add_remote
         self.instances.add(self)
 
-    def _check_values(self, key: str, value: str) -> str:
+    def _check_values(self, key: str, value: str) -> Union[str, None]:
         """Check the syntax of a config option and return an error message.
 
         Args:

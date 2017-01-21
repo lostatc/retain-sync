@@ -22,7 +22,7 @@ import os
 import sqlite3
 import datetime
 from contextlib import contextmanager
-from typing import Tuple, Iterable, List, Set
+from typing import Tuple, Iterable, List, Set, Generator
 
 from zielen.exceptions import ServerError
 from zielen.util.misc import rec_scan, md5sum
@@ -106,7 +106,7 @@ class SyncDir:
                     yield entry
 
     def list_files(self, rel=False, files=True, symlinks=False,
-                   dirs=False, exclude=None) -> str:
+                   dirs=False, exclude=None) -> Generator[str, None, None]:
         """Get the paths of files in the directory.
 
         Args:
@@ -127,8 +127,8 @@ class SyncDir:
             else:
                 yield entry.path
 
-    def list_mtimes(self, rel=False, files=True, symlinks=False,
-                    dirs=False, exclude=None) -> Tuple[str, float]:
+    def list_mtimes(self, rel=False, files=True, symlinks=False, dirs=False,
+                    exclude=None) -> Generator[Tuple[str, float], None, None]:
         """Get the paths and mtimes of files in the directory.
 
         Args:
@@ -278,7 +278,7 @@ class DestDBFile:
         sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
     @contextmanager
-    def transact(self) -> None:
+    def transact(self) -> Generator[None, None, None]:
         """Check if database file exists and commit the transaction on exit.
 
         Raises:

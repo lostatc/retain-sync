@@ -19,17 +19,13 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import sys
 import signal
-from typing import Union
 
 from zielen.exceptions import ProgramError
+from zielen.basecommand import Command
 from zielen.commands.initialize import InitializeCommand
 from zielen.commands.sync import SyncCommand
 from zielen.util.input import parse_args
 from zielen.util.misc import err
-
-CommandInstance = Union[
-    InitializeCommand, SyncCommand
-    ]
 
 
 def main() -> None:
@@ -49,7 +45,7 @@ def main() -> None:
         sys.exit(1)
 
 
-def def_command(cmd_args: dict) -> CommandInstance:
+def def_command(cmd_args: dict) -> Command:
     """Get an Command subclass instance from the command-line input."""
     if cmd_args["command"] == "initialize":
         return InitializeCommand(

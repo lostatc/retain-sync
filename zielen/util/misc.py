@@ -28,7 +28,7 @@ import pwd
 import hashlib
 import datetime
 from collections import defaultdict
-from types import FunctionType
+from typing import Callable
 
 
 def err(*args, **kwargs) -> None:
@@ -85,7 +85,8 @@ def shell_cmd(input_cmd: list) -> subprocess.Popen:
     return cmd
 
 
-def progress_bar(coverage: float, msg="", r_align=True) -> FunctionType:
+def progress_bar(coverage: float, msg="",
+                 r_align=True) -> Callable[[float], None]:
     """Create a function for updating a progress bar.
 
     Args:
@@ -97,7 +98,7 @@ def progress_bar(coverage: float, msg="", r_align=True) -> FunctionType:
     """
     coverage = float(coverage)
 
-    def update(percent) -> None:
+    def update(percent: float) -> None:
         """Update a progress bar.
 
         Args:

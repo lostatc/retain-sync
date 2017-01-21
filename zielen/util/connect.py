@@ -199,7 +199,7 @@ class SSHConnection(Connection):
 
     def _disconnect(self) -> None:
         """Stop the ssh master connection."""
-        ssh_cmd = shell_cmd(self._cmd_str + ["-O", "exit"])
+        ssh_cmd = shell_cmd(self._ssh_args + ["-O", "exit"])
         try:
             ssh_cmd.wait(timeout=3)
         except subprocess.TimeoutExpired:
