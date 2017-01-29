@@ -93,8 +93,8 @@ class ProfileExcludeFile:
                 # The patterns follow shell globbing rules as described in zielen(1).
                 #
                 # Lines with a leading slash are patterns that match relative to the root of
-                # the sync directory. Lines without a leading slash are patterns that match
-                # anywhere in the tree.
+                # the sync directory. Lines without a leading slash are patterns that match the
+                # ends of file paths anywhere in the tree.
                 """))
             if infile == "-":
                 for line in sys.stdin.read():
@@ -119,7 +119,8 @@ class ProfileExcludeFile:
         """Create a set of all file paths that match the globbing patterns.
 
         Args:
-            start_path: Search this path for files that match the patterns.
+            start_path: The directory to search in for files that match the
+                        patterns.
         """
         for line in self._readlines():
             # This assumes that cases where the user may accidentally leave
@@ -135,9 +136,8 @@ class ProfileExcludeFile:
                 glob_str = os.path.join(start_path, "**", line)
             self.files.update(glob.glob(glob_str, recursive=True))
 
-        # Create a set with relative file paths.
-        self.rel_files = {os.path.relpath(path, start_path) for path in
-                          self.files}
+        self.rel_files = {
+            os.path.relpath(path, start_path) for path in self.files}
 
 
 class ProfileInfoFile(JSONFile):
@@ -145,7 +145,7 @@ class ProfileInfoFile(JSONFile):
 
     Attributes:
         raw_vals:   A dictionary of raw values from the file.
-        vals:       A dictionary of parsed values from the file.
+        vals:       A read-only dictionary of parsed values from the file.
     """
     def __init__(self, path) -> None:
         super().__init__(path)
@@ -380,10 +380,9 @@ class ProfileConfigFile(ConfigFile):
                         required config values.
         path:           The path to the configuration file.
         profile:        The Profile object that the config file belongs to.
-        add_remote:     Flip-flop the requirements of 'LocalDir' and
-                        'RemoteDir'.
+        add_remote:     Switch the requirements of 'LocalDir' and 'RemoteDir'.
         raw_vals:       A dictionary of unmodified config value strings.
-        vals:           A dictionary of modified config values.
+        vals:           A read-only dictionary of modified config values.
     """
     instances = weakref.WeakSet()
     true_vals = ["yes", "true"]
@@ -659,8 +658,7 @@ class ProfileConfigFile(ConfigFile):
                 self.prompt_msgs[key] = (
                     self.prompt_msgs[key][:insert_pos]
                     + " ({})".format(self.subs[key])
-                    + self.prompt_msgs[key][insert_pos:]
-                    )
+                    + self.prompt_msgs[key][insert_pos:])
 
             # We don't use a defaultdict for this so that we can know if a
             # config file has been read based on whether raw_vals is empty.

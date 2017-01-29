@@ -44,7 +44,10 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
     cmd_args = ["rsync", "--info=progress2"]
 
     with contextlib.ExitStack() as stack:
-        if exclude:
+        # If an empty list is passed in for the 'files' argument, that should
+        # mean that rsync should not copy any files. That's why these are only
+        # skipped if the argument is None.
+        if exclude is not None:
             ex_file = stack.enter_context(
                 tempfile.NamedTemporaryFile(mode="w+"))
             # All file paths must include a leading slash.
@@ -52,7 +55,7 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
                 "\n".join(["/" + path.lstrip("/") for path in exclude]))
             ex_file.flush()
             cmd_args.append("--exclude-from=" + ex_file.name)
-        if files:
+        if files is not None:
             paths_file = stack.enter_context(
                 tempfile.NamedTemporaryFile(mode="w+"))
             # All file paths must include a leading slash.

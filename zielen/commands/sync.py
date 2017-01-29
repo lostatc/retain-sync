@@ -26,8 +26,9 @@ from typing import Iterable, Tuple, Set
 from zielen.exceptions import UserInputError, ServerError
 from zielen.basecommand import Command
 from zielen.util.connect import SSHConnection
-from zielen.util.misc import err, timestamp_path
+from zielen.util.misc import timestamp_path
 from zielen.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
+from zielen.io.transfer import rclone
 
 
 class SyncCommand(Command):
@@ -108,8 +109,58 @@ class SyncCommand(Command):
         local_mod_files, remote_mod_files = self._handle_conflicts(
             *self._compute_changes())
 
-    def _handle_conflicts(self, local_in: Set[str],
-                          remote_in: Set[str]) -> Tuple[Set[str], Set[str]]:
+        # Update the remote directory with modified local files. Update
+        # symlinks in the local directory so that, if the current sync
+        # operation gets interrupted, those files don't get deleted from the
+        # remote directory on the next sync operation.
+        self._update_remote(local_mod_files)
+        self.dest_dir.symlink_tree(
+            self.local_dir.path,
+            exclude=self.dest_dir.db_file.list_files(deleted=True))
+
+        # Add modified files to the local database, inflating their priority
+        # values if that option is set in the config file.
+        if self.profile.cfg_file.vals["InflatePriority"]:
+            self.profile.db_file.add_inflated(
+                local_mod_files | remote_mod_files)
+        else:
+            self.profile.db_file.add_files(local_mod_files | remote_mod_files)
+
+        # At this point, the differences between the two directories have been
+        # resolved.
+
+        # The sync is now complete. Update the time of the last sync in the
+        # info file.
+        self.profile.info_file.update_synctime()
+        self.profile.info_file.write()
+
+    def _update_remote(self, local_mod_files: Iterable[str]) -> None:
+        """Update the remote directory with modified local files.
+
+        Raises:
+            ServerError:    The remote directory is unmounted.
+        """
+        local_mod_files = set(local_mod_files)
+
+        # Copy modified local files to the remote directory, excluding symbolic
+        # links.
+        try:
+            rclone(
+                self.local_dir.path, self.dest_dir.safe_path,
+                files=local_mod_files & set(
+                    self.local_dir.list_files(rel=True)),
+                msg="Updating remote...")
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
+
+        # Add new files to the database and update the lastsync time for
+        # existing ones.
+        self.dest_dir.db_file.add_files(local_mod_files)
+
+    def _handle_conflicts(
+            self, local_in: Iterable[str], remote_in: Iterable[str]
+            ) -> Tuple[Set[str], Set[str]]:
         """Handle sync conflicts between local and remote files.
 
         Conflicts are handled by renaming the file that was modified least
@@ -125,6 +176,9 @@ class SyncCommand(Command):
         Returns:
             An tuple containing an updated version of each of the input values.
         """
+        local_in = set(local_in)
+        remote_in = set(remote_in)
+
         conflict_files = local_in & remote_in
         local_mtimes = {}
         remote_mtimes = {}
@@ -156,10 +210,10 @@ class SyncCommand(Command):
                 remote_out.add(new_path)
 
         # Remove outdated file paths from the local database, but don't add new
-        # ones. This is to prevent those files from being deleted on a
-        # subsequent operation in a case where the current operation were
-        # interrupted. The new file paths are added to the database once the
-        # directories are in sync.
+        # ones. If you do, and the current sync operation is interrupted, then
+        # those files will be deleted on the next sync operation. The new file
+        # paths are added to the database once the differences between the two
+        # directories have been resolved.
         self.profile.db_file.rm_files(local_in - local_out)
         self.profile.db_file.rm_files(remote_in - remote_out)
 
@@ -185,10 +239,11 @@ class SyncCommand(Command):
             the second is for remote files.
         """
         last_sync = self.profile.info_file.vals["LastSync"]
+        local_mtimes = self.local_dir.list_mtimes(
+            rel=True, exclude=self.profile.ex_file.rel_files)
 
         local_mod_files = {
-            path for path, time in self.local_dir.list_mtimes(
-                rel=True, exclude=self.profile.ex_file.files)
+            path for path, time in local_mtimes
             if time > last_sync or not self.profile.db_file.check_exists(path)}
         remote_mod_files = self.dest_dir.db_file.list_files(
             deleted=False, min_lastsync=last_sync)

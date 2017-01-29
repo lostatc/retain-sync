@@ -192,18 +192,10 @@ class SSHConnection(Connection):
             return True
 
     def _connect(self) -> None:
-        """Start an ssh master connection."""
+        """Start an ssh master connection and stop on program exit."""
         os.makedirs(self._runtime_dir, exist_ok=True)
         self._ssh_args.extend(["-S", os.path.join(self._runtime_dir, "%C")])
         shell_cmd(self._ssh_args + ["-NM"])
-
-    def _disconnect(self) -> None:
-        """Stop the ssh master connection."""
-        ssh_cmd = shell_cmd(self._ssh_args + ["-O", "exit"])
-        try:
-            ssh_cmd.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            pass
 
     def _execute(self, remote_cmd: list) -> subprocess.Popen:
         """Run a given command in list form over ssh.

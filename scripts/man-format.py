@@ -8,8 +8,7 @@ from bs4 import BeautifulSoup
 
 in_file = sys.argv[1]
 if not os.path.isfile(in_file):
-    print("Error: argument must be a file")
-    sys.exit(1)
+    raise OSError("argument must be a file")
 
 with open(in_file) as man_file:
     soup = BeautifulSoup(man_file, "lxml")

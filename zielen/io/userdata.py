@@ -90,15 +90,16 @@ class SyncDir:
             exclude = set(exclude)
 
         for entry in rec_scan(self.path):
-            if entry.is_file(follow_symlinks=False) and files is False:
+            if entry.is_file(follow_symlinks=False) and not files:
                 continue
-            elif entry.is_dir(follow_symlinks=False) and dirs is False:
+            elif entry.is_dir(follow_symlinks=False) and not dirs:
                 continue
-            elif entry.is_symlink() and symlinks is False:
+            elif entry.is_symlink() and not symlinks:
                 continue
             else:
+                rel_path = os.path.relpath(entry.path, self.path)
                 common = {
-                    os.path.commonpath([path, entry.path]) for path in exclude}
+                    os.path.commonpath([path, rel_path]) for path in exclude}
                 if common & exclude:
                     # File is excluded or is in an excluded directory.
                     continue
@@ -114,7 +115,7 @@ class SyncDir:
             files:      Include regular files.
             symlinks:   Include symbolic links.
             dirs:       Include directories.
-            exclude:    A list of absolute paths of files to not include.
+            exclude:    An iterable of relative paths of files to not include.
 
         Yields:
             A file path for each file in the directory that meets the criteria.
@@ -136,7 +137,7 @@ class SyncDir:
             files:      Include regular files.
             symlinks:   Include symbolic links.
             dirs:       Include directories.
-            exclude:    A list of absolute paths of files to not include.
+            exclude:    A list of relative paths of files to not include.
 
         Yields:
             A file path and mtime for each file in the directory that meets the
@@ -179,23 +180,25 @@ class SyncDir:
             destdir:    The directory to create symlinks in.
             overwrite:  Overwrite existing files in the destination directory
                         with symlinks.
-            exclude:    A list of absolute paths of files to not symlink.
+            exclude:    An iterable of relative paths of files to not symlink.
         """
         if exclude is None:
-            exclude = []
+            exclude = set()
+        else:
+            exclude = set(exclude)
 
         os.makedirs(destdir, exist_ok=True)
         for entry in rec_scan(self.path):
             destfile = os.path.join(
                 destdir, os.path.relpath(entry.path, self.path))
-            if entry.path in exclude:
+            rel_path = os.path.relpath(entry.path, self.path)
+            common = {
+                os.path.commonpath([path, rel_path]) for path in exclude}
+            if common & exclude:
                 continue
             elif entry.is_dir(follow_symlinks=False):
                 try:
                     os.mkdir(destfile)
-                except FileNotFoundError:
-                    # The directory's parent dir was in the exclude list.
-                    pass
                 except FileExistsError:
                     pass
             elif entry.is_symlink():
@@ -242,8 +245,10 @@ class DestSyncDir(SyncDir):
                       exclude=None):
         """Extend parent method to automatically exclude program directory."""
         if exclude is None:
-            exclude = []
-        exclude.append(self.prgm_dir)
+            exclude = set()
+        else:
+            exclude = set(exclude)
+        exclude.add(os.path.relpath(self.prgm_dir, self.path))
         yield from super()._list_entries(
             rel=rel, files=files, symlinks=symlinks, dirs=dirs,
             exclude=exclude)
@@ -252,8 +257,10 @@ class DestSyncDir(SyncDir):
                      overwrite=False) -> None:
         """Extend parent method to automatically exclude program directory."""
         if exclude is None:
-            exclude = []
-        exclude.append(self.prgm_dir)
+            exclude = set()
+        else:
+            exclude = set(exclude)
+        exclude.add(os.path.relpath(self.prgm_dir, self.path))
         super().symlink_tree(destdir, exclude=exclude, overwrite=overwrite)
 
 

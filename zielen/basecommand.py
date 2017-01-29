@@ -91,7 +91,7 @@ class Command:
         if self.profile:
             if os.path.isfile(self.profile.info_file.path):
                 self.profile.info_file.read()
-            if self.profile.info_file.vals["Locked"] is True:
+            if self.profile.info_file.vals["Locked"]:
                 raise LockError(
                     "another operation on this profile is already taking "
                     "place")
