@@ -1,4 +1,4 @@
-"""Add formatting to an html man page."""
+"""Modify formatting of an html man page."""
 
 import re
 import sys

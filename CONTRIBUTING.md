@@ -2,7 +2,7 @@
 Run the following command in the cloned git repository to include client-side
 hooks.
 ```
-git config --local core.hooksPath ".hooks"
+git config --local core.hooksPath "scripts/hooks"
 ```
 
 ####Development Dependencies
