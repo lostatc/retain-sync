@@ -182,7 +182,8 @@ class ProfileInfoFile(JSONFile):
                         at initialization.
 
         Args:
-            name:   The name of the profile to use for the unique ID.
+            name:       The name of the profile to use for the unique ID.
+            add_remote: The '--add-remote' command-line option is set.
         """
         with open("/etc/machine-id") as id_file:
             unique_id = "-".join([id_file.read(8), env("USER"), name])
@@ -258,7 +259,7 @@ class ProfileDBFile:
         """Add new file paths to the database if they do not already exist.
 
         Args:
-            path:       The file paths to add.
+            paths:      The file paths to add.
             priority:   The starting priority of the file path.
         """
         with self.conn:
@@ -273,7 +274,7 @@ class ProfileDBFile:
         """Add new file paths to the database with an inflated priority.
 
         Args:
-            path:   The file paths to add.
+            paths:  The file paths to add.
         """
         with self.conn:
             self.cur.execute("""\
@@ -286,7 +287,7 @@ class ProfileDBFile:
         """Remove file paths from the database.
 
         Args:
-            path:   The file paths to remove.
+            paths:  The file paths to remove.
         """
         with self.conn:
             for path in paths:
@@ -313,7 +314,7 @@ class ProfileDBFile:
         """Increment the priority of some file paths by one.
 
         Args:
-            path:   The file paths to increment the priority of.
+            paths:   The file paths to increment the priority of.
         """
         with self.conn:
             for path in paths:

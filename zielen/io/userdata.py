@@ -330,7 +330,8 @@ class DestDBFile:
         """Add new file paths to the database.
 
         Args:
-            paths:  The file paths to add.
+            paths:      The file paths to add.
+            deleted:    Mark the files as deleted.
         """
         with self.transact():
             for path in paths:

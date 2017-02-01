@@ -48,8 +48,8 @@ class Command:
             A dict containing a Profile object for each profile.
         """
         if not self._profiles:
-            self._profiles = {name: Profile(name) for name in
-                              ProgramDir.list_profiles()}
+            self._profiles = {
+                name: Profile(name) for name in ProgramDir.list_profiles()}
         return self._profiles
 
     def select_profile(self, input_str: str) -> Profile:
@@ -99,7 +99,8 @@ class Command:
             self.profile.info_file.write()
             atexit.register(unlock)
 
-    def print_interrupt_msg(self) -> None:
+    @staticmethod
+    def print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
         err(dedent("""
             Initialization was interrupted.
