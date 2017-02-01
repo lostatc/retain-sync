@@ -153,7 +153,6 @@ class ProfileInfoFile(JSONFile):
 
     @property
     def vals(self) -> Dict[str, Any]:
-        output = {}
         output = defaultdict(lambda: None)
         if self.raw_vals:
             output.update(self.raw_vals)
@@ -572,7 +571,7 @@ class ProfileConfigFile(ConfigFile):
         errors = []
 
         # Check that all key names are valid.
-        missing_keys = self.req_keys - self.raw_vals.keys()
+        missing_keys = set(self.req_keys) - self.raw_vals.keys()
         unrecognized_keys = self.raw_vals.keys() - self.all_keys
         if unrecognized_keys or missing_keys:
             for key in missing_keys:
