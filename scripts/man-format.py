@@ -1,4 +1,7 @@
-"""Modify formatting of an html man page."""
+"""Modify formatting of an html man page.
+
+Accept the absolute path of an html file as an argument and modify it in-place.
+"""
 
 import re
 import sys
@@ -27,4 +30,4 @@ for link in [first_link] + first_link.find_next_siblings(["a", "br"]):
     nav_tag.append(link)
 
 with open(in_file, "w") as man_file:
-    man_file.write(soup.prettify())
+    man_file.write(str(soup))
