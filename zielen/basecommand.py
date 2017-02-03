@@ -37,20 +37,9 @@ class Command:
         profile:        The currently selected profile.
     """
     def __init__(self) -> None:
-        self._profiles = {}
+        self.profiles = {
+            name: Profile(name) for name in ProgramDir.list_profiles()}
         self.profile = None
-
-    @property
-    def profiles(self) -> Dict[str, Profile]:
-        """Create Profile instances for each of the user's profiles.
-
-        Returns:
-            A dict containing a Profile object for each profile.
-        """
-        if not self._profiles:
-            self._profiles = {
-                name: Profile(name) for name in ProgramDir.list_profiles()}
-        return self._profiles
 
     def select_profile(self, input_str: str) -> Profile:
         """Select the proper profile based on a name or local dir path.
