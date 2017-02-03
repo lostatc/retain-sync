@@ -1,4 +1,4 @@
-<!-- Creator     : groff version 1.22.3 --><!-- CreationDate: Wed Feb  1 16:47:49 2017 --><!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!-- Creator     : groff version 1.22.3 --><!-- CreationDate: Thu Feb  2 19:14:59 2017 --><!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
 <meta content="groff -Thtml, see www.gnu.org" name="generator"/>
@@ -187,13 +187,13 @@ all subdirectories are included when a directory is synced.
 Once no more whole directories can fit within the
 user-defined storage limit, <b>zielen</b> will try to sync
 individual files until the storage limit is reached. This
-behavior can be overridden by setting <b>syncExtraFiles</b>
+behavior can be overridden by setting <b>SyncExtraFiles</b>
 to ’no’ in the profile config file. Any files
 that have been added since the last sync are copied to the
 remote directory and have their priority artifically
 inflated so that they’re more likely to stay in the
 local directory for a while. This behavior can be overridden
-by setting <b>inflatePriority</b> to ’no’ in the
+by setting <b>InflatePriority</b> to ’no’ in the
 profile config file. Any files that have been deleted since
 the last sync are either removed from or marked for deletion
 in the remote directory (see <b>TRASH</b>).</p>
@@ -206,28 +206,46 @@ remote filesystem supports them.</p>
 <h2>EXCLUDING
 <a name="EXCLUDING"></a>
 </h2>
-<p style="margin-left:11%; margin-top: 1em"><b>zielen</b>
-allows the user to define certain files or directories to be
-excluded from syncing, meaning that they will never leave
-the local directory. This is done in the
-’exclude’ file for that profile (see
-<b>FILES</b>). To keep user-created symbolic links from
-being clobbered, all symbolic links found in the local
-initialized directory that <b>zielen</b> didn’t put
-there are added to the exclude file automatically. The root
-of each file/directory path in the exclude file is anchored
-to the local initialized directory. Another way to think of
-it: each file/directory path in the exclude file is relative
-to the initialized directory, but must include a leading
-slash.</p>
-<p style="margin-left:11%; margin-top: 1em">If the remote
-directory is not shared with any other profiles, then files
-are removed from the remote directory once they are
-excluded. If the remote directory is shared, then files
-remain in the remote directory until they are excluded in
-each configuration that shares that directory. Files that
-are excluded in only some of these profiles will remain in
-the remote directory and will continue to sync normally.</p>
+<p style="margin-left:11%; margin-top: 1em">Files and
+directories can be excluded from syncing using the exclude
+pattern file (see <b>FILES</b>). Each line in the file
+specifies a shell globbing pattern that represents files to
+exclude. Excluded files stay in the local directory and
+don’t count toward the storage limit. If a file is not
+already in the local directory, it is copied from the remote
+directory during the next sync. In single-client
+configurations, the file is then removed from the remote
+directory. In multi-client configurations, a file is removed
+from the remote directory only when it has been excluded by
+each client that shares that remote directory. Until then, a
+copy remains in the remote directory and all copies of the
+file stay in sync.</p>
+<p style="margin-left:11%; margin-top: 1em">Patterns have
+the following format:</p>
+<p style="margin-left:11%; margin-top: 1em">• Lines
+starting with a pound sign ’#’ serve as
+comments.</p>
+<p style="margin-left:11%; margin-top: 1em">• An
+asterisk ’*’ matches anything, but stops at
+slashes.</p>
+<p style="margin-left:11%; margin-top: 1em">• A double
+asterisk ’**’ matches anything, including
+slashes.</p>
+<p style="margin-left:11%; margin-top: 1em">• A
+question mark ’?’ matches any single
+character.</p>
+<p style="margin-left:11%; margin-top: 1em">• A set of
+brackets ’[]’ matches any single character
+contained within the brackets.</p>
+<p style="margin-left:11%; margin-top: 1em">• To match
+any of the above meta-characters literally, wrap them in
+brackets.</p>
+<p style="margin-left:11%; margin-top: 1em">• Patterns
+starting with a slash match file paths relative to the root
+of the sync directory.</p>
+<p style="margin-left:11%; margin-top: 1em">• Patterns
+not starting with a slash match the ends of file paths
+anywhere in the tree.</p>
 <h2>TRASH
 <a name="TRASH"></a>
 </h2>
@@ -249,7 +267,7 @@ permanently deletes the file in the remote directory.
 Otherwise, it only marks the file for deletion. Files marked
 for deletion are made hidden and have ´.trash’
 appended to the end of the file name. This behavior can be
-overridden by setting <b>deleteAlways</b> to
+overridden by setting <b>DeleteAlways</b> to
 ´yes’ in the profile config file. The command
 <b>empty-trash</b> can be used to permanently delete all
 files in the remote directory that are marked for deletion.

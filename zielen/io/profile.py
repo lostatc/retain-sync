@@ -359,51 +359,51 @@ class ProfileConfigFile(ConfigFile):
     """Manipulate a profile configuration file.
 
     Attributes:
-        instances:      A weakly-referenced set of instances of this class.
-        true_vals:      A list of strings that are recognized as boolean true.
-        false_vals:     A list of strings that are recognized as boolean false.
-        host_synonyms:  A list of strings that are synonyms for 'localhost'.
-        req_keys:       A list of config keys that must be included in the
+        _instances:     A weakly-referenced set of instances of this class.
+        _true_vals:     A list of strings that are recognized as boolean true.
+        _false_vals:    A list of strings that are recognized as boolean false.
+        _host_synonyms: A list of strings that are synonyms for 'localhost'.
+        _req_keys:      A list of config keys that must be included in the
                         config file.
-        opt_keys:       A list of config keys that may be commented out or
+        _opt_keys:      A list of config keys that may be commented out or
                         omitted.
-        all_keys:       A list of all keys that are recognized in the config
+        _all_keys:      A list of all keys that are recognized in the config
                         file.
-        bool_keys:      A list of config keys that must have boolean values.
-        connect_keys:   A list of config keys that only matter when connecting
+        _bool_keys:     A list of config keys that must have boolean values.
+        _connect_keys:  A list of config keys that only matter when connecting
                         over ssh.
-        defaults:       A dictionary of default values for optional config
+        _defaults:      A dictionary of default values for optional config
                         keys.
-        subs:           A dictionary of default values for required config
+        _subs:          A dictionary of default values for required config
                         keys.
-        prompt_msgs:    The messages to use when prompting the user for
+        _prompt_msgs:   The messages to use when prompting the user for
                         required config values.
         path:           The path to the configuration file.
         profile:        The Profile object that the config file belongs to.
         add_remote:     Switch the requirements of 'LocalDir' and 'RemoteDir'.
-        raw_vals:       A dictionary of unmodified config value strings.
-        vals:           A read-only dictionary of modified config values.
+        _raw_vals:      A dictionary of unmodified config value strings.
+        _vals:          A read-only dictionary of modified config values.
     """
-    instances = weakref.WeakSet()
-    true_vals = ["yes", "true"]
-    false_vals = ["no", "false"]
-    host_synonyms = ["localhost", "127.0.0.1"]
-    req_keys = [
+    _instances = weakref.WeakSet()
+    _true_vals = ["yes", "true"]
+    _false_vals = ["no", "false"]
+    _host_synonyms = ["localhost", "127.0.0.1"]
+    _req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit"
         ]
-    opt_keys = [
+    _opt_keys = [
         "SshfsOptions", "TrashDirs", "DeleteAlways", "SyncExtraFiles",
         "InflatePriority", "AccountForSize"
         ]
-    all_keys = req_keys + opt_keys
-    bool_keys = [
+    _all_keys = _req_keys + _opt_keys
+    _bool_keys = [
         "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
-    connect_keys = ["RemoteUser", "Port"]
-    # The reason for the distinction between self.defaults and self.subs is
+    _connect_keys = ["RemoteUser", "Port"]
+    # The reason for the distinction between self._defaults and self._subs is
     # that some optional config values have a valid reason for being blank.
-    defaults = {
+    _defaults = {
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
         "TrashDirs":        os.path.join(env("XDG_DATA_HOME"), "Trash/files"),
@@ -412,28 +412,25 @@ class ProfileConfigFile(ConfigFile):
         "InflatePriority":  "yes",
         "AccountForSize":   "yes"
         }
-    subs = {
-        "RemoteHost":   host_synonyms[0],
+    _subs = {
+        "RemoteHost":   _host_synonyms[0],
         "RemoteUser":   env("USER"),
         "Port":         "22"
         }
-
-    prompt_msgs = {
-        "LocalDir":     "Enter the local directory path: ",
-        "RemoteHost":   ("Enter the hostname, IP address or domain name "
-                         "of the remote: "),
-        "RemoteUser":   "Enter your user name on the server: ",
-        "Port":         "Enter the port number for the connection: ",
-        "RemoteDir":    "Enter the remote directory path: ",
-        "StorageLimit": ("Enter the amount of data to keep synced "
-                         "locally: ")
+    _prompt_msgs = {
+        "LocalDir":     "Local directory path",
+        "RemoteHost":   "Hostname, IP address or domain name of the remote",
+        "RemoteUser":   "Your user name on the server",
+        "Port":         "Port number for the connection",
+        "RemoteDir":    "Remote directory path",
+        "StorageLimit": "Amount of data to keep synced locally"
         }
 
     def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
         super().__init__(path)
         self.profile = profile_obj
         self.add_remote = add_remote
-        self.instances.add(self)
+        self._instances.add(self)
 
     def _check_values(self, key: str, value: str) -> Union[str, None]:
         """Check the syntax of a config option and return an error message.
@@ -446,12 +443,12 @@ class ProfileConfigFile(ConfigFile):
             A string corresponding to the syntax error (if any).
         """
         # Check if required values are blank.
-        if key in self.req_keys and not value:
+        if key in self._req_keys and not value:
             return "must not be blank"
 
         # Check boolean values.
-        if key in self.bool_keys and value:
-            if value.lower() not in (self.true_vals + self.false_vals):
+        if key in self._bool_keys and value:
+            if value.lower() not in (self._true_vals + self._false_vals):
                 return "must have a boolean value"
 
         if key == "LocalDir":
@@ -461,7 +458,7 @@ class ProfileConfigFile(ConfigFile):
             if os.path.commonpath([value, ProgramDir.path]) == value:
                 return "must not contain zielen config files"
             overlap_profiles = []
-            for instance in self.instances:
+            for instance in self._instances:
                 # Check if value overlaps with the 'LocalDir' of another
                 # profile.
                 if (not instance.profile
@@ -526,7 +523,7 @@ class ProfileConfigFile(ConfigFile):
             if not re.search("^~?/", value):
                 return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if self.raw_vals["RemoteHost"] in self.host_synonyms:
+            if self.raw_vals["RemoteHost"] in self._host_synonyms:
                 if os.path.exists(value):
                     if os.path.isdir(value):
                         if not os.access(value, os.W_OK):
@@ -571,8 +568,8 @@ class ProfileConfigFile(ConfigFile):
         errors = []
 
         # Check that all key names are valid.
-        missing_keys = set(self.req_keys) - self.raw_vals.keys()
-        unrecognized_keys = self.raw_vals.keys() - self.all_keys
+        missing_keys = set(self._req_keys) - self.raw_vals.keys()
+        unrecognized_keys = self.raw_vals.keys() - self._all_keys
         if unrecognized_keys or missing_keys:
             for key in missing_keys:
                 errors.append(
@@ -583,10 +580,10 @@ class ProfileConfigFile(ConfigFile):
 
         # Check values for valid syntax.
         check_vals = self.raw_vals.copy()
-        if self.raw_vals["RemoteHost"] in self.host_synonyms:
+        if self.raw_vals["RemoteHost"] in self._host_synonyms:
             # These values are irrelevant if the remote directory is on the
             # local machine.
-            for key in self.connect_keys:
+            for key in self._connect_keys:
                 del check_vals[key]
         for key, value in check_vals.items():
             if check_empty or not check_empty and value:
@@ -603,14 +600,14 @@ class ProfileConfigFile(ConfigFile):
         output = {}
         if self.raw_vals:
             # Set default values.
-            output = self.defaults.copy()
+            output = self._defaults.copy()
             output.update(self.raw_vals)
 
         for key, value in output.copy().items():
             if key == "LocalDir":
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "RemoteHost":
-                if value in self.host_synonyms:
+                if value in self._host_synonyms:
                     value = None
             elif key == "RemoteDir":
                 value = os.path.expanduser(os.path.normpath(value))
@@ -637,11 +634,11 @@ class ProfileConfigFile(ConfigFile):
                 value = value.split(":")
                 for index, element in enumerate(value):
                     value[index] = os.path.expanduser(element)
-            elif key in self.bool_keys:
+            elif key in self._bool_keys:
                 if isinstance(value, str):
-                    if value.lower() in self.true_vals:
+                    if value.lower() in self._true_vals:
                         value = True
-                    elif value.lower() in self.false_vals:
+                    elif value.lower() in self._false_vals:
                         value = False
             output[key] = value
 
@@ -649,33 +646,34 @@ class ProfileConfigFile(ConfigFile):
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
-        prompt_keys = self.req_keys.copy()
+        prompt_keys = self._req_keys.copy()
+        print(dedent("""\
+            Please enter values for the following settings. Leave blank to accept the
+            default value if one is given in parentheses.
+            """))
         for key in prompt_keys:
-            # Add default value to the end of the prompt message, before the
-            # colon.
-            if key in self.subs:
-                insert_pos = self.prompt_msgs[key].rfind(":")
-                self.prompt_msgs[key] = (
-                    self.prompt_msgs[key][:insert_pos]
-                    + " ({})".format(self.subs[key])
-                    + self.prompt_msgs[key][insert_pos:])
+            if key in self._subs:
+                # Add the default value to the end of the prompt message.
+                self._prompt_msgs[key] += " ({}): ".format(self._subs[key])
+            else:
+                self._prompt_msgs[key] += ": "
 
             # We don't use a defaultdict for this so that we can know if a
             # config file has been read based on whether raw_vals is empty.
             if not self.raw_vals.get(key, None):
                 while True:
-                    usr_input = input(self.prompt_msgs[key]).strip()
-                    if not usr_input and key in self.subs:
-                        usr_input = self.subs[key]
+                    usr_input = input(self._prompt_msgs[key]).strip()
+                    if not usr_input and key in self._subs:
+                        usr_input = self._subs[key]
                     err_msg = self._check_values(key, usr_input)
                     if err_msg:
                         err("Error: this value " + err_msg)
                     else:
                         break
-                if key == "RemoteHost" and usr_input in self.host_synonyms:
+                if key == "RemoteHost" and usr_input in self._host_synonyms:
                     # These values are irrelevant if the remote
                     # directory is on the local machine.
-                    for conn_key in self.connect_keys:
+                    for conn_key in self._connect_keys:
                         prompt_keys.remove(conn_key)
                 self.raw_vals[key] = usr_input
         print()
