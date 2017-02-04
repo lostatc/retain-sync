@@ -30,16 +30,13 @@ from zielen.exceptions import UserInputError
 def usage(command: str) -> None:
     """Print a usage message."""
 
-    # Define ANSI escape color codes.
     if sys.stdout.isatty():
-        normal = chr(27) + "[0m"      # No formatting.
-        color1 = chr(27) + "[1;31m"   # Bold red, used for commands/options.
-        color2 = chr(27) + "[1;32m"   # Bold green, used for arguments.
+        normal = chr(27) + "[0m"    # No formatting.
+        strong = chr(27) + "[1m"    # Bold, used for commands/options.
+        emphasis = chr(27) + "[4m"  # Underlined, used for arguments.
     else:
         # Don't use colors if stdout isn't a tty.
-        normal = ""
-        color1 = ""
-        color2 = ""
+        normal = emphasis = strong = ""
 
     if not command:
         help_msg = dedent("""\
@@ -51,33 +48,35 @@ def usage(command: str) -> None:
                 {1}-q{0}, {1}--quiet{0}         Suppress all non-error output.
 
             Commands:
-                {1}initialize{0} [{2}options{0}] {2}profile{0}
-                    Create a new profile for a pair of directories to sync.
+                {1}initialize{0} [{2}options{0}] {2}name{0}
+                    Create a new profile, called {2}name{0}, representing a pair of directories to
+                    sync.
 
-                {1}sync{0} {2}profile{0}|{2}path{0}
-                    Redistribute files between the local and remote directories.
+                {1}sync{0} {2}name{0}|{2}path{0}
+                    Bring the local and remote directories in sync and redistribute files based on
+                    their priorities.
 
-                {1}reset{0} [{2}options{0}] {2}profile{0}|{2}path{0}
+                {1}reset{0} [{2}options{0}] {2}name{0}|{2}path{0}
                     Retrieve all files from the remote directory and de-initialize the
                     local directory.
 
-                {1}list-profiles{0}
+                {1}list{0}
                     Print a table of all initialized local directories and the names of
                     their profiles.
 
-                {1}empty-trash{0} {2}profile{0}|{2}path{0}
+                {1}empty-trash{0} {2}name{0}|{2}path{0}
                     Permanently delete all files in the remote directory that are marked
                     for deletion.""")
 
     elif command == "initialize":
         help_msg = dedent("""\
-            {1}initialize{0} [{2}options{0}] {2}profile{0}
-                Create a new profile called {2}profile{0} that syncs a local and remote
-                directory. Move files from the local directory to the remote one.
+            {1}initialize{0} [{2}options{0}] {2}name{0}
+                Create a new profile, called {2}name{0}, representing a pair of directories to
+                sync. Move files from the local directory to the remote one.
 
                 {1}-e{0}, {1}--exclude{0} {2}file{0}
-                    Get a list of file/directory paths from {2}file{0} that will be
-                    excluded from syncing.
+                    Get patterns from {2}file{0} representing files and directories to exclude from
+                    syncing.
 
                 {1}-t{0}, {1}--template{0} {2}file{0}
                     Get settings for the profile from the template {2}file{0} instead
@@ -89,13 +88,13 @@ def usage(command: str) -> None:
 
     elif command == "sync":
         help_msg = dedent("""\
-            {1}sync{0} {2}profile{0}|{2}path{0}
-                Redistribute files between the local and remote directories based on their
-                priority and update the remote directory with any new or deleted files.""")
+            {1}sync{0} {2}name{0}|{2}path{0}
+                Bring the local and remote directories in sync and redistribute files based on
+                their priorities.""")
 
     elif command == "reset":
         help_msg = dedent("""\
-            {1}reset{0} [{2}options{0}] {2}profile{0}|{2}path{0}
+            {1}reset{0} [{2}options{0}] {2}name{0}|{2}path{0}
                 Retrieve all files from the remote directory and de-initialize the local
                 directory.
 
@@ -106,19 +105,19 @@ def usage(command: str) -> None:
                 {1}-n{0}, {1}--no-retrieve{0}
                     Don't retrieve files from the remote directory.""")
 
-    elif command == "list-profiles":
+    elif command == "list":
         help_msg = dedent("""\
-            {1}list-profiles{0}
+            {1}list{0}
                 Print a table of all initialized directories and the names of their
                 profiles.""")
 
     elif command == "empty-trash":
         help_msg = dedent("""\
-            {1}empty-trash{0} {2}profile{0}|{2}path{0}
+            {1}empty-trash{0} {2}name{0}|{2}path{0}
                 Permanently delete all files in the remote directory that are marked for
                 deletion.""")
 
-    help_msg = help_msg.format(normal, color1, color2)
+    help_msg = help_msg.format(normal, strong, emphasis)
     print(help_msg)
 
 
@@ -184,23 +183,23 @@ def parse_args() -> dict:
 
     parser_sync = subparsers.add_parser("sync", add_help=False)
     parser_sync.add_argument("--help", action=HelpAction)
-    parser_sync.add_argument("profile", metavar="profile or path")
+    parser_sync.add_argument("profile", metavar="profile name or path")
     parser_sync.set_defaults(command="sync")
 
     parser_reset = subparsers.add_parser("reset", add_help=False)
     parser_reset.add_argument("--help", action=HelpAction)
     parser_reset.add_argument("--keep-remote", "-k", action="store_true")
     parser_reset.add_argument("--no-retrieve", "-n", action="store_true")
-    parser_reset.add_argument("profile", metavar="profile or path")
+    parser_reset.add_argument("profile", metavar="profile name or path")
     parser_reset.set_defaults(command="reset")
 
-    parser_listprofiles = subparsers.add_parser("list-profiles", add_help=False)
+    parser_listprofiles = subparsers.add_parser("list", add_help=False)
     parser_listprofiles.add_argument("--help", action=HelpAction)
-    parser_listprofiles.set_defaults(command="list-profiles")
+    parser_listprofiles.set_defaults(command="list")
 
     parser_emptytrash = subparsers.add_parser("empty-trash", add_help=False)
     parser_emptytrash.add_argument("--help", action=HelpAction)
-    parser_emptytrash.add_argument("profile", metavar="profile or path")
+    parser_emptytrash.add_argument("profile", metavar="profile name or path")
     parser_emptytrash.set_defaults(command="empty-trash")
 
     return vars(parser.parse_args())
