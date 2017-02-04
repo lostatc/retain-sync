@@ -28,16 +28,16 @@ centrally and sync them across multiple clients as storage space permits.
 ## Installation
 #### Dependencies
 * python >= 3.5
-* Sphinx
 * rsync
-* sshfs (optional)
+* Sphinx
+* sshfs
 * systemd
 
 #### Installing from source
+Run the following commands in the downloaded source directory.
 ```
-git clone https://github.com/lostatc/zielen
-cd zielen
-python setup.py install
+make
+sudo make install
 ```
 
 ## Notes

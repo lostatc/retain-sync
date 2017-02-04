@@ -8,17 +8,18 @@ setup(
     author="Garrett Powell",
     author_email="garrett@gpowell.net",
     license="GPLv3",
+    install_requires=["Sphinx"],
     data_files=[
         ("bin",
-            ["scripts/zielen"]),
-        ("share/man/man1",
-            ["docs/zielen.1"]),
-        ("share/zielen",
-            ["docs/templates/config-template"]),
+            ["scripts/zielen", "scripts/zielend"]),
         ("share/licenses/zielen",
             ["LICENSE"]),
+        ("share/zielen",
+            ["docs/templates/config-template"]),
         ("lib/systemd/user",
-            ["docs/unit/zielen@.service"])
+            ["docs/unit/zielen@.service"]),
+        ("share/man/man1",
+            ["docs/_build/man/zielen.1"])
         ],
     packages=[
         "zielen", "zielen.io", "zielen.util", "zielen.commands"
