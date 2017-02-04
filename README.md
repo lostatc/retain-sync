@@ -14,6 +14,8 @@ directory vs the remote one. Multiple concurrent pairs of directories can be
 synced, and since they can overlap, zielen allows you to store your files
 centrally and sync them across multiple clients as storage space permits.
 
+[Documentation](https://zielen.readthedocs.io/en/latest/index.html)
+
 ## Features
 * uses rsync's delta-transfer algorithm to only sync what has been modified
 * uses ssh for syncing between computers, which is secure and easy to set up
@@ -26,6 +28,7 @@ centrally and sync them across multiple clients as storage space permits.
 ## Installation
 #### Dependencies
 * python >= 3.5
+* Sphinx
 * rsync
 * sshfs (optional)
 * systemd
@@ -36,9 +39,6 @@ git clone https://github.com/lostatc/zielen
 cd zielen
 python setup.py install
 ```
-
-## Documentation
-[zielen(1)](https://lostatc.github.io/zielen/zielen.1.html)
 
 ## Notes
 If you're using an ssh agent, zielen needs the location of the
