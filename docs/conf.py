@@ -47,7 +47,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'zielen'
-copyright = 'Copyright © 2016-2017 Garrett Powell'
+copyright = 'Copyright 2016-2017 Garrett Powell'
 author = 'Garrett Powell <garrett@gpowell.net>'
 
 # The version info for the project you're documenting, acts as replacement for
