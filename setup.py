@@ -11,7 +11,7 @@ setup(
     install_requires=["Sphinx"],
     data_files=[
         ("bin",
-            ["scripts/zielen", "scripts/zielend"]),
+            ["scripts/zielen"]),
         ("share/licenses/zielen",
             ["LICENSE"]),
         ("share/zielen",
