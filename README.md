@@ -1,5 +1,6 @@
 # zielen
 This program is still in active development, and is not yet in a usable state.
+Not all features described have been implemented.
 
 zielen is a program that tries to conserve disk space by redistributing your
 files based on their size and how frequently you access them. Your most
