@@ -28,11 +28,12 @@ centrally and sync them across multiple clients as storage space permits.
 
 ## Installation
 #### Dependencies
-* python >= 3.5
-* rsync
-* Sphinx
-* sshfs
-* systemd
+* [python](https://www.python.org/) >= 3.5
+* [inotify](https://github.com/dsoprea/PyInotify)
+* [rsync](https://rsync.samba.org/)
+* [Sphinx](http://www.sphinx-doc.org/en/stable/)
+* [sshfs](https://github.com/libfuse/sshfs)
+* [systemd](https://www.freedesktop.org/wiki/Software/systemd/)
 
 #### Installing from source
 Run the following commands in the downloaded source directory.
