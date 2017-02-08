@@ -22,27 +22,38 @@ import signal
 
 from zielen.exceptions import ProgramError
 from zielen.basecommand import Command
+from zielen.daemon import Daemon
 from zielen.commands.initialize import InitializeCommand
 from zielen.commands.sync import SyncCommand
 from zielen.util.input import parse_args
 from zielen.util.misc import err
 
 
-def main() -> None:
-    """Main function."""
-    # Exit properly on SIGTERM, SIGHUP or SIGINT
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGHUP, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
+def main() -> int:
+    """Start the program."""
     try:
+        handle_signals()
         cmd_args = parse_args()
         command = def_command(cmd_args)
         command.main()
     except ProgramError as e:
         for message in e.args:
             err("Error: {}".format(message))
-        sys.exit(1)
+        return 1
+    return 0
+
+
+def daemon() -> int:
+    """Start the daemon."""
+    try:
+        handle_signals()
+        ghost = Daemon(sys.argv[1])
+        ghost.main()
+    except ProgramError as e:
+        for message in e.args:
+            err("Error: {}".format(message))
+        return 1
+    return 0
 
 
 def def_command(cmd_args: dict) -> Command:
@@ -61,7 +72,12 @@ def def_command(cmd_args: dict) -> Command:
         pass
 
 
-def signal_handler(signum: int, frame) -> None:
-    """Print an appropriate error message for an interruption by signal."""
-    err("Error: program received", signal.Signals(signum).name)
-    sys.exit(1)
+def handle_signals() -> None:
+    """Exit properly on SIGTERM, SIGHUP or SIGINT."""
+    def handler(signum: int, frame) -> None:
+        """Print an appropriate error message for an interruption by signal."""
+        raise ProgramError("program received" + signal.Signals(signum).name)
+
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGHUP, handler)
+    signal.signal(signal.SIGINT, handler)

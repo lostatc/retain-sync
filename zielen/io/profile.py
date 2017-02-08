@@ -26,9 +26,10 @@ import datetime
 import pkg_resources
 import sqlite3
 import weakref
+import time
 from textwrap import dedent
 from collections import defaultdict
-from typing import Dict, Any, Iterable, Set, Union, Generator
+from typing import Dict, Any, Iterable, Set, Union, Generator, List, Tuple
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -160,6 +161,10 @@ class ProfileInfoFile(JSONFile):
                 output["LastSync"] = datetime.datetime.strptime(
                     output["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
                     tzinfo=datetime.timezone.utc).timestamp()
+            if output["LastAdjust"]:
+                output["LastAdjust"] = datetime.datetime.strptime(
+                    output["LastAdjust"], "%Y-%m-%dT%H:%M:%S").replace(
+                    tzinfo=datetime.timezone.utc).timestamp()
         return output
 
     def generate(self, name: str, add_remote=False) -> None:
@@ -173,6 +178,8 @@ class ProfileInfoFile(JSONFile):
                         already running on the profile.
             LastSync:   The date and time (UTC) of the last sync on the
                         profile.
+            LastAdjust: The date and time (UTC) of the last priority adjustment
+                        on the profile.
             Version:    The version of the program that the profile was
                         initialized by.
             ID:         A unique ID consisting of the machine ID, username and
@@ -188,11 +195,12 @@ class ProfileInfoFile(JSONFile):
             unique_id = "-".join([id_file.read(8), env("USER"), name])
         version = float(pkg_resources.get_distribution("zielen").version)
         self.raw_vals.update({
-            "Status":   "partial",
-            "Locked":   True,
+            "Status": "partial",
+            "Locked": True,
             "LastSync": None,
-            "Version":  version,
-            "ID":       unique_id,
+            "LastAdjust": None,
+            "Version": version,
+            "ID": unique_id,
             "InitOpts": {
                 "add_remote": add_remote
                 }
@@ -204,6 +212,13 @@ class ProfileInfoFile(JSONFile):
         # Store the timestamp as a human-readable string so that the file can
         # be edited manually.
         self.raw_vals["LastSync"] = datetime.datetime.utcnow().strftime(
+            "%Y-%m-%dT%H:%M:%S")
+
+    def update_adjusttime(self) -> None:
+        """Update the time of the last sync."""
+        # Store the timestamp as a human-readable string so that the file can
+        # be edited manually.
+        self.raw_vals["LastAdjust"] = datetime.datetime.utcnow().strftime(
             "%Y-%m-%dT%H:%M:%S")
 
 
@@ -295,11 +310,12 @@ class ProfileDBFile:
                     WHERE path=?;
                     """, (path,))
 
-    def prioritize(self) -> Set[str]:
+    def get_priorities(self) -> List[Tuple[str, float]]:
         """Get the paths of files sorted by their priorities.
 
         Returns:
-            A list of file paths and their priorities.
+            A list of tuples, each containing a file path the corresponding
+            priority value, sorted by priority.
         """
         with self.conn:
             self.cur.execute("""\
@@ -307,7 +323,7 @@ class ProfileDBFile:
                 FROM files
                 ORDER BY priority DESC
                 """)
-        return {path for path, priority in self.cur.fetchall()}
+        return [(path, priority) for path, priority in self.cur.fetchall()]
 
     def increment(self, paths: Iterable[str]) -> None:
         """Increment the priority of some file paths by one.
@@ -323,7 +339,7 @@ class ProfileDBFile:
                     WHERE path=?;
                     """, (path,))
 
-    def adjust_all(self, adjustment=0.99) -> None:
+    def adjust_all(self, adjustment) -> None:
         """Multiply the priorities of all file paths by a constant.
 
         Args:

@@ -8,7 +8,7 @@ setup(
     author="Garrett Powell",
     author_email="garrett@gpowell.net",
     license="GPLv3",
-    install_requires=["Sphinx"],
+    install_requires=["Sphinx", "inotify"],
     data_files=[
         ("bin",
             ["scripts/zielen"]),
