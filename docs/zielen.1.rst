@@ -28,7 +28,7 @@ Terminology
 -----------
 Local Directory
     A local directory is a directory on your local machine that you want to
-    contain only that files that it has space for.
+    contain only the files that it has space for.
 
 Remote Directory
     A remote directory is a directory, either on your local machine or
@@ -125,8 +125,6 @@ COMMANDS
     deletion (see TRASH_). This command accepts the absolute path of a local
     initialized directory or the name of its profile.
 
-.. _SYNCING:
-
 SYNCING
 =======
 Whenever a profile is initialized, **zielen** will direct the user to start the
@@ -160,8 +158,6 @@ long as both filesystems support them. The program deliberately does not sync
 user-created symlinks. The rationale behind this is that absolute links will be
 broken when copied to another directory.
 
-.. _EXCLUDING:
-
 EXCLUDING
 =========
 Files and directories can be excluded from syncing using the exclude pattern
@@ -189,8 +185,6 @@ Patterns have the following format:
 * Patterns not starting with a slash match the ends of file paths anywhere in
   the tree.
 
-.. _TRASH:
-
 TRASH
 =====
 Before **zielen** deletes a file in the remote directory, it first searches for
@@ -204,8 +198,6 @@ in the profile config file. The command **empty-trash** can be used to
 permanently delete all files in the remote directory that are marked for
 deletion. The list of directories that are searched for deleted files can be
 altered in the profile config file.
-
-.. _FILES:
 
 FILES
 =====
