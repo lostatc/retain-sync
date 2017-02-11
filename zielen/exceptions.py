@@ -33,7 +33,7 @@ class ServerError(ProgramError):
 
 
 class AvailableSpaceError(ProgramError):
-    """Raised whenever there is not enough space to accomodate files."""
+    """Raised whenever there is not enough space to accommodate files."""
 
 
 class UserInputError(ProgramError):

@@ -33,8 +33,8 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
 
     Args:
         add_args:   A list of arguments to pass to rsync.
-        files:      A list of relative file paths to sync.
-        exclude:    A list of relative file paths to exclude from syncing.
+        files:      A list of relative paths of files to sync.
+        exclude:    A list of relative paths of files to exclude from syncing.
         msg:        A message to display opposite the progress bar. If empty,
                     the bar won't appear.
 
@@ -94,8 +94,8 @@ def rclone(src: str, dest: str, files=None, exclude=None, msg="") -> None:
     Args:
         src:        The file to copy or directory to copy the contents of.
         dest:       The location to copy the files to.
-        files:      A list of relative file paths to sync.
-        exclude:    A list of relative file paths to exclude from syncing.
+        files:      A list of relative paths of files to sync.
+        exclude:    A list of relative paths of files to exclude from syncing.
         msg:        A message to display opposite the progress bar. If empty,
                     the bar won't appear.
 

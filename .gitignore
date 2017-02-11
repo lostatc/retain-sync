@@ -4,3 +4,4 @@ __pycache__
 /docs/_build
 /build
 /installed_files.txt
+/.idea

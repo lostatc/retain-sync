@@ -26,10 +26,9 @@ import datetime
 import pkg_resources
 import sqlite3
 import weakref
-import time
 from textwrap import dedent
 from collections import defaultdict
-from typing import Dict, Any, Iterable, Set, Union, Generator, List, Tuple
+from typing import Dict, Any, Iterable, Union, Generator, List, Tuple
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -88,7 +87,7 @@ class ProfileExcludeFile:
         """
         with open(self.path, "w") as outfile:
             outfile.write(dedent("""\
-                # This file contians patterns representing files and directories to exclude
+                # This file contains patterns representing files and directories to exclude
                 # from syncing.
                 #
                 # The patterns follow shell globbing rules as described in zielen(1).

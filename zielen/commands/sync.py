@@ -129,10 +129,201 @@ class SyncCommand(Command):
         # At this point, the differences between the two directories have been
         # resolved.
 
+        # Copy excluded files to the local directory if not already there,
+        # and remove them from the remote directory if they've been excluded
+        # by each client. Decide which files and directories should remain
+        # in the local directory.
+
+        # Decide which files and directories to keep in the local directory.
+        retain_dirs, remaining_space = self._prioritize_dirs(
+            self.profile.cfg_file.vals["StorageLimit"])
+        if self.profile.cfg_file.vals["SyncExtraFiles"]:
+            retain_files, remaining_space = self._prioritize_files(
+                remaining_space, exclude_paths=retain_dirs)
+        else:
+            retain_files = set()
+
+        # Copy the selected files to the local directory and replace all
+        # others with symlinks.
+        self._update_local(retain_dirs | retain_files)
+
         # The sync is now complete. Update the time of the last sync in the
         # info file.
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
+
+    def _update_local(self, retain_files: Iterable[str]) -> None:
+        """Update the local directory with remote files.
+
+        Args:
+            retain_files:   The paths of files and directories to copy from
+                            the remote directory to the local one. All other
+                            files in the local directory are replaced with
+                            symlinks.
+        """
+        retain_files = set(retain_files)
+        all_files = set(self.local_dir.list_files(rel=True, dirs=True))
+        stale_files = list(all_files - retain_files)
+
+        # Sort the file paths so that a directory's contents always comes
+        # before the directory.
+        stale_files.sort(reverse=True)
+
+        for path in stale_files:
+            try:
+                os.remove(os.path.join(self.local_dir.path, path))
+            except IsADirectoryError:
+                shutil.rmtree(os.path.join(self.local_dir.path, path))
+
+        self.dest_dir.symlink_tree(
+            self.local_dir.path,
+            exclude=self.dest_dir.db_file.list_files(deleted=True))
+
+        try:
+            rclone(
+                self.dest_dir.safe_path, self.local_dir.path,
+                files=retain_files,
+                exclude=self.dest_dir.db_file.list_files(deleted=True),
+                msg="Updating local files...")
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
+
+    def _prioritize_files(
+            self, space_limit=int, exclude_paths=None) -> Tuple[Set[str], int]:
+        """Calculate which files will stay in the local directory.
+
+        Args:
+            exclude_paths:  An iterable of paths of files and directories to
+                            not consider when selecting files.
+            space_limit:    The amount of space remaining in the directory
+                            (in bytes).
+
+        Returns:
+            A tuple containing a list of paths of files to keep in the local
+            directory and the amount of space remaining (in bytes) until the
+            storage limit is reached.
+        """
+        file_priorities = self.profile.db_file.get_priorities()
+        adjusted_priorities = []
+        for file_path, file_priority in file_priorities:
+            for exclude_path in exclude_paths:
+                if (os.path.commonpath([file_path, exclude_path])
+                        == exclude_path):
+                    break
+            else:
+                # The file is not included in the list of excluded paths.
+                file_size = os.stat(
+                    os.path.join(self.dest_dir.path, file_path)).st_size
+                if self.profile.cfg_file.vals["AccountForSize"]:
+                    try:
+                        adjusted_priorities.append((
+                            file_path, file_priority / file_size, file_size))
+                    except ZeroDivisionError:
+                        adjusted_priorities.append((file_path, 0, file_size))
+                else:
+                    adjusted_priorities.append((
+                        file_path, file_priority, file_size))
+
+        # Sort directories by priority.
+        adjusted_priorities.sort(key=lambda x: x[1], reverse=True)
+        selected_files = [
+            (path, size) for path, priority, size in adjusted_priorities]
+
+        # Calculate which directories will stay in the local directory.
+        remaining_space = space_limit
+        for file_path, file_size in selected_files.copy():
+            remaining_space -= file_size
+            if remaining_space < 0:
+                # There is not enough room for the current directory.
+                # Remove it from the list.
+                selected_files.remove((file_path, file_size))
+                remaining_space += file_size
+
+        selected_files = {path for path, size in selected_files}
+        return selected_files, remaining_space
+
+    def _prioritize_dirs(self, space_limit: int) -> Tuple[Set[str], int]:
+        """Calculate which directories will stay in the local directory.
+
+        Args:
+            space_limit:    The amount of space remaining in the directory
+                            (in bytes).
+        Returns:
+            A tuple containing a list of paths of directories to keep in the
+            local directory and the amount of space remaining (in bytes) until
+            the storage limit is reached.
+        """
+        file_priorities = self.profile.db_file.get_priorities()
+        dir_paths = self.local_dir.list_files(
+            rel=True, files=False, dirs=True,
+            exclude=self.profile.ex_file.rel_files)
+        dir_priorities = []
+
+        # Calculate the priorities of each directory. A directory priority is
+        # calculated by finding the sum of the priorities of its files and
+        # dividing by the directory size.
+        for dir_path in dir_paths:
+            dir_priority = 0.0
+            dir_size = 0
+            for file_path, file_priority in file_priorities:
+                if os.path.commonpath([file_path, dir_path]) == dir_path:
+                    dir_priority += file_priority
+                    dir_size += os.stat(
+                        os.path.join(self.dest_dir.path, file_path)).st_size
+            if self.profile.cfg_file.vals["AccountForSize"]:
+                try:
+                    dir_priorities.append((
+                        dir_path, dir_priority / dir_size, dir_size))
+                except ZeroDivisionError:
+                    dir_priorities.append((dir_path, 0, dir_size))
+            else:
+                dir_priorities.append((dir_path, dir_priority, dir_size))
+
+        # Sort directories by priority.
+        dir_priorities.sort(key=lambda x: x[1], reverse=True)
+        selected_dirs = [
+            (path, size) for path, priority, size in dir_priorities]
+
+        # Calculate which directories will stay in the local directory.
+        while True:
+            remaining_space = space_limit
+            for dir_path, dir_size in selected_dirs.copy():
+                if dir_size > self.profile.cfg_file.vals["StorageLimit"]:
+                    # This directory alone is larger than the storage limit.
+                    # Remove it from the list.
+                    selected_dirs.remove((dir_path, dir_size))
+                    continue
+
+                remaining_space -= dir_size
+                if remaining_space < 0:
+                    # There is not enough room for the current directory.
+                    # Remove it from the list.
+                    selected_dirs.remove((dir_path, dir_size))
+                    remaining_space += dir_size
+                else:
+                    # Remove any subdirectories of the current directory
+                    # from the list. This prevents directories from being
+                    # counted more than once when calculating the total size.
+                    for subdir_path, subdir_size in selected_dirs.copy():
+                        if (dir_path != subdir_path
+                                and os.path.commonpath([subdir_path, dir_path])
+                                == dir_path):
+                            selected_dirs.remove((subdir_path, subdir_size))
+                            break
+                    else:
+                        continue
+
+                    # The list of directories has been modified. Start over
+                    # from the beginning.
+                    break
+            else:
+                # The directories that remain in the list are the ones that
+                # will stay in the local directory.
+                break
+
+        selected_dirs = {path for path, size in selected_dirs}
+        return selected_dirs, remaining_space
 
     def _update_remote(self, local_mod_files: Iterable[str]) -> None:
         """Update the remote directory with modified local files.
@@ -149,13 +340,13 @@ class SyncCommand(Command):
                 self.local_dir.path, self.dest_dir.safe_path,
                 files=local_mod_files & set(
                     self.local_dir.list_files(rel=True)),
-                msg="Updating remote...")
+                msg="Updating remote files...")
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
-        # Add new files to the database and update the lastsync time for
-        # existing ones.
+        # Add new files to the database and update the time of the last sync
+        # for existing ones.
         self.dest_dir.db_file.add_files(local_mod_files)
 
     def _handle_conflicts(
@@ -264,7 +455,8 @@ class SyncCommand(Command):
         """
         local_files = set(self.local_dir.list_files(rel=True, symlinks=True))
         remote_files = set(self.dest_dir.list_files(rel=True))
-        known_files = set(self.profile.db_file.prioritize())
+        known_files = {
+            path for path, priority in self.profile.db_file.get_priorities()}
 
         local_del_files = known_files - remote_files
         remote_del_files = known_files - local_files

@@ -3,7 +3,7 @@
 #
 
 
-# The path to the local sync directory.
+# The path of the local sync directory.
 LocalDir=
 
 # The hostname, IP address or domain name of the remote. Use 'localhost' if the
@@ -18,7 +18,7 @@ RemoteUser=
 # to the local machine.
 Port=
 
-# The path to the remote sync directory.
+# The path of the remote sync directory.
 RemoteDir=
 
 # The amount of data to keep in the local directory. This accepts KB, MB, GB,

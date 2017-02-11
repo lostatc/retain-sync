@@ -243,7 +243,7 @@ class SSHConnection(Connection):
         return not bool(cmd.returncode)
 
     def _mkdir(self) -> bool:
-        """Create the remote direcory if it doesn't already exist."""
+        """Create the remote directory if it doesn't already exist."""
         remote_dir = shlex.quote(self._remote_dir)
         cmd = self._execute(["mkdir", "-p", remote_dir])
         return not bool(cmd.returncode)

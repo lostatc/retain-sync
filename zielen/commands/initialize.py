@@ -192,8 +192,9 @@ class InitializeCommand(Command):
             # Generate the exclude pattern file.
             self.profile.ex_file.generate(self.exclude)
 
-            # The profile is now partially initialized. If the initilization is
-            # interrupted from this point, it can be resumed.
+            # The profile is now partially initialized. If the
+            # initialization is interrupted from this point, it can be
+            # resumed.
             self.profile.info_file.generate(
                 self.profile.name, add_remote=self.add_remote)
             atexit.register(self.print_interrupt_msg)
@@ -206,6 +207,7 @@ class InitializeCommand(Command):
             atexit.unregister(self.connection.unmount)
         self.profile.info_file.raw_vals["Status"] = "initialized"
         self.profile.info_file.update_synctime()
+        self.profile.info_file.update_adjusttime()
         self.profile.info_file.write()
         atexit.unregister(self.print_interrupt_msg)
 
@@ -233,20 +235,20 @@ class InitializeCommand(Command):
                 raise ServerError(
                     "the connection to the remote directory was lost")
 
-            # Check that there is enough local space to accomodate remote
+            # Check that there is enough local space to accommodate remote
             # files.
             if self.dest_dir.total_size() > self.local_dir.space_avail():
                 raise AvailableSpaceError(
-                    "not enough local space to accomodate remote files")
+                    "not enough local space to accommodate remote files")
         else:
             # Expand exclude globbing patterns.
             self.profile.ex_file.glob(self.local_dir.path)
 
-            # Check that there is enough remote space to accomodate local
+            # Check that there is enough remote space to accommodate local
             # files.
             if self.local_dir.total_size() > self.dest_dir.space_avail():
                 raise AvailableSpaceError(
-                    "not enough space in remote to accomodate local files")
+                    "not enough space in remote to accommodate local files")
 
             # Copy local files to the server.
             try:
