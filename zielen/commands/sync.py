@@ -270,11 +270,13 @@ class SyncCommand(Command):
         remote_del_files = known_files - local_files
         if not self.profile.cfg_file.vals["DeleteAlways"]:
             trash_dir = TrashDir(self.profile.cfg_file.vals["TrashDirs"])
-        remote_trash_files = {
-            path for path in remote_del_files
-            if self.profile.cfg_file.vals["DeleteAlways"]
-            or not trash_dir.check_file(os.path.join(
-                self.dest_dir.safe_path, path))}
+        remote_trash_files = set()
+        for path in remote_del_files:
+            dest_path = os.path.join(self.dest_dir.safe_path, path)
+            if (self.profile.cfg_file.vals["DeleteAlways"]
+                    or os.path.isfile(dest_path)
+                    and not trash_dir.check_file(dest_path)):
+                remote_trash_files.add(path)
         remote_del_files -= remote_trash_files
 
         return local_del_files, remote_del_files, remote_trash_files
