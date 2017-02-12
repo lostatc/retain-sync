@@ -162,7 +162,8 @@ class SyncCommand(Command):
                             symlinks.
         """
         retain_files = set(retain_files)
-        all_files = set(self.local_dir.list_files(rel=True, dirs=True))
+        all_files = set(self.local_dir.list_files(
+            rel=True, dirs=True, exclude=self.profile.ex_file.rel_files))
         stale_files = list(all_files - retain_files)
 
         # Sort the file paths so that a directory's contents always comes
