@@ -260,10 +260,6 @@ class InitializeCommand(Command):
                 raise ServerError(
                     "the connection to the remote directory was lost")
 
-        # Overwrite local files with symlinks to the corresponding files in the
-        # remote dir.
-        self.dest_dir.symlink_tree(self.local_dir.path, overwrite=True)
-
         remote_files = set(self.dest_dir.list_files(rel=True))
 
         # Generate the local file priority database.
@@ -279,6 +275,13 @@ class InitializeCommand(Command):
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")
+
+        # Overwrite local files with symlinks to the corresponding files in the
+        # remote dir.
+        self.dest_dir.symlink_tree(
+            self.local_dir.path,
+            exclude=self.dest_dir.db_file.list_files(deleted=True),
+            overwrite=True)
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
