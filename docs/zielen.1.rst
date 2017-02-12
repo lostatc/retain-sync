@@ -94,14 +94,14 @@ COMMANDS
 
 **sync** *name*\ \|\ *path*
     Bring the local and remote directories in sync and redistribute files based
-    on their priorities. This command accepts the absolute *path* of a local
-    initialized directory or the *name* of its profile. This command is run
-    automatically at intervals while the daemon is running.
+    on their priorities. This command accpets the *name* of a profile or the
+    absolute *path* of its local directory. This command is run automatically
+    at intervals while the daemon is running.
 
 **reset** [*options*] *name*\ \|\ *path*
     Retrieve all files from the remote directory and de-initialize the local
-    directory. This command accepts the absolute *path* of a local initialized
-    directory or the *name* of its profile.
+    directory. This command accpets the *name* of a profile or the absolute
+    *path* of its local directory.
 
     **-k**, **--keep-remote**
         Copy files from the remote directory to the local one instead of moving
@@ -117,13 +117,13 @@ COMMANDS
         option supersedes **--keep-remote**.
 
 **list**
-    Print a table of all initialized directories and the names of their
-    profiles.
+    Print a table of all profiles names and the paths of their local
+    directories.
 
-**empty-trash**
+**empty-trash** *name*\ \|\ *path*
     Permanently delete all files in the remote directory that are marked for
-    deletion (see TRASH_). This command accepts the absolute path of a local
-    initialized directory or the name of its profile.
+    deletion (see TRASH_). This command accpets the *name* of a profile or the
+    absolute *path* of its local directory.
 
 SYNCING
 =======

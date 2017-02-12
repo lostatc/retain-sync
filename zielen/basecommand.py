@@ -63,7 +63,7 @@ class Command:
                         input_path, profile.cfg_file.vals["LocalDir"]):
                     return profile
         raise UserInputError(
-            "argument is not a profile name or initialized directory")
+            "argument is not a profile name or local directory path")
 
     def lock(self) -> None:
         """Lock the profile if not already locked."""
