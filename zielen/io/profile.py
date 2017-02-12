@@ -64,6 +64,10 @@ class Profile:
 class ProfileExcludeFile:
     """Manipulate a file containing exclude patterns for the profile.
 
+    A copy of the exclude pattern file for each client is kept in the remote
+    directory so that each client can determine if every other client has
+    excluded a given file.
+
     Attributes:
         comment_reg:    Regex that denotes a comment line.
         path:           The path to the exclude pattern file.
@@ -594,13 +598,13 @@ class ProfileConfigFile(ConfigFile):
                     "{0}: unrecognized option '{1}'".format(context, key))
 
         # Check values for valid syntax.
-        check_vals = self.raw_vals.copy()
-        if self.raw_vals["RemoteHost"] in self._host_synonyms:
-            # These values are irrelevant if the remote directory is on the
-            # local machine.
-            for key in self._connect_keys:
-                del check_vals[key]
-        for key, value in check_vals.items():
+        for key, value in self.raw_vals.items():
+            # If the remote directory is on the local machine, then certain
+            # options should not be checked.
+            if (self.raw_vals["RemoteHost"] in self._host_synonyms
+                    and key in self._connect_keys):
+                continue
+
             if check_empty or not check_empty and value:
                 err_msg = self._check_values(key, value)
                 if err_msg:
@@ -661,12 +665,18 @@ class ProfileConfigFile(ConfigFile):
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
-        prompt_keys = self._req_keys.copy()
         print(dedent("""\
             Please enter values for the following settings. Leave blank to accept the
             default value if one is given in parentheses.
             """))
-        for key in prompt_keys:
+        for key in self._req_keys:
+            # If the remote directory is on the local machine, then the user
+            # should not be prompted for certain settings.
+            if (self.raw_vals.get("RemoteHost", None) in self._host_synonyms
+                    and key in self._connect_keys):
+                self.raw_vals[key] = ""
+                continue
+
             if key in self._subs:
                 # Add the default value to the end of the prompt message.
                 self._prompt_msgs[key] += " ({}): ".format(self._subs[key])
@@ -685,10 +695,5 @@ class ProfileConfigFile(ConfigFile):
                         err("Error: this value " + err_msg)
                     else:
                         break
-                if key == "RemoteHost" and usr_input in self._host_synonyms:
-                    # These values are irrelevant if the remote
-                    # directory is on the local machine.
-                    for conn_key in self._connect_keys:
-                        prompt_keys.remove(conn_key)
                 self.raw_vals[key] = usr_input
         print()

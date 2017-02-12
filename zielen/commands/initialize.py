@@ -162,7 +162,8 @@ class InitializeCommand(Command):
             # This final check is necessary for cases where a template was used
             # that contained values dependent on other unspecified values for
             # validity checking (e.g. 'RemoteDir' and 'RemoteHost').
-            self.profile.cfg_file.check_all(context="template file")
+            if self.template:
+                self.profile.cfg_file.check_all(context="template file")
 
             # Write config values to file.
             if self.template:
