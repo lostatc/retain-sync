@@ -11,7 +11,7 @@ setup(
     install_requires=["Sphinx", "inotify"],
     data_files=[
         ("bin",
-            ["scripts/zielen"]),
+            ["scripts/zielen", "scripts/zielend"]),
         ("share/licenses/zielen",
             ["LICENSE"]),
         ("share/zielen",

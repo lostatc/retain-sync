@@ -1,8 +1,10 @@
 PREFIX ?= /usr
+BINDIR = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man
 
 build:
 	make -C "docs" man
+	sed "s|@bindir@|$(BINDIR)|" "docs/unit/zielen@.service.in" > "docs/unit/zielen@.service"
 	python setup.py build
 	python setup.py egg_info
 
@@ -20,6 +22,7 @@ uninstall:
 clean:
 	rm -rf "build"
 	rm -rf "docs/_build"
+	rm -f "docs/unit/zielen@.service"
 	find "zielen" -depth -name "__pycache__" -type d | xargs rm -rf
 
 help:

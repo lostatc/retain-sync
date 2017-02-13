@@ -4,7 +4,7 @@ Documentation=man:zielen(1)
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/env python3 -c "from zielen.main import daemon; daemon()" %i
+ExecStart=@bindir@/zielend %i
 StandardOutput=journal
 StandardError=journal
 

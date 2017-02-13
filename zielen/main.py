@@ -43,17 +43,15 @@ def main() -> int:
     return 0
 
 
-def daemon() -> int:
+def daemon(profile_name) -> None:
     """Start the daemon."""
     try:
         handle_signals()
-        ghost = Daemon(sys.argv[1])
+        ghost = Daemon(profile_name)
         ghost.main()
     except ProgramError as e:
         for message in e.args:
             err("Error: {}".format(message))
-        return 1
-    return 0
 
 
 def def_command(cmd_args: dict) -> Command:
