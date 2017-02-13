@@ -27,6 +27,7 @@ from zielen.exceptions import UserInputError, ServerError
 from zielen.basecommand import Command
 from zielen.util.connect import SSHConnection
 from zielen.util.misc import timestamp_path
+from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
 from zielen.io.transfer import rclone
 
@@ -129,10 +130,10 @@ class SyncCommand(Command):
         # At this point, the differences between the two directories have been
         # resolved.
 
-        # Copy excluded files to the local directory if not already there,
-        # and remove them from the remote directory if they've been excluded
-        # by each client. Decide which files and directories should remain
-        # in the local directory.
+        # Calculate which excluded files are still in the remote directory.
+        remote_excluded_files = (
+            self.profile.ex_file.rel_files
+            & set(self.dest_dir.list_files(rel=True, dirs=True)))
 
         # Decide which files and directories to keep in the local directory.
         retain_dirs, remaining_space = self._prioritize_dirs(
@@ -143,14 +144,59 @@ class SyncCommand(Command):
         else:
             retain_files = set()
 
-        # Copy the selected files to the local directory and replace all
-        # others with symlinks.
-        self._update_local(retain_dirs | retain_files)
+        # Copy the selected files as well as any excluded files still in the
+        # remote directory to the local directory and replace all others
+        # with symlinks.
+        self._update_local(retain_dirs | retain_files | remote_excluded_files)
+
+        # Remove excluded files that are still in the remote directory.
+        self._rm_excluded_files(remote_excluded_files)
 
         # The sync is now complete. Update the time of the last sync in the
         # info file.
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
+
+    def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
+        """Remove excluded files from the remote directory.
+
+        Remove files from the remote directory only if they've been excluded
+        by each client. Also remove them from both databases.
+
+        Args:
+            excluded_paths: The paths of excluded files to remove.
+        """
+        # Expand globbing patterns for each client's exclude pattern file.
+        pattern_files = []
+        for entry in os.scandir(self.dest_dir.ex_dir):
+            pattern_file = ProfileExcludeFile(entry.path)
+            pattern_file.glob(self.local_dir.path)
+            pattern_files.append(pattern_file)
+
+        all_files = self.profile.db_file.get_paths()
+
+        rm_files = set()
+        for excluded_path in excluded_paths:
+            for pattern_file in pattern_files:
+                if excluded_path not in pattern_file.rel_files:
+                    break
+            else:
+                # The file was not found in one of the exclude pattern
+                # files. Remove it from the remote directory and both
+                # databases.
+                if excluded_path not in all_files:
+                    # The current path is a directory. Add all the
+                    # directory's files to the set instead of the directory
+                    # itself.
+                    for filepath in all_files:
+                        if (os.path.commonpath([filepath, excluded_path])
+                                == excluded_path):
+                            rm_files.add(filepath)
+                else:
+                    rm_files.add(excluded_path)
+
+        # This doesn't accept directory paths, only file paths.
+        self._rm_remote_files(rm_files)
 
     def _update_local(self, retain_files: Iterable[str]) -> None:
         """Update the local directory with remote files.
@@ -474,14 +520,15 @@ class SyncCommand(Command):
 
         return local_del_files, remote_del_files, remote_trash_files
 
-    def _rm_local_files(self, paths: Iterable[str]) -> None:
+    def _rm_local_files(self, file_paths: Iterable[str]) -> None:
         """Delete local files and remove them from both databases.
 
         Args:
-            paths:  The relative paths of files to remove.
+            file_paths: The relative paths of files to remove. These can not
+                        be directory paths.
         """
         full_paths = [
-            os.path.join(self.local_dir.path, path) for path in paths]
+            os.path.join(self.local_dir.path, path) for path in file_paths]
         for path in full_paths:
             try:
                 os.remove(path)
@@ -492,16 +539,17 @@ class SyncCommand(Command):
         # If a deletion from another client was already synced to the server,
         # then that file path will have already been removed from the remote
         # database.
-        self.profile.db_file.rm_files(paths)
+        self.profile.db_file.rm_files(file_paths)
 
-    def _rm_remote_files(self, paths: Iterable[str]) -> None:
+    def _rm_remote_files(self, file_paths: Iterable[str]) -> None:
         """Delete remote files and remove them from the local database.
 
         Args:
-            paths:  The relative paths of files to remove.
+            file_paths: The relative paths of files to remove. These can not
+                        be directory paths.
         """
         full_paths = [
-            os.path.join(self.dest_dir.safe_path, path) for path in paths]
+            os.path.join(self.dest_dir.safe_path, path) for path in file_paths]
         for path in full_paths:
             try:
                 os.remove(path)
@@ -509,10 +557,10 @@ class SyncCommand(Command):
                 # This could happen in a situation where the program was
                 # interrupted before the database could be updated.
                 pass
-        self.profile.db_file.rm_files(paths)
-        self.dest_dir.db_file.rm_files(paths)
+        self.profile.db_file.rm_files(file_paths)
+        self.dest_dir.db_file.rm_files(file_paths)
 
-    def _trash_files(self, paths: Iterable[str]) -> None:
+    def _trash_files(self, file_paths: Iterable[str]) -> None:
         """Mark files in the remote directory for deletion.
 
         This involves renaming the file to signify its state to the user and
@@ -520,16 +568,17 @@ class SyncCommand(Command):
         program.
 
         Args:
-            paths:  The relative paths of files to mark for deletion.
+            file_paths: The relative paths of files to mark for deletion. These
+                        can not be directory paths.
         """
         new_paths = [
-            timestamp_path(path, keyword="deleted") for path in paths]
+            timestamp_path(path, keyword="deleted") for path in file_paths]
         full_paths = [
-            os.path.join(self.dest_dir.safe_path, path) for path in paths]
+            os.path.join(self.dest_dir.safe_path, path) for path in file_paths]
         new_full_paths = [
             os.path.join(self.dest_dir.safe_path, path) for path in new_paths]
         for old_path, new_path in zip(full_paths, new_full_paths):
             os.rename(old_path, new_path)
-        self.profile.db_file.rm_files(paths)
-        self.dest_dir.db_file.rm_files(paths)
+        self.profile.db_file.rm_files(file_paths)
+        self.dest_dir.db_file.rm_files(file_paths)
         self.dest_dir.db_file.add_files(new_paths, deleted=True)
