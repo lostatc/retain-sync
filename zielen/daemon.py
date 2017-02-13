@@ -92,6 +92,10 @@ class Daemon(Command):
         while True:
             if (time.time() >= self.profile.info_file.vals["LastAdjust"]
                     + self.adjust_interval):
+                # This is necessary because a sync may have occurred since
+                # the last adjustment, which updates a value in the info file.
+                self.profile.info_file.read()
+
                 self.profile.db_file.adjust_all(self.adjust_constant)
                 self.profile.info_file.update_adjusttime()
                 self.profile.info_file.write()
