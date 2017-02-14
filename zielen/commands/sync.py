@@ -527,19 +527,19 @@ class SyncCommand(Command):
             file_paths: The relative paths of files to remove. These can not
                         be directory paths.
         """
-        full_paths = [
-            os.path.join(self.local_dir.path, path) for path in file_paths]
-        for path in full_paths:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                # This could happen in a situation where the program was
-                # interrupted before the database could be updated.
-                pass
-        # If a deletion from another client was already synced to the server,
-        # then that file path will have already been removed from the remote
-        # database.
-        self.profile.db_file.rm_files(file_paths)
+        deleted_files = []
+
+        # Make sure that the database always gets updated with whatever files
+        # have been deleted.
+        try:
+            for path in file_paths:
+                os.remove(os.path.join(self.local_dir.path, path))
+                deleted_files.append(path)
+        finally:
+            # If a deletion from another client was already synced to the
+            # server, then that file path will have already been removed
+            # from the remote database.
+            self.profile.db_file.rm_files(deleted_files)
 
     def _rm_remote_files(self, file_paths: Iterable[str]) -> None:
         """Delete remote files and remove them from the local database.
@@ -548,17 +548,21 @@ class SyncCommand(Command):
             file_paths: The relative paths of files to remove. These can not
                         be directory paths.
         """
-        full_paths = [
-            os.path.join(self.dest_dir.safe_path, path) for path in file_paths]
-        for path in full_paths:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                # This could happen in a situation where the program was
-                # interrupted before the database could be updated.
-                pass
-        self.profile.db_file.rm_files(file_paths)
-        self.dest_dir.db_file.rm_files(file_paths)
+        deleted_files = []
+
+        # Make sure that the database always gets updated with whatever files
+        # have been deleted.
+        try:
+            for path in file_paths:
+                try:
+                    os.remove(os.path.join(self.dest_dir.safe_path, path))
+                except FileNotFoundError:
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
+                deleted_files.append(path)
+        finally:
+            self.profile.db_file.rm_files(deleted_files)
+            self.dest_dir.db_file.rm_files(deleted_files)
 
     def _trash_files(self, file_paths: Iterable[str]) -> None:
         """Mark files in the remote directory for deletion.
@@ -573,12 +577,23 @@ class SyncCommand(Command):
         """
         new_paths = [
             timestamp_path(path, keyword="deleted") for path in file_paths]
-        full_paths = [
-            os.path.join(self.dest_dir.safe_path, path) for path in file_paths]
-        new_full_paths = [
-            os.path.join(self.dest_dir.safe_path, path) for path in new_paths]
-        for old_path, new_path in zip(full_paths, new_full_paths):
-            os.rename(old_path, new_path)
-        self.profile.db_file.rm_files(file_paths)
-        self.dest_dir.db_file.rm_files(file_paths)
-        self.dest_dir.db_file.add_files(new_paths, deleted=True)
+        old_renamed_files = []
+        new_renamed_files = []
+
+        # Make sure that the database always gets updated with whatever files
+        # have been renamed.
+        try:
+            for old_path, new_path in zip(file_paths, new_paths):
+                try:
+                    os.rename(
+                        os.path.join(self.dest_dir.safe_path, old_path),
+                        os.path.join(self.dest_dir.safe_path, new_path))
+                except FileNotFoundError:
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
+                old_renamed_files.append(old_path)
+                new_renamed_files.append(new_path)
+        finally:
+            self.profile.db_file.rm_files(old_renamed_files)
+            self.dest_dir.db_file.rm_files(old_renamed_files)
+            self.dest_dir.db_file.add_files(new_renamed_files, deleted=True)
