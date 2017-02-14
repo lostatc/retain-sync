@@ -28,6 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Dict, Any, Iterable, Union, Generator, List, Tuple, Set
 
 from zielen.exceptions import FileParseError
@@ -247,6 +248,18 @@ class ProfileDBFile:
         sqlite3.register_adapter(bool, int)
         sqlite3.register_converter("bool", lambda x: bool(int(x)))
 
+    @contextmanager
+    def transact(self) -> Generator[None, None, None]:
+        """Check if database file exists and commit the transaction on exit.
+
+        Raises:
+            FileParseError:  The database file wasn't found.
+        """
+        if not os.path.isfile(self.path):
+            raise FileParseError("the local database file couldn't be found")
+        with self.conn:
+            yield
+
     def create(self) -> None:
         """Create a new empty database.
 
@@ -264,7 +277,7 @@ class ProfileDBFile:
             self.path, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cur = self.conn.cursor()
 
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 CREATE TABLE files (
                     path text,
@@ -279,7 +292,7 @@ class ProfileDBFile:
             paths:      The file paths to add.
             priority:   The starting priority of the file path.
         """
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     INSERT INTO files (path, priority)
@@ -293,7 +306,7 @@ class ProfileDBFile:
         Args:
             paths:  The file paths to add.
         """
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 SELECT MAX(priority) FROM files;
                 """)
@@ -306,7 +319,7 @@ class ProfileDBFile:
         Args:
             paths:  The file paths to remove.
         """
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     DELETE FROM files
@@ -320,7 +333,7 @@ class ProfileDBFile:
             A list of tuples, each containing a file path the corresponding
             priority value, sorted by priority.
         """
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 SELECT path, priority
                 FROM files
@@ -329,7 +342,12 @@ class ProfileDBFile:
         return [(path, priority) for path, priority in self.cur.fetchall()]
 
     def get_paths(self) -> Set[str]:
-        with self.conn:
+        """Get the paths of files in the database.
+
+        Returns:
+            A set of relative file paths.
+        """
+        with self.transact():
             self.cur.execute("""\
                 SELECT path
                 FROM files
@@ -342,7 +360,7 @@ class ProfileDBFile:
         Args:
             paths:   The file paths to increment the priority of.
         """
-        with self.conn:
+        with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     UPDATE files
@@ -356,7 +374,7 @@ class ProfileDBFile:
         Args:
             adjustment: The constant to multiply file priorities by.
         """
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 UPDATE files
                 SET priority=priority*?;
@@ -371,7 +389,7 @@ class ProfileDBFile:
         Returns:
             A boolean value representing whether a record was found.
         """
-        with self.conn:
+        with self.transact():
             self.cur.execute("""\
                 SELECT 1 FROM files
                 WHERE path=?;

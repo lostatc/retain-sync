@@ -93,7 +93,9 @@ class Daemon(Command):
             if (time.time() >= self.profile.info_file.vals["LastAdjust"]
                     + self.adjust_interval):
                 # This is necessary because a sync may have occurred since
-                # the last adjustment, which updates a value in the info file.
+                # the last adjustment, which updates a value in the info
+                # file. If we don't read the info file before writing to it,
+                # that value will get reset.
                 self.profile.info_file.read()
 
                 self.profile.db_file.adjust_all(self.adjust_constant)
@@ -102,7 +104,7 @@ class Daemon(Command):
             time.sleep(5)
 
     def _watch(self, start_path: str):
-        """Get path of files that have been opened and add them to a queue."""
+        """Get paths of files that have been opened and add them to a queue."""
         # This class constructor only accepts file paths in bytes form.
         adapter = inotify.adapters.InotifyTree(start_path.encode())
         for event in adapter.event_gen():
