@@ -106,6 +106,10 @@ class SyncCommand(Command):
         self._rm_remote_files(remote_del_files)
         self._trash_files(remote_trash_files)
 
+        # Remove files from the remote database that were previously marked
+        # for deletion and have since been deleted from the remote directory.
+        self._cleanup_trash()
+
         # Handle syncing conflicts.
         local_mod_files, remote_mod_files = self._handle_conflicts(
             *self._compute_changes())
@@ -156,6 +160,17 @@ class SyncCommand(Command):
         # info file.
         self.profile.info_file.update_synctime()
         self.profile.info_file.write()
+
+    def _cleanup_trash(self) -> None:
+        """Clean up files marked for deletion in the remote directory.
+
+        Remove files from the remote database that were previously marked
+        for deletion and have since been deleted from the remote directory.
+        """
+        deleted_trash_files = (
+            set(self.dest_dir.db_file.list_files(deleted=True))
+            - set(self.dest_dir.list_files(rel=True)))
+        self.dest_dir.db_file.rm_files(deleted_trash_files)
 
     def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
         """Remove excluded files from the remote directory.
@@ -491,22 +506,24 @@ class SyncCommand(Command):
     def _compute_deletions(self) -> Tuple[Set[str], Set[str], Set[str]]:
         """Compute files that need to be deleted to sync the two directories.
 
-        A file needs to be deleted if it is found in the local database but not
-        in either the local or remote directory.
+        A file needs to be deleted if it is found in the local database but
+        not in either the local or remote directory. A file is marked for
+        deletion if it is not found in any of the trash directories.
 
         Returns:
-            A tuple containing three sets of relative file paths. The first is
-            for local files to be deleted, the second is for remote files to be
-            deleted and the third is for remote files to be marked for
-            deletion.
+            A tuple containing three sets of relative file paths: local
+            files to be deleted, remote files to be deleted and remote files
+            to be marked for deletion.
         """
         local_files = set(self.local_dir.list_files(rel=True, symlinks=True))
         remote_files = set(self.dest_dir.list_files(rel=True))
-        known_files = {
-            path for path, priority in self.profile.db_file.get_priorities()}
+        known_files = {path for path in self.profile.db_file.get_paths()}
 
+        # Compute files that need to be deleted.
         local_del_files = known_files - remote_files
         remote_del_files = known_files - local_files
+
+        # Compute files to be marked for deletion.
         if not self.profile.cfg_file.vals["DeleteAlways"]:
             trash_dir = TrashDir(self.profile.cfg_file.vals["TrashDirs"])
         remote_trash_files = set()
@@ -537,8 +554,10 @@ class SyncCommand(Command):
                 deleted_files.append(path)
         finally:
             # If a deletion from another client was already synced to the
-            # server, then that file path will have already been removed
-            # from the remote database.
+            # server, then that file path should have already been removed
+            # from the remote database. However, they user may have manually
+            # deleted files from the remote directory since the last sync.
+            self.dest_dir.db_file.rm_files(deleted_files)
             self.profile.db_file.rm_files(deleted_files)
 
     def _rm_remote_files(self, file_paths: Iterable[str]) -> None:
