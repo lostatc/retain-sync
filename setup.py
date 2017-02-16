@@ -9,6 +9,7 @@ setup(
     author_email="garrett@gpowell.net",
     license="GPLv3",
     install_requires=["Sphinx", "inotify"],
+    python_requires=">=3.5",
     data_files=[
         ("bin",
             ["scripts/zielen", "scripts/zielend"]),
