@@ -32,7 +32,11 @@ from zielen.util.misc import err
 def main() -> int:
     """Start the program."""
     try:
-        handle_signals()
+        # Exit properly on SIGTERM, SIGHUP or SIGINT.
+        signal.signal(signal.SIGTERM, signal_exception_handler)
+        signal.signal(signal.SIGHUP, signal_exception_handler)
+        signal.signal(signal.SIGINT, signal_exception_handler)
+
         cmd_args = parse_args()
         command = def_command(cmd_args)
         command.main()
@@ -46,7 +50,13 @@ def main() -> int:
 def daemon(profile_name) -> int:
     """Start the daemon."""
     try:
-        handle_signals()
+        # Exit properly on SIGTERM, SIGHUP or SIGINT. SIGTERM is the method
+        # by which the daemon will normally exit, and should not raise an
+        # exception.
+        signal.signal(signal.SIGTERM, signal_exit_handler)
+        signal.signal(signal.SIGHUP, signal_exception_handler)
+        signal.signal(signal.SIGINT, signal_exception_handler)
+
         ghost = Daemon(profile_name)
         ghost.main()
     except ProgramError as e:
@@ -72,12 +82,11 @@ def def_command(cmd_args: dict) -> Command:
         pass
 
 
-def handle_signals() -> None:
-    """Exit properly on SIGTERM, SIGHUP or SIGINT."""
-    def handler(signum: int, frame) -> None:
-        """Print an appropriate error message for an interruption by signal."""
-        raise ProgramError("program received " + signal.Signals(signum).name)
+def signal_exception_handler(signum: int, frame) -> None:
+    """Raise an exception with error message for an interruption by signal."""
+    raise ProgramError("program received " + signal.Signals(signum).name)
 
-    signal.signal(signal.SIGTERM, handler)
-    signal.signal(signal.SIGHUP, handler)
-    signal.signal(signal.SIGINT, handler)
+
+def signal_exit_handler(signum: int, frame) -> None:
+    """Exit the program normally in response to an interruption by signal."""
+    sys.exit(0)

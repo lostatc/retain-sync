@@ -28,7 +28,6 @@ import inotify.adapters
 
 from zielen.basecommand import Command
 from zielen.util.misc import err
-from zielen.commands.sync import SyncCommand
 
 
 class Daemon(Command):
@@ -66,23 +65,20 @@ class Daemon(Command):
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
 
-        adjust_proc = multiprocessing.Process(target=self._adjust, daemon=True)
-        adjust_proc.start()
-
         sync_proc = multiprocessing.Process(target=self._sync, daemon=True)
         sync_proc.start()
 
         local_dir = self.profile.cfg_file.vals["LocalDir"]
         if self.profile.cfg_file.vals["RemoteHost"]:
-            remote_dir = self.profile.mnt_dir
+            dest_dir = self.profile.mnt_dir
         else:
-            remote_dir = self.profile.cfg_file.vals["RemoteDir"]
+            dest_dir = self.profile.cfg_file.vals["RemoteDir"]
 
         local_watch_proc = multiprocessing.Process(
             target=self._watch, args=(local_dir,), daemon=True)
         local_watch_proc.start()
         remote_watch_proc = multiprocessing.Process(
-            target=self._watch, args=(remote_dir,), daemon=True)
+            target=self._watch, args=(dest_dir,), daemon=True)
         remote_watch_proc.start()
 
         # Every second, get a set of file paths from the queue and increment
@@ -95,30 +91,30 @@ class Daemon(Command):
             while self.files_queue.qsize() != 0:
                 accessed_files.add(self.files_queue.get())
             self.profile.db_file.increment(accessed_files)
+
+            self._adjust()
             time.sleep(1)
 
     def _adjust(self):
         """Adjust the priority values in the database every twenty minutes."""
-        while True:
-            if (time.time() >= self.profile.info_file.vals["LastAdjust"]
-                    + self.ADJUST_INTERVAL):
-                # This is necessary because a sync may have occurred since
-                # the last adjustment, which updates a value in the info
-                # file. If we don't read the info file before writing to it,
-                # that value will get reset.
-                self.profile.info_file.read()
+        if (time.time() >= self.profile.info_file.vals["LastAdjust"]
+                + self.ADJUST_INTERVAL):
+            # This is necessary because a sync may have occurred since
+            # the last adjustment, which updates a value in the info
+            # file. If we don't read the info file before writing to it,
+            # that value will get reset.
+            self.profile.info_file.read()
 
-                self.profile.db_file.adjust_all(self.ADJUST_CONSTANT)
-                self.profile.info_file.update_adjusttime()
-                self.profile.info_file.write()
-            time.sleep(5)
+            self.profile.db_file.adjust_all(self.ADJUST_CONSTANT)
+            self.profile.info_file.update_adjusttime()
+            self.profile.info_file.write()
 
     def _sync(self):
         """Initiate a sync at a regular interval."""
         last_attempt = self.profile.info_file.vals["LastSync"]
         while True:
-            if (time.time() >=
-                    last_attempt + self.profile.cfg_file.vals["SyncInterval"]):
+            if (time.time() >= last_attempt
+                    + self.profile.cfg_file.vals["SyncInterval"]):
                 # Use a subprocess so that an in-progress sync continues
                 # after the daemon exits and so that functions registered
                 # with atexit execute correctly.
@@ -138,7 +134,7 @@ class Daemon(Command):
 
                 # If a sync fails, wait the full interval before trying again.
                 last_attempt = time.time()
-            time.sleep(5)
+            time.sleep(1)
 
     def _watch(self, start_path: str):
         """Get paths of files that have been opened and add them to a queue."""
