@@ -40,13 +40,13 @@ class Profile:
     """Get information about a profile and its contents.
 
     Attributes:
-        name:       The name of the profile.
-        path:       The path to the profile directory.
-        mnt_dir:    The path to the remote mountpoint.
-        ex_file:    The path to the exclude pattern file.
-        info_file:  The path to the JSON file for profile metadata.
-        db_file:    The path to the file priority database.
-        cfg_file:   The path to the profile's configuration file.
+        name: The name of the profile.
+        path: The path to the profile directory.
+        mnt_dir: The path to the remote mountpoint.
+        ex_file: The path to the exclude pattern file.
+        info_file: The path to the JSON file for profile metadata.
+        db_file: The path to the file priority database.
+        cfg_file: The path to the profile's configuration file.
     """
     def __init__(self, name: str) -> None:
         self.name = name
@@ -70,12 +70,11 @@ class ProfileExcludeFile:
     excluded a given file.
 
     Attributes:
-        comment_reg:    Regex that denotes a comment line.
-        path:           The path to the exclude pattern file.
-        files:          A set of absolute file paths that match the globbing
-                        patterns.
-        rel_files:      A set of relative file paths that match the globbing
-                        patterns.
+        comment_reg: Regex that denotes a comment line.
+        path: The path to the exclude pattern file.
+        files: A set of absolute file paths that match the globbing patterns.
+        rel_files: A set of relative file paths that match the globbing
+            patterns.
     """
     comment_reg = re.compile(r"^\s*#")
 
@@ -88,7 +87,7 @@ class ProfileExcludeFile:
         """Generate a new file with comments.
 
         Args:
-            infile:  If supplied, copy lines from this file into the new one.
+            infile: If supplied, copy lines from this file into the new one.
         """
         with open(self.path, "w") as outfile:
             outfile.write(dedent("""\
@@ -125,7 +124,7 @@ class ProfileExcludeFile:
 
         Args:
             start_path: The directory to search in for files that match the
-                        patterns.
+                patterns.
         """
         for line in self._readlines():
             # This assumes that cases where the user may accidentally leave
@@ -149,8 +148,8 @@ class ProfileInfoFile(JSONFile):
     """Parse a JSON-formatted file for profile metadata.
 
     Attributes:
-        raw_vals:   A dictionary of raw values from the file.
-        vals:       A read-only dictionary of parsed values from the file.
+        raw_vals: A dictionary of raw values from the file.
+        vals: A read-only dictionary of parsed values from the file.
     """
     def __init__(self, path) -> None:
         super().__init__(path)
@@ -175,24 +174,23 @@ class ProfileInfoFile(JSONFile):
         """Generate info for a new profile.
 
         JSON Values:
-            Status:     A short string describing the status of the profile.
-                        "initialized": fully initialized
-                        "partial": partially initialized
-            Locked:     A boolean used to determine if another operation is
-                        already running on the profile.
-            LastSync:   The date and time (UTC) of the last sync on the
-                        profile.
+            Status: A short string describing the status of the profile.
+                "initialized": fully initialized
+                "partial": partially initialized
+            Locked: A boolean used to determine if another operation is already
+                running on the profile.
+            LastSync: The date and time (UTC) of the last sync on the profile.
             LastAdjust: The date and time (UTC) of the last priority adjustment
-                        on the profile.
-            Version:    The version of the program that the profile was
-                        initialized by.
-            ID:         A unique ID consisting of the machine ID, username and
-                        profile name.
-            InitOpts:   A dictionary of options given at the command line
-                        at initialization.
+                on the profile.
+            Version: The version of the program that the profile was
+                initialized by.
+            ID: A unique ID consisting of the machine ID, username and profile
+                name.
+            InitOpts: A dictionary of options given at the command line at
+                initialization.
 
         Args:
-            name:       The name of the profile to use for the unique ID.
+            name: The name of the profile to use for the unique ID.
             add_remote: The '--add-remote' command-line option is set.
         """
         with open("/etc/machine-id") as id_file:
@@ -230,9 +228,9 @@ class ProfileDBFile:
     """Manipulate a profile file database.
 
     Attributes:
-        path:   The path to the database file.
-        conn:   The sqlite connection object for the database.
-        cur:    The sqlite cursor object for the connection.
+        path: The path to the database file.
+        conn: The sqlite connection object for the database.
+        cur: The sqlite cursor object for the connection.
     """
 
     def __init__(self, path) -> None:
@@ -253,7 +251,7 @@ class ProfileDBFile:
         """Check if database file exists and commit the transaction on exit.
 
         Raises:
-            FileParseError:  The database file wasn't found.
+            FileParseError: The database file wasn't found.
         """
         if not os.path.isfile(self.path):
             raise FileParseError("the local database file couldn't be found")
@@ -264,11 +262,11 @@ class ProfileDBFile:
         """Create a new empty database.
 
         Database Columns:
-            path:       The relative path to the file.
-            priority:   The priority value of the file.
+            path: The relative path to the file.
+            priority: The priority value of the file.
 
         Raises:
-            FileExistsError:    The database file already exists.
+            FileExistsError: The database file already exists.
         """
         if os.path.isfile(self.path):
             raise FileExistsError
@@ -289,8 +287,8 @@ class ProfileDBFile:
         """Add new file paths to the database if they do not already exist.
 
         Args:
-            paths:      The file paths to add.
-            priority:   The starting priority of the file path.
+            paths: The file paths to add.
+            priority: The starting priority of the file path.
         """
         with self.transact():
             for path in paths:
@@ -304,7 +302,7 @@ class ProfileDBFile:
         """Add new file paths to the database with an inflated priority.
 
         Args:
-            paths:  The file paths to add.
+            paths: The file paths to add.
         """
         with self.transact():
             self.cur.execute("""\
@@ -317,7 +315,7 @@ class ProfileDBFile:
         """Remove file paths from the database.
 
         Args:
-            paths:  The file paths to remove.
+            paths: The file paths to remove.
         """
         with self.transact():
             for path in paths:
@@ -358,7 +356,7 @@ class ProfileDBFile:
         """Increment the priority of some file paths by one.
 
         Args:
-            paths:   The file paths to increment the priority of.
+            paths: The file paths to increment the priority of.
         """
         with self.transact():
             for path in paths:
@@ -384,7 +382,7 @@ class ProfileDBFile:
         """Check if a record exists with a given file path.
 
         Args:
-            path:   The relative file path to check the database for.
+            path: The relative file path to check the database for.
 
         Returns:
             A boolean value representing whether a record was found.
@@ -404,30 +402,28 @@ class ProfileConfigFile(ConfigFile):
     """Manipulate a profile configuration file.
 
     Attributes:
-        _instances:     A weakly-referenced set of instances of this class.
-        _true_vals:     A list of strings that are recognized as boolean true.
-        _false_vals:    A list of strings that are recognized as boolean false.
+        _instances: A weakly-referenced set of instances of this class.
+        _true_vals: A list of strings that are recognized as boolean true.
+        _false_vals: A list of strings that are recognized as boolean false.
         _host_synonyms: A list of strings that are synonyms for 'localhost'.
-        _req_keys:      A list of config keys that must be included in the
-                        config file.
-        _opt_keys:      A list of config keys that may be commented out or
-                        omitted.
-        _all_keys:      A list of all keys that are recognized in the config
-                        file.
-        _bool_keys:     A list of config keys that must have boolean values.
-        _connect_keys:  A list of config keys that only matter when connecting
-                        over ssh.
-        _defaults:      A dictionary of default string values for optional
-                        config keys.
-        _subs:          A dictionary of default string values for required
-                        config keys.
-        _prompt_msgs:   The messages to use when prompting the user for
-                        required config values.
-        path:           The path to the configuration file.
-        profile:        The Profile object that the config file belongs to.
-        add_remote:     Switch the requirements of 'LocalDir' and 'RemoteDir'.
-        _raw_vals:      A dictionary of unmodified config value strings.
-        _vals:          A read-only dictionary of modified config values.
+        _req_keys: A list of config keys that must be included in the config
+            file.
+        _opt_keys: A list of config keys that may be commented out or omitted.
+        _all_keys: A list of all keys that are recognized in the config file.
+        _bool_keys: A list of config keys that must have boolean values.
+        _connect_keys: A list of config keys that only matter when connecting
+            over ssh.
+        _defaults: A dictionary of default string values for optional config
+            keys.
+        _subs: A dictionary of default string values for required config
+            keys.
+        _prompt_msgs: The messages to use when prompting the user for required
+            config values.
+        path: The path to the configuration file.
+        profile: The Profile object that the config file belongs to.
+        add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
+        _raw_vals: A dictionary of unmodified config value strings.
+        _vals: A read-only dictionary of modified config values.
     """
     _instances = weakref.WeakSet()
     _true_vals = ["yes", "true"]
@@ -482,8 +478,8 @@ class ProfileConfigFile(ConfigFile):
         """Check the syntax of a config option and return an error message.
 
         Args:
-            key:    The name of the config option to check.
-            value:  The value of the config option to check.
+            key: The name of the config option to check.
+            value: The value of the config option to check.
 
         Returns:
             A string corresponding to the syntax error (if any).
@@ -610,12 +606,12 @@ class ProfileConfigFile(ConfigFile):
         """Check that file is valid and syntactically correct.
 
         Args:
-            check_empty:    Check empty/unset values.
-            context:        The context to show in the error messages.
+            check_empty: Check empty/unset values.
+            context: The context to show in the error messages.
 
         Raises:
             FileParseError: There were missing, unrecognized or invalid options
-                            in the config file.
+                in the config file.
         """
         errors = []
 

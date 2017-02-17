@@ -33,8 +33,8 @@ class Command:
     """Base class for program commands.
 
     Attributes:
-        profiles:       A dictionary of Profile instances.
-        profile:        The currently selected profile.
+        profiles: A dictionary of Profile instances.
+        profile: The currently selected profile.
     """
     def __init__(self) -> None:
         self.profiles = {
@@ -71,7 +71,7 @@ class Command:
             """Release the lock on the profile.
 
             Raises:
-                LockError:  The selected profile is already locked.
+                LockError: The selected profile is already locked.
             """
             self.profile.info_file.raw_vals["Locked"] = False
             if os.path.isfile(self.profile.info_file.path):

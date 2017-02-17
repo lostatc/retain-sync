@@ -40,15 +40,14 @@ class InitializeCommand(Command):
 
     Attributes:
         profile_in: A string representing the selected profile.
-        profile:    The currently selected profile.
-        exclude:    The path to a file containing exclude patterns.
-        template:   The path to a template configuration file.
+        profile: The currently selected profile.
+        exclude: The path to a file containing exclude patterns.
+        template: The path to a template configuration file.
         add_remote: Start with a set of existing remote files.
-        local_dir:  A LocalSyncDir object representing the local directory.
-        dest_dir:   A DestSyncDir object representing the destination
-                    directory.
+        local_dir: A LocalSyncDir object representing the local directory.
+        dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the connection to the
-                    remote directory.
+            remote directory.
     """
     def __init__(self, profile_in: str, exclude=None, template=None,
                  add_remote=False) -> None:
@@ -65,11 +64,10 @@ class InitializeCommand(Command):
         """Run the command.
 
         Raises:
-            UserInputError:         The command-line arguments were invalid.
-            ServerError:            The connection to the remote directory was
-                                    lost.
-            AvailableSpaceError:    There is not enough space in the local or
-                                    remote filesystem.
+            UserInputError: The command-line arguments were invalid.
+            ServerError: The connection to the remote directory was lost.
+            AvailableSpaceError: There is not enough space in the local or
+                remote filesystem.
         """
         # Define cleanup functions.
         def cleanup_profile() -> None:

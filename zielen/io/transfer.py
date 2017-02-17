@@ -32,11 +32,11 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
     """Run an rsync command and print a status bar.
 
     Args:
-        add_args:   A list of arguments to pass to rsync.
-        files:      A list of relative paths of files to sync.
-        exclude:    A list of relative paths of files to exclude from syncing.
-        msg:        A message to display opposite the progress bar. If empty,
-                    the bar won't appear.
+        add_args: A list of arguments to pass to rsync.
+        files: A list of relative paths of files to sync.
+        exclude: A list of relative paths of files to exclude from syncing.
+        msg: A message to display opposite the progress bar. If empty, the bar
+            won't appear.
 
     Raises:
         FileTransferError:  Rsync returned a non-zero exit code.
@@ -92,16 +92,16 @@ def rclone(src: str, dest: str, files=None, exclude=None, msg="") -> None:
     """Recursively copy files, preserving file metadata.
 
     Args:
-        src:        The file to copy or directory to copy the contents of.
-        dest:       The location to copy the files to.
-        files:      A list of relative paths of files to sync.
-        exclude:    A list of relative paths of files to exclude from syncing.
-        msg:        A message to display opposite the progress bar. If empty,
-                    the bar won't appear.
+        src: The file to copy or directory to copy the contents of.
+        dest: The location to copy the files to.
+        files: A list of relative paths of files to sync.
+        exclude: A list of relative paths of files to exclude from syncing.
+        msg: A message to display opposite the progress bar. If empty, the bar
+            won't appear.
 
     Raises:
-        FileNotFoundError:  The source or destination files couldn't be found.
-        FileTransferError:  The file transfer failed.
+        FileNotFoundError: The source or destination files couldn't be found.
+        FileTransferError: The file transfer failed.
     """
     if not os.path.exists(src) or not os.path.exists(os.path.dirname(dest)):
         raise FileNotFoundError

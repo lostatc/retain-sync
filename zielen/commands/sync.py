@@ -36,10 +36,9 @@ class SyncCommand(Command):
     """Redistribute files between the local and remote directories.
 
     Attributes:
-        profile:    The currently selected profile.
-        local_dir:  A LocalSyncDir object representing the local directory.
-        dest_dir:   A DestSyncDir object representing the destination
-                    directory.
+        profile: The currently selected profile.
+        local_dir: A LocalSyncDir object representing the local directory.
+        dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the remote connection.
     """
     def __init__(self, profile_in: str) -> None:
@@ -54,7 +53,7 @@ class SyncCommand(Command):
 
         Raises:
             UserInputError: The specified profile has already been initialized.
-            ServerError:    The connection to the remote directory was lost.
+            ServerError: The connection to the remote directory was lost.
         """
         self.profile.info_file.read()
 
@@ -165,7 +164,7 @@ class SyncCommand(Command):
         """Clean up files marked for deletion in the remote directory.
 
         Remove files from the remote database that were previously marked
-        for deletion and have since been deleted from the remote directory.
+        for deletion and have since been deleted.
         """
         deleted_trash_files = (
             set(self.dest_dir.db_file.list_files(deleted=True))
@@ -217,10 +216,9 @@ class SyncCommand(Command):
         """Update the local directory with remote files.
 
         Args:
-            retain_files:   The paths of files and directories to copy from
-                            the remote directory to the local one. All other
-                            files in the local directory are replaced with
-                            symlinks.
+            retain_files: The paths of files and directories to copy from the
+                remote directory to the local one. All other files in the local
+                directory are replaced with symlinks.
         """
         retain_files = set(retain_files)
         all_files = set(self.local_dir.list_files(
@@ -256,10 +254,10 @@ class SyncCommand(Command):
         """Calculate which files will stay in the local directory.
 
         Args:
-            exclude_paths:  An iterable of paths of files and directories to
-                            not consider when selecting files.
-            space_limit:    The amount of space remaining in the directory
-                            (in bytes).
+            exclude_paths: An iterable of paths of files and directories to not
+                consider when selecting files.
+            space_limit: The amount of space remaining in the directory
+                (in bytes).
 
         Returns:
             A tuple containing a list of paths of files to keep in the local
@@ -309,8 +307,8 @@ class SyncCommand(Command):
         """Calculate which directories will stay in the local directory.
 
         Args:
-            space_limit:    The amount of space remaining in the directory
-                            (in bytes).
+            space_limit: The amount of space remaining in the directory
+                (in bytes).
         Returns:
             A tuple containing a list of paths of directories to keep in the
             local directory and the amount of space remaining (in bytes) until
@@ -391,7 +389,7 @@ class SyncCommand(Command):
         """Update the remote directory with modified local files.
 
         Raises:
-            ServerError:    The remote directory is unmounted.
+            ServerError: The remote directory is unmounted.
         """
         local_mod_files = set(local_mod_files)
 
@@ -421,10 +419,8 @@ class SyncCommand(Command):
         aren't treated specially and are synced just like any other file.
 
         Args:
-            local_in:   A set of local files that have been modified since the
-                        last sync.
-            remote_in:  A set of remote files that have been modified since the
-                        last sync.
+            local_in: Local files that have been modified since the last sync.
+            remote_in: Remote files that have been modified since the last sync.
 
         Returns:
             An tuple containing an updated version of each of the input values.
@@ -542,7 +538,7 @@ class SyncCommand(Command):
 
         Args:
             file_paths: The relative paths of files to remove. These can not
-                        be directory paths.
+                include directory paths.
         """
         deleted_files = []
 
@@ -565,7 +561,7 @@ class SyncCommand(Command):
 
         Args:
             file_paths: The relative paths of files to remove. These can not
-                        be directory paths.
+                include directory paths.
         """
         deleted_files = []
 
@@ -592,7 +588,7 @@ class SyncCommand(Command):
 
         Args:
             file_paths: The relative paths of files to mark for deletion. These
-                        can not be directory paths.
+                can not be directory paths.
         """
         new_paths = [
             timestamp_path(path, keyword="deleted") for path in file_paths]

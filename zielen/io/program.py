@@ -31,8 +31,8 @@ class ProgramDir:
     """Get information about the main configuration directory.
 
     Attributes:
-        path:           The path to the program directory.
-        profiles_dir:   The base directory containing profile directories.
+        path: The path to the program directory.
+        profiles_dir: The base directory containing profile directories.
     """
 
     path = os.path.join(env("XDG_CONFIG_HOME"), "zielen")
@@ -56,8 +56,8 @@ class ConfigFile:
     """Parse a configuration file.
 
     Attributes:
-        path:       The path to the configuration file.
-        raw_vals:   A dictionary of unmodified config value strings.
+        path: The path to the configuration file.
+        raw_vals: A dictionary of unmodified config value strings.
     """
 
     # This is regex that denotes a comment line.
@@ -107,8 +107,8 @@ class JSONFile:
     """Parse a JSON-formatted file.
 
     Attributes:
-        path:       The path to the JSON file.
-        raw_vals:   A dictionary or list of values from the file.
+        path: The path to the JSON file.
+        raw_vals: A dictionary or list of values from the file.
     """
     def __init__(self, path) -> None:
         self.path = path

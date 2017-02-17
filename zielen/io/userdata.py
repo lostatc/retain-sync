@@ -32,9 +32,9 @@ class TrashDir:
     """Get information about the user's local trash directory.
 
     Attributes:
-        paths:  The paths to the trash directories.
-        sizes:  A list of tuples containing the paths and sizes of every file
-                in the trash.
+        paths: The paths to the trash directories.
+        sizes: A list of tuples containing the paths and sizes of every file
+            in the trash.
     """
     def __init__(self, paths: Iterable[str]) -> None:
         self.paths = paths
@@ -73,8 +73,8 @@ class SyncDir:
     """Perform operations on a sync directory.
 
     Attributes:
-        path:   The directory path without a trailing slash.
-        tpath:  The directory path including a trailing slash.
+        path: The directory path without a trailing slash.
+        tpath: The directory path including a trailing slash.
     """
 
     def __init__(self, path: str) -> None:
@@ -111,11 +111,11 @@ class SyncDir:
         """Get the paths of files in the directory.
 
         Args:
-            rel:        Yield relative file paths.
-            files:      Include regular files.
-            symlinks:   Include symbolic links.
-            dirs:       Include directories.
-            exclude:    An iterable of relative paths of files to not include.
+            rel: Yield relative file paths.
+            files: Include regular files.
+            symlinks: Include symbolic links.
+            dirs: Include directories.
+            exclude: An iterable of relative paths of files to not include.
 
         Yields:
             A file path for each file in the directory that meets the criteria.
@@ -133,11 +133,11 @@ class SyncDir:
         """Get the paths and mtimes of files in the directory.
 
         Args:
-            rel:        Yield relative file paths.
-            files:      Include regular files.
-            symlinks:   Include symbolic links.
-            dirs:       Include directories.
-            exclude:    A list of relative paths of files to not include.
+            rel: Yield relative file paths.
+            files: Include regular files.
+            symlinks: Include symbolic links.
+            dirs: Include directories.
+            exclude: A list of relative paths of files to not include.
 
         Yields:
             A file path and mtime for each file in the directory that meets the
@@ -177,10 +177,10 @@ class SyncDir:
         """Recursively copy the directory as a tree of symlinks.
 
         Args:
-            destdir:    The directory to create symlinks in.
-            overwrite:  Overwrite existing files in the destination directory
-                        with symlinks.
-            exclude:    An iterable of relative paths of files to not symlink.
+            destdir: The directory to create symlinks in.
+            overwrite: Overwrite existing files in the destination directory
+                with symlinks.
+            exclude: An iterable of relative paths of files to not symlink.
         """
         if exclude is None:
             exclude = set()
@@ -228,11 +228,11 @@ class DestSyncDir(SyncDir):
     is the mount point.
 
     Attributes:
-        prgm_dir:   Contains special program files.
-        safe_path:  Defined relative to prgm_dir in order to prevent access
-                    when prgm_dir is missing.
-        ex_dir:     Contains copies of each client's exclude pattern file.
-        db_file:    Contains information on files in the remote.
+        prgm_dir: Contains special program files.
+        safe_path: Defined relative to prgm_dir in order to prevent access when
+            prgm_dir is missing.
+        ex_dir: Contains copies of each client's exclude pattern file.
+        db_file: Contains information on files in the remote.
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)
@@ -268,7 +268,7 @@ class DestDBFile:
     """Manipulate the remote file database.
 
     Attributes:
-        path:   The path to the database file.
+        path: The path to the database file.
     """
 
     def __init__(self, path: str) -> None:
@@ -289,7 +289,7 @@ class DestDBFile:
         """Check if database file exists and commit the transaction on exit.
 
         Raises:
-            ServerError:  The database file wasn't found.
+            ServerError: The database file wasn't found.
         """
         if not os.path.isfile(self.path):
             raise ServerError(
@@ -301,14 +301,14 @@ class DestDBFile:
         """Create a new empty database.
 
         Database Columns:
-            path:       The relative path to the file.
-            lastsync:   The date and time (UTC) that the file was last updated
-                        by a sync in seconds since the epoch.
-            trash:      A boolean representing whether the file is considered
-                        to be in the trash.
+            path: The relative path to the file.
+            lastsync: The date and time (UTC) that the file was last updated by
+                a sync in seconds since the epoch.
+            trash: A boolean representing whether the file is considered to be
+                in the trash.
 
         Raises:
-            FileExistsError:    The database file already exists.
+            FileExistsError: The database file already exists.
         """
         if os.path.isfile(self.path):
             raise FileExistsError
@@ -330,8 +330,8 @@ class DestDBFile:
         """Add new file paths to the database.
 
         Args:
-            paths:      The file paths to add.
-            deleted:    Mark the files as deleted.
+            paths: The file paths to add.
+            deleted: Mark the files as deleted.
         """
         with self.transact():
             for path in paths:
@@ -347,7 +347,7 @@ class DestDBFile:
         """Remove file paths from the database.
 
         Args:
-            paths:  The file paths to remove.
+            paths: The file paths to remove.
         """
         with self.transact():
             for path in paths:
@@ -360,7 +360,7 @@ class DestDBFile:
         """Update the time of the last sync for some files.
 
         Args:
-            paths:  The file paths to set.
+            paths: The file paths to set.
         """
         time = datetime.datetime.utcnow().replace(
             tzinfo=datetime.timezone.utc).timestamp()
@@ -393,9 +393,9 @@ class DestDBFile:
         """Get a list of file paths that match certain constraints.
 
         Args:
-            deleted:        Select files marked as deleted.
-            min_lastsync:   Select files that were last synced more recently
-                            than this time.
+            deleted: Select files marked as deleted.
+            min_lastsync: Select files that were last synced more recently than
+                this time.
 
         Returns:
             A set of file paths that match the criteria.

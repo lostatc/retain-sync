@@ -40,17 +40,16 @@ class Daemon(Command):
     user-defined interval.
 
     Attributes:
-        ADJUST_INTERVAL:    This is the interval of time (in seconds) to wait
-                            between making priority adjustments. Two files
-                            accessed within this interval of time will be
-                            weighted the same.
-        ADJUST_CONSTANT:    This is the constant used to adjust priorities for
-                            time. Every ADJUST_INTERVAL seconds, the priority
-                            of every file is multiplied by this value.
-        profile:            The currently selected profile.
-        files_queue:        A Queue for temporarily holding the paths of files
-                            hat have been opened in the local or remote
-                            directories before they're updated in the database.
+        ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
+            between making priority adjustments. Two files accessed within this
+            interval of time will be weighted the same.
+        ADJUST_CONSTANT: This is the constant used to adjust priorities for
+            time. Every ADJUST_INTERVAL seconds, the priority of every file is
+            multiplied by this value.
+        profile: The currently selected profile.
+        files_queue: A Queue for temporarily holding the paths of files hat
+            have been opened in the local or remote directories before they're
+            updated in the database.
     """
     ADJUST_INTERVAL = 20*60
     ADJUST_CONSTANT = 0.99

@@ -85,16 +85,16 @@ def shell_cmd(input_cmd: list) -> subprocess.Popen:
     return cmd
 
 
-def progress_bar(coverage: float, msg="",
-                 r_align=True) -> Callable[[float], None]:
+def progress_bar(
+        coverage: float, msg="", r_align=True) -> Callable[[float], None]:
     """Create a function for updating a progress bar.
 
     Args:
-        coverage:   The percentage of the width of the terminal window that the
-                    progress bar should cover.
-        msg:        A message to be printed opposite the progress bar.
-        r_align:    Align the progress bar to the right edge of the screen
-                    instead of the left.
+        coverage: The percentage of the width of the terminal window that the
+            progress bar should cover.
+        msg: A message to be printed opposite the progress bar.
+        r_align: Align the progress bar to the right edge of the screen instead
+            of the left.
     """
     coverage = float(coverage)
 
@@ -102,7 +102,7 @@ def progress_bar(coverage: float, msg="",
         """Update a progress bar.
 
         Args:
-            percent:    Fill the bar to this percentage.
+            percent: Fill the bar to this percentage.
         """
         percent = float(percent)
         if percent > 1 or percent < 0:
@@ -142,9 +142,9 @@ def timestamp_path(path: str, keyword="") -> str:
     """Return a timestamped version of a file path.
 
     Args:
-        path:       The file path on which to base the new file path.
-        keyword:    A string to include in the new file path before the
-                    timestamp.
+        path: The file path on which to base the new file path.
+        keyword: A string to include in the new file path before the
+            timestamp.
     """
     keyword += "-" if keyword else keyword
     return (

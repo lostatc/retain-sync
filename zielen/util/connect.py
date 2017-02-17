@@ -41,8 +41,8 @@ class Connection(metaclass=ABCMeta):
             mountpoint: The path of the local directory on which to mount.
 
         Raises:
-            ServerError:    The connection timed out or the mount otherwise
-                            failed.
+            ServerError: The connection timed out or the mount otherwise
+                failed.
         """
 
     @abstractmethod
@@ -53,7 +53,7 @@ class Connection(metaclass=ABCMeta):
             mountpoint: The path of the local directory from which to unmount.
 
         Raises:
-            ServerError:    The unmount failed.
+            ServerError: The unmount failed.
         """
 
     @abstractmethod
@@ -61,8 +61,8 @@ class Connection(metaclass=ABCMeta):
         """Check the validity of the remote directory.
 
         Args:
-            add_remote: The remote directory must exist and doesn't have to
-                        be empty.
+            add_remote: The remote directory must exist and doesn't have to be
+                empty.
 
         Raises:
             UserInputError: The remote directory is invalid.
@@ -91,8 +91,8 @@ class SSHConnection(Connection):
         """Check the validity of the remote directory over ssh.
 
         Args:
-            add_remote: The remote directory must exist and doesn't have to
-                        be empty.
+            add_remote: The remote directory must exist and doesn't have to be
+                empty.
 
         Raises:
             UserInputError: The remote directory is invalid.
@@ -127,8 +127,8 @@ class SSHConnection(Connection):
             mountpoint: The path of the local directory on which to mount.
 
         Raises:
-            ServerError:    The connection timed out or the mount otherwise
-                            failed.
+            ServerError: The connection timed out or the mount otherwise
+                failed.
         """
         sshfs_args = [
             "sshfs", self._id_str + ":" + self._remote_dir, mountpoint]
@@ -158,7 +158,7 @@ class SSHConnection(Connection):
             mountpoint: The path of the local directory from which to unmount.
 
         Raises:
-            ServerError:    The unmount failed.
+            ServerError: The unmount failed.
         """
         if os.path.ismount(mountpoint):
             unmount_cmd = shell_cmd(["fusermount", "-u", mountpoint])
@@ -202,12 +202,13 @@ class SSHConnection(Connection):
 
         Args:
             remote_cmd: A list containing the command to execute and all of its
-                        parameters.
+                parameters.
+
         Returns:
             A subprocess.Popen object for the command.
 
         Raises:
-            ServerError:    The ssh connection timed out.
+            ServerError: The ssh connection timed out.
         """
         ssh_cmd = shell_cmd(self._ssh_args + ["--"] + remote_cmd)
         try:
