@@ -129,8 +129,8 @@ SYNCING
 =======
 Whenever a profile is initialized, **zielen** will direct the user to start the
 daemon for that profile. The daemon monitors file access in the local directory
-and runs the **sync** command whenever a file is modified, with a cooldown
-period that's configurable in the profile config file (see FILES_).
+and runs the **sync** command at a regular interval, which is configurable in
+the profile config file (see FILES_). The default interval is 20 minutes.
 
 A sync conflict occurs when a file has been modified in both the local and
 remote directories since the last sync. Such conflicts are handled by renaming

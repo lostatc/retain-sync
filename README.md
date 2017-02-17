@@ -18,7 +18,8 @@ centrally and sync them across multiple clients as storage space permits.
 [Documentation](https://zielen.readthedocs.io/en/latest/index.html)
 
 ## Features
-* uses rsync's delta-transfer algorithm to only sync what has been modified
+* uses rsync's delta-transfer algorithm to only sync the differences between
+  files
 * uses ssh for syncing between computers, which is secure and easy to set up
 * does not require root privileges
 * gives the user the ability to exclude files from syncing

@@ -26,6 +26,9 @@ RemoteDir=
 StorageLimit=
 
 
+# The amount of time (in minutes) that the daemon will wait between syncs.
+#SyncInterval=20
+
 # Mount options to pass to sshfs.
 #SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 

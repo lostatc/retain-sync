@@ -2,6 +2,7 @@
 *.egg-info
 __pycache__
 /docs/_build
+/docs/_static
 /build
 /installed_files.txt
 /.idea

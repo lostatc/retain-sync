@@ -5,4 +5,4 @@ import sys
 from zielen.main import daemon
 
 if __name__ == "__main__":
-    daemon(sys.argv[1])
+    sys.exit(daemon(sys.argv[1]))

@@ -85,8 +85,8 @@ class Command:
                     "another operation on this profile is already taking "
                     "place")
             self.profile.info_file.raw_vals["Locked"] = True
-            self.profile.info_file.write()
             atexit.register(unlock)
+            self.profile.info_file.write()
 
     @staticmethod
     def print_interrupt_msg() -> None:

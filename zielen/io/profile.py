@@ -417,10 +417,10 @@ class ProfileConfigFile(ConfigFile):
         _bool_keys:     A list of config keys that must have boolean values.
         _connect_keys:  A list of config keys that only matter when connecting
                         over ssh.
-        _defaults:      A dictionary of default values for optional config
-                        keys.
-        _subs:          A dictionary of default values for required config
-                        keys.
+        _defaults:      A dictionary of default string values for optional
+                        config keys.
+        _subs:          A dictionary of default string values for required
+                        config keys.
         _prompt_msgs:   The messages to use when prompting the user for
                         required config values.
         path:           The path to the configuration file.
@@ -438,8 +438,8 @@ class ProfileConfigFile(ConfigFile):
         "StorageLimit"
         ]
     _opt_keys = [
-        "SshfsOptions", "TrashDirs", "DeleteAlways", "SyncExtraFiles",
-        "InflatePriority", "AccountForSize"
+        "SyncInterval", "SshfsOptions", "TrashDirs", "DeleteAlways",
+        "SyncExtraFiles", "InflatePriority", "AccountForSize "
         ]
     _all_keys = _req_keys + _opt_keys
     _bool_keys = [
@@ -449,6 +449,7 @@ class ProfileConfigFile(ConfigFile):
     # The reason for the distinction between self._defaults and self._subs is
     # that some optional config values have a valid reason for being blank.
     _defaults = {
+        "SyncInterval":     "20",
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
         "TrashDirs":        os.path.join(env("XDG_DATA_HOME"), "Trash/files"),
@@ -502,15 +503,17 @@ class ProfileConfigFile(ConfigFile):
             value = os.path.expanduser(os.path.normpath(value))
             if os.path.commonpath([value, ProgramDir.path]) == value:
                 return "must not contain zielen config files"
+
             overlap_profiles = []
             for instance in self._instances:
                 # Check if value overlaps with the 'LocalDir' of another
                 # profile.
                 if (not instance.profile
                         or not os.path.isfile(instance.path)
-                        or instance is self):
-                    # Do not include the current instance or any instances that
-                    # do not belong to a profile.
+                        or instance.profile.name == self.profile.name):
+                    # Do not include instances that do not belong to a
+                    # profile, instances that do not have a config file in
+                    # the filesystem or the current instance.
                     continue
                 name = instance.profile.name
                 if not instance.vals:
@@ -518,6 +521,7 @@ class ProfileConfigFile(ConfigFile):
                 common = os.path.commonpath([instance.vals["LocalDir"], value])
                 if common in [instance.vals["LocalDir"], value]:
                     overlap_profiles.append(name)
+
             if overlap_profiles:
                 # Print a comma-separated list of conflicting profile names
                 # after the error message.
@@ -590,6 +594,9 @@ class ProfileConfigFile(ConfigFile):
         elif key == "StorageLimit":
             if not re.search("^[0-9]+\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
                 return "must be an integer followed by a unit (e.g. 10GB)"
+        elif key == "SyncInterval":
+            if not re.search("^[0-9]+$", value):
+                return "must be an integer"
         elif key == "SshfsOptions":
             if value:
                 if re.search("\s+", value):
@@ -657,6 +664,7 @@ class ProfileConfigFile(ConfigFile):
             elif key == "RemoteDir":
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "StorageLimit":
+                # Convert to bytes.
                 try:
                     num, unit = re.findall(
                         "^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
@@ -674,8 +682,11 @@ class ProfileConfigFile(ConfigFile):
                         value = int(num) * 10**9
                 except IndexError:
                     pass
+            elif key == "SyncInterval":
+                # Convert to seconds.
+                value = int(value) * 60
             elif key == "TrashDirs":
-                # Convert colon-separated strings to list.
+                # Convert colon-separated strings to a list.
                 value = value.split(":")
                 for index, element in enumerate(value):
                     value[index] = os.path.expanduser(element)

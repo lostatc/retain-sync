@@ -63,7 +63,7 @@ class SyncCommand(Command):
 
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
-            atexit.register(self.interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
             raise UserInputError("invalid profile")
 
         self.profile.cfg_file.read()

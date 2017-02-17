@@ -43,7 +43,7 @@ def main() -> int:
     return 0
 
 
-def daemon(profile_name) -> None:
+def daemon(profile_name) -> int:
     """Start the daemon."""
     try:
         handle_signals()
@@ -52,6 +52,8 @@ def daemon(profile_name) -> None:
     except ProgramError as e:
         for message in e.args:
             err("Error: {}".format(message))
+        return 1
+    return 0
 
 
 def def_command(cmd_args: dict) -> Command:
@@ -74,7 +76,7 @@ def handle_signals() -> None:
     """Exit properly on SIGTERM, SIGHUP or SIGINT."""
     def handler(signum: int, frame) -> None:
         """Print an appropriate error message for an interruption by signal."""
-        raise ProgramError("program received" + signal.Signals(signum).name)
+        raise ProgramError("program received " + signal.Signals(signum).name)
 
     signal.signal(signal.SIGTERM, handler)
     signal.signal(signal.SIGHUP, handler)
