@@ -29,11 +29,14 @@ class ListCommand(Command):
 
     def main(self) -> None:
         # TODO: figure out if this can be optimized
-        for name, profile in self.profiles.items():
-            profile.cfg_file.read()
+        if not self.profiles:
+            print("\n-- No profiles --\n")
+        else:
+            for name, profile in self.profiles.items():
+                profile.cfg_file.read()
 
-        table_headers = ["Profile", "Local Directory"]
-        table_data = [
-            (name, profile.cfg_file.vals["LocalDir"])
-            for name, profile in self.profiles.items()]
-        print_table(table_data, table_headers)
+            table_headers = ["Profile", "Local Directory"]
+            table_data = [
+                (name, profile.cfg_file.vals["LocalDir"])
+                for name, profile in self.profiles.items()]
+            print_table(table_data, table_headers)
