@@ -57,7 +57,7 @@ class Command:
         input_path = os.path.abspath(input_str)
         if os.path.exists(input_path):
             for name, profile in self.profiles.items():
-                if not profile.cfg_file.vals:
+                if not profile.cfg_file.raw_vals:
                     profile.cfg_file.read()
                 if os.path.samefile(
                         input_path, profile.cfg_file.vals["LocalDir"]):

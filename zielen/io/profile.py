@@ -33,7 +33,7 @@ from typing import Dict, Any, Iterable, Union, Generator, List, Tuple, Set
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
-from zielen.util.misc import err, env
+from zielen.util.misc import err, env, DictProperty
 
 
 class Profile:
@@ -155,20 +155,23 @@ class ProfileInfoFile(JSONFile):
         super().__init__(path)
         self.raw_vals = {}
 
-    @property
-    def vals(self) -> Dict[str, Any]:
-        output = defaultdict(lambda: None)
-        if self.raw_vals:
-            output.update(self.raw_vals)
-            if output["LastSync"]:
-                output["LastSync"] = datetime.datetime.strptime(
-                    output["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
+    @DictProperty
+    def vals(self, key) -> Any:
+        if key in self.raw_vals:
+            value = self.raw_vals[key]
+        else:
+            value = None
+
+        if value is not None:
+            if key == "LastSync":
+                value = datetime.datetime.strptime(
+                    self.raw_vals["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
                     tzinfo=datetime.timezone.utc).timestamp()
-            if output["LastAdjust"]:
-                output["LastAdjust"] = datetime.datetime.strptime(
-                    output["LastAdjust"], "%Y-%m-%dT%H:%M:%S").replace(
+            if key == "LastAdjust":
+                value = datetime.datetime.strptime(
+                    self.raw_vals["LastAdjust"], "%Y-%m-%dT%H:%M:%S").replace(
                     tzinfo=datetime.timezone.utc).timestamp()
-        return output
+        return value
 
     def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
@@ -512,7 +515,7 @@ class ProfileConfigFile(ConfigFile):
                     # the filesystem or the current instance.
                     continue
                 name = instance.profile.name
-                if not instance.vals:
+                if not instance.raw_vals:
                     instance.read()
                 common = os.path.commonpath([instance.vals["LocalDir"], value])
                 if common in [instance.vals["LocalDir"], value]:
@@ -642,16 +645,17 @@ class ProfileConfigFile(ConfigFile):
         if errors:
             raise FileParseError(*errors)
 
-    @property
-    def vals(self) -> Dict[str, Any]:
+    @DictProperty
+    def vals(self, key) -> Any:
         """Parse individual config values."""
-        output = {}
-        if self.raw_vals:
-            # Set default values.
-            output = self._defaults.copy()
-            output.update(self.raw_vals)
+        if key in self.raw_vals:
+            value = self.raw_vals[key]
+        elif key in self._defaults:
+            value = self._defaults[key]
+        else:
+            value = None
 
-        for key, value in output.copy().items():
+        if value is not None:
             if key == "LocalDir":
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "RemoteHost":
@@ -692,9 +696,8 @@ class ProfileConfigFile(ConfigFile):
                         value = True
                     elif value.lower() in self._false_vals:
                         value = False
-            output[key] = value
 
-        return output
+        return value
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""

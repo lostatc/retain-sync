@@ -28,7 +28,7 @@ import pwd
 import hashlib
 import datetime
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Collection
 
 
 def err(*args, **kwargs) -> None:
@@ -153,3 +153,48 @@ def timestamp_path(path: str, keyword="") -> str:
         + keyword
         + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         + os.path.splitext(path)[1])
+
+
+class DictProperty(object):
+    """A property for the getting and setting of individual dictionary keys."""
+    class _Proxy(object):
+        def __init__(self, obj, fget, fset, fdel):
+            self._obj = obj
+            self._fget = fget
+            self._fset = fset
+            self._fdel = fdel
+
+        def __getitem__(self, key):
+            if self._fget is None:
+                raise TypeError("can't read item")
+            return self._fget(self._obj, key)
+
+        def __setitem__(self, key, value):
+            if self._fset is None:
+                raise TypeError("can't set item")
+            self._fset(self._obj, key, value)
+
+        def __delitem__(self, key):
+            if self._fdel is None:
+                raise TypeError("can't delete item")
+            self._fdel(self._obj, key)
+
+    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
+        self._fget = fget
+        self._fset = fset
+        self._fdel = fdel
+        self.__doc__ = doc
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return self._Proxy(obj, self._fget, self._fset, self._fdel)
+
+    def getter(self, fget):
+        return type(self)(fget, self._fset, self._fdel, self.__doc__)
+
+    def setter(self, fset):
+        return type(self)(self._fget, fset, self._fdel, self.__doc__)
+
+    def deleter(self, fdel):
+        return type(self)(self._fget, self._fset, fdel, self.__doc__)
