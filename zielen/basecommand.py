@@ -20,6 +20,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import atexit
+import abc
 from typing import Dict
 from textwrap import dedent
 
@@ -29,7 +30,7 @@ from zielen.io.profile import Profile
 from zielen.util.misc import err
 
 
-class Command:
+class Command(abc.ABC):
     """Base class for program commands.
 
     Attributes:
@@ -40,6 +41,10 @@ class Command:
         self.profiles = {
             name: Profile(name) for name in ProgramDir.list_profiles()}
         self.profile = None
+
+    @abc.abstractmethod
+    def main(self) -> None:
+        """Run the command."""
 
     def select_profile(self, input_str: str) -> Profile:
         """Select the proper profile based on a name or local dir path.

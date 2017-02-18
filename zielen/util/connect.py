@@ -24,16 +24,16 @@ import subprocess
 import re
 import stat
 import tempfile
+import abc
 from textwrap import indent
-from abc import ABCMeta, abstractmethod
 
 from zielen.exceptions import ServerError, UserInputError
 from zielen.util.misc import env, shell_cmd
 
 
-class Connection(metaclass=ABCMeta):
+class Connection(abc.ABC):
     """Initiate a connection with a remote computer over some protocol."""
-    @abstractmethod
+    @abc.abstractmethod
     def mount(self, mountpoint: str) -> None:
         """Mount a remote directory in the local filesystem.
 
@@ -45,7 +45,7 @@ class Connection(metaclass=ABCMeta):
                 failed.
         """
 
-    @abstractmethod
+    @abc.abstractmethod
     def unmount(self, mountpoint: str) -> None:
         """Unmount a remote directory from the local filesystem.
 
@@ -56,7 +56,7 @@ class Connection(metaclass=ABCMeta):
             ServerError: The unmount failed.
         """
 
-    @abstractmethod
+    @abc.abstractmethod
     def check_remote(self, add_remote: bool) -> None:
         """Check the validity of the remote directory.
 
