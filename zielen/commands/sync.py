@@ -41,9 +41,9 @@ class SyncCommand(Command):
         dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the remote connection.
     """
-    def __init__(self, profile_in: str) -> None:
+    def __init__(self, profile_input: str) -> None:
         super().__init__()
-        self.profile = self.select_profile(profile_in)
+        self.profile = self.select_profile(profile_input)
         self.local_dir = None
         self.dest_dir = None
         self.connection = None

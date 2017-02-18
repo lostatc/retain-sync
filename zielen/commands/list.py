@@ -28,6 +28,7 @@ class ListCommand(Command):
         super().__init__()
 
     def main(self) -> None:
+        # TODO: figure out if this can be optimized
         for name, profile in self.profiles.items():
             profile.cfg_file.read()
 

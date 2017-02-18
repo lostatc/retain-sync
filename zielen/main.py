@@ -26,6 +26,7 @@ from zielen.daemon import Daemon
 from zielen.commands.initialize import InitializeCommand
 from zielen.commands.sync import SyncCommand
 from zielen.commands.list import ListCommand
+from zielen.commands.emptytrash import EmptyTrashCommand
 from zielen.util.input import parse_args
 from zielen.util.misc import err
 
@@ -80,7 +81,7 @@ def def_command(cmd_args: dict) -> Command:
     elif cmd_args["command"] == "list":
         return ListCommand()
     elif cmd_args["command"] == "empty-trash":
-        pass
+        return EmptyTrashCommand(cmd_args["profile"])
 
 
 def signal_exception_handler(signum: int, frame) -> None:

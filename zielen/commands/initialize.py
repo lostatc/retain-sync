@@ -39,7 +39,7 @@ class InitializeCommand(Command):
     """Create a new profile for a pair of directories to sync.
 
     Attributes:
-        profile_in: A string representing the selected profile.
+        profile_input: A string representing the selected profile.
         profile: The currently selected profile.
         exclude: The path to a file containing exclude patterns.
         template: The path to a template configuration file.
@@ -49,10 +49,10 @@ class InitializeCommand(Command):
         connection: A Connection object representing the connection to the
             remote directory.
     """
-    def __init__(self, profile_in: str, exclude=None, template=None,
+    def __init__(self, profile_input: str, exclude=None, template=None,
                  add_remote=False) -> None:
         super().__init__()
-        self.profile_in = profile_in
+        self.profile_input = profile_input
         self.exclude = exclude
         self.template = template
         self.add_remote = add_remote
@@ -85,9 +85,9 @@ class InitializeCommand(Command):
                 pass
 
         # Check that value of profile name is valid.
-        if re.search(r"\s+", self.profile_in):
+        if re.search(r"\s+", self.profile_input):
             raise UserInputError("profile name must not contain spaces")
-        elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_in):
+        elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_input):
             raise UserInputError(
                 "profile name must not contain special symbols")
 
@@ -101,7 +101,7 @@ class InitializeCommand(Command):
                 raise UserInputError(
                     "argument for '--template' is not a valid file")
 
-        self.profile = Profile(self.profile_in)
+        self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
         if os.path.isfile(self.profile.info_file.path):
             self.profile.info_file.read()
