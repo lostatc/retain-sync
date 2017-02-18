@@ -20,15 +20,13 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import shutil
-import atexit
 from typing import Iterable, Tuple, Set
 
-from zielen.exceptions import UserInputError, ServerError
+from zielen.exceptions import ServerError
 from zielen.basecommand import Command
-from zielen.util.connect import SSHConnection
 from zielen.util.misc import timestamp_path
 from zielen.io.profile import ProfileExcludeFile
-from zielen.io.userdata import TrashDir, LocalSyncDir, DestSyncDir
+from zielen.io.userdata import TrashDir
 from zielen.io.transfer import rclone
 
 
@@ -44,9 +42,6 @@ class SyncCommand(Command):
     def __init__(self, profile_input: str) -> None:
         super().__init__()
         self.profile = self.select_profile(profile_input)
-        self.local_dir = None
-        self.dest_dir = None
-        self.connection = None
 
     def main(self) -> None:
         """Run the command.
@@ -55,37 +50,7 @@ class SyncCommand(Command):
             UserInputError: The specified profile has already been initialized.
             ServerError: The connection to the remote directory was lost.
         """
-        self.profile.info_file.read()
-
-        # Lock profile if not already locked.
-        self.lock()
-
-        # Warn if profile is only partially initialized.
-        if self.profile.info_file.vals["Status"] == "partial":
-            atexit.register(self.print_interrupt_msg)
-            raise UserInputError("invalid profile")
-
-        self.profile.cfg_file.read()
-        self.profile.cfg_file.check_all()
-
-        # TODO: Remove these repetitive assignments.
-        self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
-        if self.profile.cfg_file.vals["RemoteHost"]:
-            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-            self.connection = SSHConnection(
-                self.profile.cfg_file.vals["RemoteHost"],
-                self.profile.cfg_file.vals["RemoteUser"],
-                self.profile.cfg_file.vals["Port"],
-                self.profile.cfg_file.vals["RemoteDir"],
-                self.profile.cfg_file.vals["SshfsOptions"])
-            if not os.path.isdir(self.dest_dir.path):
-                # Unmount if mountpoint is broken.
-                self.connection.unmount(self.dest_dir.path)
-            if not os.path.ismount(self.dest_dir.path):
-                self.connection.mount(self.dest_dir.path)
-        else:
-            self.dest_dir = DestSyncDir(
-                self.profile.cfg_file.vals["RemoteDir"])
+        self.setup_profile()
 
         # Copy exclude pattern file to the remote.
         try:
@@ -420,7 +385,8 @@ class SyncCommand(Command):
 
         Args:
             local_in: Local files that have been modified since the last sync.
-            remote_in: Remote files that have been modified since the last sync.
+            remote_in: Remote files that have been modified since the last
+            sync.
 
         Returns:
             An tuple containing an updated version of each of the input values.

@@ -21,12 +21,13 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import atexit
 import abc
-from typing import Dict
 from textwrap import dedent
 
 from zielen.exceptions import UserInputError, LockError
 from zielen.io.program import ProgramDir
 from zielen.io.profile import Profile
+from zielen.io.userdata import LocalSyncDir, DestSyncDir
+from zielen.util.connect import SSHConnection
 from zielen.util.misc import err
 
 
@@ -36,11 +37,17 @@ class Command(abc.ABC):
     Attributes:
         profiles: A dictionary of Profile instances.
         profile: The currently selected profile.
+        local_dir: A LocalSyncDir object representing the local directory.
+        dest_dir: A DestSyncDir object representing the destination directory.
+        connection: A Connection object representing the remote connection.
     """
     def __init__(self) -> None:
         self.profiles = {
             name: Profile(name) for name in ProgramDir.list_profiles()}
         self.profile = None
+        self.local_dir = None
+        self.dest_dir = None
+        self.connection = None
 
     @abc.abstractmethod
     def main(self) -> None:
@@ -70,7 +77,45 @@ class Command(abc.ABC):
         raise UserInputError(
             "argument is not a profile name or local directory path")
 
-    def lock(self) -> None:
+    def setup_profile(self):
+        """Perform some initial setup and assignments.
+
+        Raises:
+            UserInputError: The selected profile is only partially initialized.
+        """
+        self.profile.info_file.read()
+
+        # Lock profile if not already locked.
+        self._lock()
+
+        # Warn if profile is only partially initialized.
+        if self.profile.info_file.vals["Status"] == "partial":
+            atexit.register(self._print_interrupt_msg)
+            raise UserInputError("invalid profile")
+
+        self.profile.cfg_file.read()
+        self.profile.cfg_file.check_all()
+
+        # TODO: Remove these repetitive assignments.
+        self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
+        if self.profile.cfg_file.vals["RemoteHost"]:
+            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
+            self.connection = SSHConnection(
+                self.profile.cfg_file.vals["RemoteHost"],
+                self.profile.cfg_file.vals["RemoteUser"],
+                self.profile.cfg_file.vals["Port"],
+                self.profile.cfg_file.vals["RemoteDir"],
+                self.profile.cfg_file.vals["SshfsOptions"])
+            if not os.path.isdir(self.dest_dir.path):
+                # Unmount if mountpoint is broken.
+                self.connection.unmount(self.dest_dir.path)
+            if not os.path.ismount(self.dest_dir.path):
+                self.connection.mount(self.dest_dir.path)
+        else:
+            self.dest_dir = DestSyncDir(
+                self.profile.cfg_file.vals["RemoteDir"])
+
+    def _lock(self) -> None:
         """Lock the profile if not already locked."""
         def unlock() -> None:
             """Release the lock on the profile.
@@ -94,7 +139,7 @@ class Command(abc.ABC):
             self.profile.info_file.write()
 
     @staticmethod
-    def print_interrupt_msg() -> None:
+    def _print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
         err(dedent("""
             Initialization was interrupted.
