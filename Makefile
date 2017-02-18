@@ -25,11 +25,17 @@ clean:
 	rm -f "docs/unit/zielen@.service"
 	find "zielen" -depth -name "__pycache__" -type d | xargs rm -rf
 
+develop:
+	python setup.py develop \
+		--prefix "$(PREFIX)" \
+		--user
+
 help:
 	@echo "make:            Build the program."
-	@echo "make install:    Install the program."
+	@echo "make install:    Install the program normally."
 	@echo "make uninstall:  Uninstall the program."
 	@echo "make clean:      Remove generated files."
+	@echo "make develop:	Install the program in development mode."
 	@echo "make help:       Show this help message."
 
-.PHONY: build install uninstall clean help
+.PHONY: build install uninstall clean develop help
