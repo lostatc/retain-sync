@@ -155,6 +155,35 @@ def timestamp_path(path: str, keyword="") -> str:
         + os.path.splitext(path)[1])
 
 
+def print_table(data: Collection, headers: Collection) -> None:
+    """Print input values in a formatted table.
+
+    Args:
+        data: The values used to fill the body of the table. Each item in this
+            collection represents a row in the table.
+        headers: The values to use as column headings.
+    """
+    column_lengths = []
+    for content, header in zip(zip(*data), headers):
+        column = list(content) + [header]
+        column = [str(item) for item in column]
+        column_lengths.append(len(max(column, key=len)))
+
+    # Print the table header.
+    print(" | ".join([
+        "{0:<{1}}".format(name, width)
+        for name, width in zip(headers, column_lengths)]))
+
+    # Print the separator between the header and body.
+    print("-+-".join(["-"*length for length in column_lengths]))
+
+    # Print the table body.
+    for row in data:
+        print(" | ".join([
+             "{0:<{1}}".format(field, width)
+             for field, width in zip(row, column_lengths)]))
+
+
 class DictProperty(object):
     """A property for the getting and setting of individual dictionary keys."""
     class _Proxy(object):

@@ -25,6 +25,7 @@ from zielen.basecommand import Command
 from zielen.daemon import Daemon
 from zielen.commands.initialize import InitializeCommand
 from zielen.commands.sync import SyncCommand
+from zielen.commands.list import ListCommand
 from zielen.util.input import parse_args
 from zielen.util.misc import err
 
@@ -77,7 +78,7 @@ def def_command(cmd_args: dict) -> Command:
     elif cmd_args["command"] == "reset":
         pass
     elif cmd_args["command"] == "list":
-        pass
+        return ListCommand()
     elif cmd_args["command"] == "empty-trash":
         pass
 

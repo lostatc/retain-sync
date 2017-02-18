@@ -5,9 +5,4 @@ import sys
 from zielen.main import main
 
 if __name__ == "__main__":
-    # Start program with profiler.
-    # import profile
-    # profile.run("main()")
-
-    # Start program normally.
     sys.exit(main())
