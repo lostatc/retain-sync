@@ -88,26 +88,29 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
                 + indent("\n".join(stderr.splitlines()[-5:]), "    "))
 
 
-def rclone(src: str, dest: str, files=None, exclude=None, msg="") -> None:
+def rclone(source: str, dest: str, files=None, exclude=None, msg="",
+           rm_source=False) -> None:
     """Recursively copy files, preserving file metadata.
 
     Args:
-        src: The file to copy or directory to copy the contents of.
+        source: The file to copy or directory to copy the contents of.
         dest: The location to copy the files to.
         files: A list of relative paths of files to sync.
         exclude: A list of relative paths of files to exclude from syncing.
         msg: A message to display opposite the progress bar. If empty, the bar
             won't appear.
+        rm_source: Remove source files once they are copied to the destination.
 
     Raises:
         FileNotFoundError: The source or destination files couldn't be found.
         FileTransferError: The file transfer failed.
     """
-    if not os.path.exists(src) or not os.path.exists(os.path.dirname(dest)):
+    if not os.path.exists(source) or not os.path.exists(os.path.dirname(dest)):
         raise FileNotFoundError
 
     # The rsync option '--archive' does not imply '--recursive' when
     # '--files-from' is specified, so we have to explicitly include it.
-    _rsync_cmd(
-        ["-asrHAXS", os.path.join(src, ""), dest],
-        files=files, exclude=exclude, msg=msg)
+    rsync_args = ["-asrHAXS", os.path.join(source, ""), dest]
+    if rm_source:
+        rsync_args.append("--remove-source-files")
+    _rsync_cmd(rsync_args, files=files, exclude=exclude, msg=msg)

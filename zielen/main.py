@@ -25,6 +25,7 @@ from zielen.basecommand import Command
 from zielen.daemon import Daemon
 from zielen.commands.initialize import InitializeCommand
 from zielen.commands.sync import SyncCommand
+from zielen.commands.reset import ResetCommand
 from zielen.commands.list import ListCommand
 from zielen.commands.emptytrash import EmptyTrashCommand
 from zielen.util.input import parse_args
@@ -77,7 +78,9 @@ def def_command(cmd_args: dict) -> Command:
     elif cmd_args["command"] == "sync":
         return SyncCommand(cmd_args["profile"])
     elif cmd_args["command"] == "reset":
-        pass
+        return ResetCommand(
+            cmd_args["profile"], cmd_args["keep_remote"],
+            cmd_args["no_retrieve"])
     elif cmd_args["command"] == "list":
         return ListCommand()
     elif cmd_args["command"] == "empty-trash":
