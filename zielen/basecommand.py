@@ -99,18 +99,18 @@ class Command(abc.ABC):
         # TODO: Remove these repetitive assignments.
         self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
         if self.profile.cfg_file.vals["RemoteHost"]:
-            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
             self.connection = SSHConnection(
                 self.profile.cfg_file.vals["RemoteHost"],
                 self.profile.cfg_file.vals["RemoteUser"],
                 self.profile.cfg_file.vals["Port"],
                 self.profile.cfg_file.vals["RemoteDir"],
                 self.profile.cfg_file.vals["SshfsOptions"])
-            if not os.path.isdir(self.dest_dir.path):
+            if not os.path.isdir(self.profile.mnt_dir):
                 # Unmount if mountpoint is broken.
-                self.connection.unmount(self.dest_dir.path)
-            if not os.path.ismount(self.dest_dir.path):
-                self.connection.mount(self.dest_dir.path)
+                self.connection.unmount(self.profile.mnt_dir)
+            if not os.path.ismount(self.profile.mnt_dir):
+                self.connection.mount(self.profile.mnt_dir)
+            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
         else:
             self.dest_dir = DestSyncDir(
                 self.profile.cfg_file.vals["RemoteDir"])
