@@ -33,8 +33,6 @@ from typing import Callable, Collection
 
 def err(*args, **kwargs) -> None:
     """Print to standard error."""
-    # TODO: print error message on new line if cursor is not at the beginning
-    # of the line
     print(*args, file=sys.stderr, **kwargs)
 
 
@@ -69,7 +67,7 @@ def prefill_input(prompt: str, prefill: str) -> str:
 
 
 def rec_scan(path: str):
-    """Recursively scan a directory tree and yield a DirEntry object."""
+    """Recursively scan a directory tree and yield an os.DirEntry object."""
     for entry in os.scandir(path):
         yield entry
         if entry.is_dir(follow_symlinks=False):
@@ -93,8 +91,8 @@ def progress_bar(
         coverage: The percentage of the width of the terminal window that the
             progress bar should cover.
         msg: A message to be printed opposite the progress bar.
-        r_align: Align the progress bar to the right edge of the screen instead
-            of the left.
+        r_align: Align the progress bar to the right edge of the screen as
+            opposed to the left.
     """
     coverage = float(coverage)
 
@@ -130,7 +128,10 @@ def progress_bar(
 
 
 def md5sum(path) -> str:
-    """Get the MD5 checksum of a file."""
+    """Get the MD5 checksum of a file.
+
+    Read the file 4KiB at a time.
+    """
     md5_hash = hashlib.md5()
     with open(path, "rb") as file:
         for chunk in iter(lambda: file.read(4096), b""):
@@ -140,6 +141,8 @@ def md5sum(path) -> str:
 
 def timestamp_path(path: str, keyword="") -> str:
     """Return a timestamped version of a file path.
+
+    filename_keyword-YYYYMMDD-HHMMSS.ext
 
     Args:
         path: The file path on which to base the new file path.

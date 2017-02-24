@@ -111,13 +111,13 @@ class InitializeCommand(Command):
             raise UserInputError("this profile already exists")
 
         # Lock profile if not already locked.
-        self._lock()
+        self.lock()
 
         # Check whether an interrupted initialization is being resumed.
         if self.profile.info_file.vals["Status"] == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
-            atexit.register(self._print_interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
 
             self.profile.cfg_file.read()
             self.profile.cfg_file.check_all()
@@ -127,7 +127,6 @@ class InitializeCommand(Command):
             self.add_remote = (
                 self.profile.info_file.vals["InitOpts"]["add_remote"])
 
-            # TODO: Remove these repetitive assignments.
             self.local_dir = LocalSyncDir(
                 self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
@@ -172,7 +171,6 @@ class InitializeCommand(Command):
                 self.profile.cfg_file.write(os.path.join(
                     sys.prefix, "share/zielen/config-template"))
 
-            # TODO: Remove these repetitive assignments.
             self.local_dir = LocalSyncDir(
                 self.profile.cfg_file.vals["LocalDir"])
             if self.profile.cfg_file.vals["RemoteHost"]:
@@ -196,7 +194,7 @@ class InitializeCommand(Command):
             # resumed.
             self.profile.info_file.generate(
                 self.profile.name, add_remote=self.add_remote)
-            atexit.register(self._print_interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
             atexit.unregister(delete_profile)
 
         self._setup_remote()
@@ -208,7 +206,7 @@ class InitializeCommand(Command):
         self.profile.info_file.update_synctime()
         self.profile.info_file.update_adjusttime()
         self.profile.info_file.write()
-        atexit.unregister(self._print_interrupt_msg)
+        atexit.unregister(self.print_interrupt_msg)
 
         # Advise user to start/enable the daemon.
         print(dedent("""

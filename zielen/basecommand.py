@@ -86,17 +86,16 @@ class Command(abc.ABC):
         self.profile.info_file.read()
 
         # Lock profile if not already locked.
-        self._lock()
+        self.lock()
 
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
-            atexit.register(self._print_interrupt_msg)
+            atexit.register(self.print_interrupt_msg)
             raise UserInputError("invalid profile")
 
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
 
-        # TODO: Remove these repetitive assignments.
         self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
         if self.profile.cfg_file.vals["RemoteHost"]:
             self.connection = SSHConnection(
@@ -115,7 +114,7 @@ class Command(abc.ABC):
             self.dest_dir = DestSyncDir(
                 self.profile.cfg_file.vals["RemoteDir"])
 
-    def _lock(self) -> None:
+    def lock(self) -> None:
         """Lock the profile if not already locked."""
         def unlock() -> None:
             """Release the lock on the profile.
@@ -139,7 +138,7 @@ class Command(abc.ABC):
             self.profile.info_file.write()
 
     @staticmethod
-    def _print_interrupt_msg() -> None:
+    def print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
         err(dedent("""
             Initialization was interrupted.

@@ -27,9 +27,8 @@ import pkg_resources
 import sqlite3
 import weakref
 from textwrap import dedent
-from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, Any, Iterable, Union, Generator, List, Tuple, Set
+from typing import Any, Iterable, Union, Generator, List, Tuple, Set
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -425,8 +424,8 @@ class ProfileConfigFile(ConfigFile):
         path: The path to the configuration file.
         profile: The Profile object that the config file belongs to.
         add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
-        _raw_vals: A dictionary of unmodified config value strings.
-        _vals: A read-only dictionary of modified config values.
+        raw_vals: A dictionary of unmodified config value strings.
+        vals: A read-only dictionary of modified config values.
     """
     _instances = weakref.WeakSet()
     _true_vals = ["yes", "true"]
@@ -684,12 +683,16 @@ class ProfileConfigFile(ConfigFile):
                     pass
             elif key == "SyncInterval":
                 # Convert to seconds.
-                value = int(value) * 60
+                try:
+                    value = int(value) * 60
+                except ValueError:
+                    pass
             elif key == "TrashDirs":
                 # Convert colon-separated strings to a list.
                 value = value.split(":")
                 for index, element in enumerate(value):
-                    value[index] = os.path.expanduser(element)
+                    value[index] = os.path.expanduser(
+                        os.path.normpath(element))
             elif key in self._bool_keys:
                 if isinstance(value, str):
                     if value.lower() in self._true_vals:

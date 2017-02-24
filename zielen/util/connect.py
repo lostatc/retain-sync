@@ -175,7 +175,7 @@ class SSHConnection(Connection):
     @staticmethod
     def _guess_env() -> bool:
         """Guess environment variables for ssh-agent."""
-        if not os.environ["SSH_AUTH_SOCK"]:
+        if not env("SSH_AUTH_SOCK"):
             # Search for ssh-agent auth socket in it's default location.
             for entry in os.scandir(tempfile.gettempdir()):
                 if (re.search("^ssh-", entry.name)
