@@ -161,6 +161,9 @@ def timestamp_path(path: str, keyword="") -> str:
 def print_table(data: Collection, headers: Collection) -> None:
     """Print input values in a formatted table.
 
+    All values in the table are left-aligned, and columns are as wide as
+    their longest value.
+
     Args:
         data: The values used to fill the body of the table. Each item in this
             collection represents a row in the table.
@@ -168,8 +171,7 @@ def print_table(data: Collection, headers: Collection) -> None:
     """
     column_lengths = []
     for content, header in zip(zip(*data), headers):
-        column = list(content) + [header]
-        column = [str(item) for item in column]
+        column = [str(item) for item in [*content, header]]
         column_lengths.append(len(max(column, key=len)))
 
     # Print the table header.
