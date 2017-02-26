@@ -24,7 +24,7 @@ from typing import Iterable, Tuple, Set
 
 from zielen.exceptions import ServerError
 from zielen.basecommand import Command
-from zielen.util.misc import timestamp_path
+from zielen.util.misc import timestamp_path, rec_scan
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
 from zielen.io.transfer import rclone
@@ -156,6 +156,7 @@ class SyncCommand(Command):
 
         rm_files = set()
         for excluded_path in excluded_paths:
+            full_excluded_path = os.path.join(self.local_dir.path, excluded_path)
             for pattern_file in pattern_files:
                 if excluded_path not in pattern_file.rel_files:
                     break
@@ -167,10 +168,11 @@ class SyncCommand(Command):
                     # The current path is a directory. Add all the
                     # directory's files to the set instead of the directory
                     # itself.
-                    for filepath in all_files:
-                        if (os.path.commonpath([filepath, excluded_path])
-                                == excluded_path):
-                            rm_files.add(filepath)
+                    for entry in rec_scan(full_excluded_path):
+                        rel_sub_path = os.path.relpath(
+                            entry.path, self.local_dir.path)
+                        if rel_sub_path in all_files:
+                            rm_files.add(rel_sub_path)
                 else:
                     rm_files.add(excluded_path)
 
@@ -214,8 +216,8 @@ class SyncCommand(Command):
             raise ServerError(
                 "the connection to the remote directory was lost")
 
-    def _prioritize_files(
-            self, space_limit=int, exclude_paths=None) -> Tuple[Set[str], int]:
+    def _prioritize_files(self, space_limit: int,
+                          exclude_paths=None) -> Tuple[Set[str], int]:
         """Calculate which files will stay in the local directory.
 
         Args:
@@ -231,7 +233,8 @@ class SyncCommand(Command):
         """
         file_priorities = self.profile.db_file.get_priorities()
         adjusted_priorities = []
-        for file_path, file_priority in file_priorities:
+        for file_path, file_priority in file_priorities.items():
+            full_file_path = os.path.join(self.local_dir.path, file_path)
             for exclude_path in exclude_paths:
                 if (os.path.commonpath([file_path, exclude_path])
                         == exclude_path):
@@ -239,7 +242,7 @@ class SyncCommand(Command):
             else:
                 # The file is not included in the list of excluded paths.
                 file_size = os.stat(
-                    os.path.join(self.dest_dir.path, file_path)).st_size
+                    full_file_path, follow_symlinks=True).st_size
                 if self.profile.cfg_file.vals["AccountForSize"]:
                     try:
                         adjusted_priorities.append((
@@ -252,20 +255,17 @@ class SyncCommand(Command):
 
         # Sort directories by priority.
         adjusted_priorities.sort(key=lambda x: x[1], reverse=True)
-        selected_files = [
+        prioritized_files = [
             (path, size) for path, priority, size in adjusted_priorities]
 
         # Calculate which directories will stay in the local directory.
+        selected_files = set()
         remaining_space = space_limit
-        for file_path, file_size in selected_files.copy():
-            remaining_space -= file_size
-            if remaining_space < 0:
-                # There is not enough room for the current directory.
-                # Remove it from the list.
-                selected_files.remove((file_path, file_size))
-                remaining_space += file_size
+        for file_path, file_size in prioritized_files:
+            if remaining_space - file_size > 0:
+                selected_files.add(file_path)
+                remaining_space -= file_size
 
-        selected_files = {path for path, size in selected_files}
         return selected_files, remaining_space
 
     def _prioritize_dirs(self, space_limit: int) -> Tuple[Set[str], int]:
@@ -285,17 +285,18 @@ class SyncCommand(Command):
             exclude=self.profile.ex_file.rel_files)
         dir_priorities = []
 
-        # Calculate the priorities of each directory. A directory priority is
-        # calculated by finding the sum of the priorities of its files and
-        # dividing by the directory size.
+        # Calculate the priorities and sizes of each directory. A directory
+        # priority is calculated by finding the sum of the priorities of its
+        # files and dividing by the directory size.
         for dir_path in dir_paths:
+            full_dir_path = os.path.join(self.local_dir.path, dir_path)
             dir_priority = 0.0
-            dir_size = 0
-            for file_path, file_priority in file_priorities:
-                if os.path.commonpath([file_path, dir_path]) == dir_path:
-                    dir_priority += file_priority
-                    dir_size += os.stat(
-                        os.path.join(self.dest_dir.path, file_path)).st_size
+            dir_size = os.stat(full_dir_path, follow_symlinks=True).st_size
+            for entry in rec_scan(full_dir_path):
+                rel_path = os.path.relpath(entry.path, self.local_dir.path)
+                dir_size += entry.stat(follow_symlinks=True).st_size
+                if rel_path in file_priorities:
+                    dir_priority += file_priorities[rel_path]
             if self.profile.cfg_file.vals["AccountForSize"]:
                 try:
                     dir_priorities.append((
@@ -307,47 +308,51 @@ class SyncCommand(Command):
 
         # Sort directories by priority.
         dir_priorities.sort(key=lambda x: x[1], reverse=True)
-        selected_dirs = [
-            (path, size) for path, priority, size in dir_priorities]
+        prioritized_dirs = [
+            path for path, priority, size in dir_priorities]
+        dir_sizes = {path: size for path, priority, size in dir_priorities}
 
-        # Calculate which directories will stay in the local directory.
-        while True:
-            remaining_space = space_limit
-            for dir_path, dir_size in selected_dirs.copy():
-                if dir_size > self.profile.cfg_file.vals["StorageLimit"]:
-                    # This directory alone is larger than the storage limit.
-                    # Remove it from the list.
-                    selected_dirs.remove((dir_path, dir_size))
-                    continue
+        # Select which directories will stay in the local directory.
+        remaining_space = space_limit
+        selected_dirs = set()
+        selected_subdirs = set()
+        for dir_path in prioritized_dirs:
+            full_dir_path = os.path.join(self.local_dir.path, dir_path)
+            dir_size = dir_sizes[dir_path]
 
+            if dir_path in selected_subdirs:
+                # The current directory is a subdirectory of a directory
+                # that has already been selected. Skip it.
+                continue
+
+            if dir_size > self.profile.cfg_file.vals["StorageLimit"]:
+                # The current directory alone is larger than the storage limit.
+                # Skip it.
+                continue
+
+            # Find all subdirectories of the current directory that are
+            # already in the set of selected files. When you have a lot of
+            # directories, using os.scandir() to search the filesystem is
+            # significantly faster than checking against every other
+            # directory path in memory using os.path.commonpath().
+            subdirs = set()
+            subdirs_size = 0
+            for entry in rec_scan(full_dir_path):
+                rel_subdir_path = os.path.relpath(
+                    entry.path, self.local_dir.path)
+                subdirs.add(rel_subdir_path)
+                if rel_subdir_path in selected_dirs:
+                    subdirs_size += dir_sizes[rel_subdir_path]
+
+            if remaining_space + subdirs_size - dir_size > 0:
+                # Add the current directory to the set of selected files and
+                # remove all of its subdirectories from the set.
+                selected_subdirs |= subdirs
+                selected_dirs -= subdirs
+                selected_dirs.add(dir_path)
+                remaining_space += subdirs_size
                 remaining_space -= dir_size
-                if remaining_space < 0:
-                    # There is not enough room for the current directory.
-                    # Remove it from the list.
-                    selected_dirs.remove((dir_path, dir_size))
-                    remaining_space += dir_size
-                else:
-                    # Remove any subdirectories of the current directory
-                    # from the list. This prevents directories from being
-                    # counted more than once when calculating the total size.
-                    for subdir_path, subdir_size in selected_dirs.copy():
-                        if (dir_path != subdir_path
-                                and os.path.commonpath([subdir_path, dir_path])
-                                == dir_path):
-                            selected_dirs.remove((subdir_path, subdir_size))
-                            break
-                    else:
-                        continue
 
-                    # The list of directories has been modified. Start over
-                    # from the beginning.
-                    break
-            else:
-                # The directories that remain in the list are the ones that
-                # will stay in the local directory.
-                break
-
-        selected_dirs = {path for path, size in selected_dirs}
         return selected_dirs, remaining_space
 
     def _update_remote(self, local_mod_files: Iterable[str]) -> None:

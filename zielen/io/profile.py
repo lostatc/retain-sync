@@ -28,7 +28,7 @@ import sqlite3
 import weakref
 from textwrap import dedent
 from contextlib import contextmanager
-from typing import Any, Iterable, Union, Generator, List, Tuple, Set
+from typing import Any, Iterable, Union, Generator, Set, Dict
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -326,7 +326,7 @@ class ProfileDBFile:
                     WHERE path=?;
                     """, (path,))
 
-    def get_priorities(self) -> List[Tuple[str, float]]:
+    def get_priorities(self) -> Dict[str, float]:
         """Get the paths of files sorted by their priorities.
 
         Returns:
@@ -339,7 +339,7 @@ class ProfileDBFile:
                 FROM files
                 ORDER BY priority DESC
                 """)
-        return [(path, priority) for path, priority in self.cur.fetchall()]
+        return {path: priority for path, priority in self.cur.fetchall()}
 
     def get_paths(self) -> Set[str]:
         """Get the paths of files in the database.
