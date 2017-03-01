@@ -156,6 +156,14 @@ class ProfileInfoFile(JSONFile):
 
     @DictProperty
     def vals(self, key) -> Any:
+        """Parse individual values from the info file.
+
+        Output Values:
+            LastSync: Input value converted to the number of seconds since the
+                epoch.
+            LastAdjustment: Input value converted to the number of seconds
+                since the epoch.
+        """
         if key in self.raw_vals:
             value = self.raw_vals[key]
         else:
@@ -646,7 +654,24 @@ class ProfileConfigFile(ConfigFile):
 
     @DictProperty
     def vals(self, key) -> Any:
-        """Parse individual config values."""
+        """Parse individual config values.
+
+        Output Values:
+            LocalDir: Input value converted to a user-expanded, normalized
+                path.
+            RemoteHost: 'None' if value is in self._host_synonyms, and the
+                input value otherwise.
+            RemoteDir: Input value converted to a user-expanded, normalized
+                path.
+            StorageLimit: Input value converted to the number of bytes.
+            SyncInterval: Input value converted to the number of seconds.
+            TrashDirs: Input value converted to a list of user-expanded,
+                normalized paths.
+            DeleteAlways: Input value converted to a bool.
+            SyncExtraFiles: Input value converted to a bool.
+            InflatePriority: Input value converted to a bool.
+            AccountForSize: Input value converted to a bool.
+        """
         if key in self.raw_vals:
             value = self.raw_vals[key]
         elif key in self._defaults:
@@ -663,32 +688,29 @@ class ProfileConfigFile(ConfigFile):
             elif key == "RemoteDir":
                 value = os.path.expanduser(os.path.normpath(value))
             elif key == "StorageLimit":
-                # Convert to bytes.
                 try:
                     num, unit = re.findall(
                         "^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
                     if unit in ["K", "KiB"]:
-                        value = int(num) * 2**10
+                        value = int(num) * 1024
                     elif unit in ["M", "MiB"]:
-                        value = int(num) * 2**20
+                        value = int(num) * 1024**2
                     elif unit in ["G", "GiB"]:
-                        value = int(num) * 2**30
+                        value = int(num) * 1024**3
                     elif unit == "KB":
-                        value = int(num) * 10**3
+                        value = int(num) * 1000
                     elif unit == "MB":
-                        value = int(num) * 10**6
+                        value = int(num) * 1000**2
                     elif unit == "GB":
-                        value = int(num) * 10**9
+                        value = int(num) * 1000**3
                 except IndexError:
                     pass
             elif key == "SyncInterval":
-                # Convert to seconds.
                 try:
                     value = int(value) * 60
                 except ValueError:
                     pass
             elif key == "TrashDirs":
-                # Convert colon-separated strings to a list.
                 value = value.split(":")
                 for index, element in enumerate(value):
                     value[index] = os.path.expanduser(

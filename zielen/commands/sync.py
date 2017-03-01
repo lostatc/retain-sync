@@ -340,6 +340,9 @@ class SyncCommand(Command):
             for entry in rec_scan(full_dir_path):
                 rel_subdir_path = os.path.relpath(
                     entry.path, self.local_dir.path)
+                # Entries will still be added to the set even if they're not
+                # really directories. It doesn't matter as long as the set
+                # includes the directories.
                 subdirs.add(rel_subdir_path)
                 if rel_subdir_path in selected_dirs:
                     subdirs_size += dir_sizes[rel_subdir_path]
