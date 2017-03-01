@@ -242,7 +242,7 @@ class SyncCommand(Command):
             else:
                 # The file is not included in the list of excluded paths.
                 file_size = os.stat(
-                    full_file_path, follow_symlinks=True).st_size
+                    full_file_path, follow_symlinks=True).st_blocks * 512
                 if self.profile.cfg_file.vals["AccountForSize"]:
                     try:
                         adjusted_priorities.append((
@@ -291,10 +291,10 @@ class SyncCommand(Command):
         for dir_path in dir_paths:
             full_dir_path = os.path.join(self.local_dir.path, dir_path)
             dir_priority = 0.0
-            dir_size = os.stat(full_dir_path, follow_symlinks=True).st_size
+            dir_size = 0
             for entry in rec_scan(full_dir_path):
                 rel_path = os.path.relpath(entry.path, self.local_dir.path)
-                dir_size += entry.stat(follow_symlinks=True).st_size
+                dir_size += entry.stat(follow_symlinks=True).st_blocks * 512
                 if rel_path in file_priorities:
                     dir_priority += file_priorities[rel_path]
             if self.profile.cfg_file.vals["AccountForSize"]:

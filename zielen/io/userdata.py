@@ -21,6 +21,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sqlite3
 import datetime
+import shutil
 from contextlib import contextmanager
 from typing import Tuple, Iterable, List, Set, Generator
 
@@ -32,7 +33,7 @@ class TrashDir:
     """Get information about the user's local trash directory.
 
     Attributes:
-        paths: The paths to the trash directories.
+        paths: The paths of the trash directories.
         sizes: A list of tuples containing the paths and sizes of every file
             in the trash.
     """
@@ -52,6 +53,9 @@ class TrashDir:
             for path in self.paths:
                 for entry in rec_scan(path):
                     if not entry.is_dir():
+                        # Because this is being used to determine if files
+                        # are identical, the apparent size should be used
+                        # instead of the disk usage.
                         output.append((
                             entry.path,
                             entry.stat(follow_symlinks=False).st_size))
@@ -153,14 +157,14 @@ class SyncDir:
                 yield entry.path, mtime
 
     def total_size(self) -> int:
-        """Get the total size of the directory and all of its contents.
+        """Get the total disk usage of the directory and all of its contents.
 
         Returns:
-            The total size of the directory in bytes.
+            The total disk usage of the directory in bytes.
         """
         total_size = 0
         for entry in rec_scan(self.path):
-            total_size += entry.stat(follow_symlinks=False).st_size
+            total_size += entry.stat(follow_symlinks=False).st_blocks * 512
         return total_size
 
     def space_avail(self) -> int:
@@ -169,8 +173,7 @@ class SyncDir:
         Returns:
             The amount of free space in bytes.
         """
-        fs_stats = os.statvfs(self.path)
-        return fs_stats.f_bsize * fs_stats.f_bavail
+        return shutil.disk_usage(self.path).free
 
     def symlink_tree(self, destdir: str, exclude=None,
                      overwrite=False) -> None:
