@@ -45,7 +45,7 @@ class EmptyTrashCommand(Command):
 
         # Remove files marked for deletion.
         files_deleted = 0
-        for rel_path in self.dest_dir.db_file.list_files(deleted=True):
+        for rel_path in self.dest_dir.db_file.get_paths(deleted=True):
             try:
                 os.remove(os.path.join(self.dest_dir.path, rel_path))
             except FileNotFoundError:

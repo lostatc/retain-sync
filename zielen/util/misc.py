@@ -49,7 +49,11 @@ def env(var: str) -> str:
 
 
 def tty_input(prompt: str) -> str:
-    """Read user input from the tty device."""
+    """Read user input from the tty device.
+
+    Args:
+        prompt: The string to serve as the command-line input prompt.
+    """
     # TODO: figure out how to use readline while taking input from tty
     with open("/dev/tty") as file:
         sys.stdin = file
@@ -59,7 +63,12 @@ def tty_input(prompt: str) -> str:
 
 
 def prefill_input(prompt: str, prefill: str) -> str:
-    """Prompt the user for input with a prepopulated input buffer."""
+    """Prompt the user for input with a prepopulated input buffer.
+
+    Args:
+        prompt: The string to serve as the command-line input prompt.
+        prefill: The string to prefill the input buffer with.
+    """
     readline.set_startup_hook(lambda: readline.insert_text(prefill))
     usr_input = input(prompt)
     readline.set_startup_hook()
@@ -67,15 +76,39 @@ def prefill_input(prompt: str, prefill: str) -> str:
 
 
 def rec_scan(path: str):
-    """Recursively scan a directory tree and yield an os.DirEntry object."""
+    """Recursively scan a directory tree and yield an os.DirEntry object.
+
+    Args:
+        path: The path of the directory to scan.
+    """
     for entry in os.scandir(path):
         yield entry
         if entry.is_dir(follow_symlinks=False):
             yield from rec_scan(entry.path)
 
 
+def rmdir_tree(path: str):
+    """Recursively remove empty directories, leaving files alone.
+
+    Args:
+        path: The base path to remove all empty subdirectories of.
+    """
+    for entry in os.scandir(path):
+        try:
+            os.removedirs(entry.path)
+        except NotADirectoryError:
+            pass
+        except OSError:
+            rmdir_tree(entry.path)
+
+
 def shell_cmd(input_cmd: list) -> subprocess.Popen:
-    """Run a shell command and terminate it on exit."""
+    """Run a shell command and terminate it on exit.
+
+    Args:
+        input_cmd: The shell command to run, with each argument as an element
+            in a list.
+    """
     cmd = subprocess.Popen(
         input_cmd, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, universal_newlines=True)
@@ -127,10 +160,11 @@ def progress_bar(
     return update
 
 
-def md5sum(path) -> str:
-    """Get the MD5 checksum of a file.
+def md5sum(path: str) -> str:
+    """Get the MD5 checksum of a file, reading 4KiB at a time.
 
-    Read the file 4KiB at a time.
+    Args:
+        path: The path of the file to find the checksum of.
     """
     md5_hash = hashlib.md5()
     with open(path, "rb") as file:
@@ -142,7 +176,9 @@ def md5sum(path) -> str:
 def timestamp_path(path: str, keyword="") -> str:
     """Return a timestamped version of a file path.
 
-    filename_keyword-YYYYMMDD-HHMMSS.ext
+    Example:
+        >>> timestamp_path("/home/guido/notes.txt", keyword="conflict")
+        "/home/guido/notes_conflict-20170219-145503.txt"
 
     Args:
         path: The file path on which to base the new file path.
@@ -189,9 +225,9 @@ def print_table(data: Collection, headers: Collection) -> None:
              for field, width in zip(row, column_lengths)]))
 
 
-class DictProperty(object):
+class DictProperty:
     """A property for the getting and setting of individual dictionary keys."""
-    class _Proxy(object):
+    class _Proxy:
         def __init__(self, obj, fget, fset, fdel):
             self._obj = obj
             self._fget = fget

@@ -392,8 +392,8 @@ class DestDBFile:
                 """, (path,))
         return self.cur.fetchone()[0]
 
-    def list_files(self, deleted=None, min_lastsync=None) -> Set[str]:
-        """Get a list of file paths that match certain constraints.
+    def get_paths(self, deleted=None, min_lastsync=None) -> Set[str]:
+        """Get a set of file paths that match certain constraints.
 
         Args:
             deleted: Select files marked as deleted.

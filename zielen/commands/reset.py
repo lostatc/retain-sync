@@ -61,7 +61,7 @@ class ResetCommand(Command):
             try:
                 rclone(
                     self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.db_file.list_files(deleted=False),
+                    files=self.dest_dir.db_file.get_paths(deleted=False),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
@@ -70,7 +70,7 @@ class ResetCommand(Command):
 
             if not self.keep_remote:
                 # Remove files marked for deletion from the remote directory.
-                for rel_path in self.dest_dir.db_file.list_files(deleted=True):
+                for rel_path in self.dest_dir.db_file.get_paths(deleted=True):
                     try:
                         os.remove(
                             os.path.join(self.dest_dir.safe_path, rel_path))

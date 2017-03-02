@@ -24,7 +24,7 @@ from typing import Iterable, Tuple, Set
 
 from zielen.exceptions import ServerError
 from zielen.basecommand import Command
-from zielen.util.misc import timestamp_path, rec_scan
+from zielen.util.misc import timestamp_path, rec_scan, rmdir_tree
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
 from zielen.io.transfer import rclone
@@ -85,7 +85,7 @@ class SyncCommand(Command):
         self._update_remote(local_mod_files)
         self.dest_dir.symlink_tree(
             self.local_dir.path,
-            exclude=self.dest_dir.db_file.list_files(deleted=True))
+            exclude=self.dest_dir.db_file.get_paths(deleted=True))
 
         # Add modified files to the local database, inflating their priority
         # values if that option is set in the config file.
@@ -132,7 +132,7 @@ class SyncCommand(Command):
         for deletion and have since been deleted.
         """
         deleted_trash_files = (
-            set(self.dest_dir.db_file.list_files(deleted=True))
+            set(self.dest_dir.db_file.get_paths(deleted=True))
             - set(self.dest_dir.list_files(rel=True)))
         self.dest_dir.db_file.rm_files(deleted_trash_files)
 
@@ -187,30 +187,48 @@ class SyncCommand(Command):
                 remote directory to the local one. All other files in the local
                 directory are replaced with symlinks.
         """
-        retain_files = set(retain_files)
-        all_files = set(self.local_dir.list_files(
-            rel=True, dirs=True, exclude=self.profile.ex_file.rel_files))
-        stale_files = list(all_files - retain_files)
+        # Create a set including all the files and directories contained in
+        # each directory from the input.
+        all_retain_files = set(retain_files)
+        for retain_path in retain_files:
+            full_retain_path = os.path.join(self.local_dir.path, retain_path)
+            try:
+                for entry in rec_scan(full_retain_path):
+                    all_retain_files.add(
+                        os.path.relpath(entry.path, self.local_dir.path))
+            except NotADirectoryError:
+                pass
 
-        # Sort the file paths so that a directory's contents always comes
+        all_files = set(self.local_dir.list_files(
+            rel=True, dirs=True, symlinks=True,
+            exclude=self.profile.ex_file.rel_files))
+        stale_files = list(all_files - all_retain_files)
+
+        # Sort the file paths so that a directory's contents always come
         # before the directory.
         stale_files.sort(reverse=True)
 
-        for path in stale_files:
+        # Remove old, unneeded files to make room for new ones.
+        for stale_path in stale_files:
+            full_stale_path = os.path.join(self.local_dir.path, stale_path)
             try:
-                os.remove(os.path.join(self.local_dir.path, path))
+                if not os.path.islink(full_stale_path):
+                    # These files will just be replaced by symlinks anyway.
+                    # If the file is a user-created symlink, then it should
+                    # not be deleted.
+                    os.remove(full_stale_path)
             except IsADirectoryError:
-                shutil.rmtree(os.path.join(self.local_dir.path, path))
+                rmdir_tree(full_stale_path)
 
         self.dest_dir.symlink_tree(
             self.local_dir.path,
-            exclude=self.dest_dir.db_file.list_files(deleted=True))
+            exclude=self.dest_dir.db_file.get_paths(deleted=True))
 
         try:
             rclone(
                 self.dest_dir.safe_path, self.local_dir.path,
                 files=retain_files,
-                exclude=self.dest_dir.db_file.list_files(deleted=True),
+                exclude=self.dest_dir.db_file.get_paths(deleted=True),
                 msg="Updating local files...")
         except FileNotFoundError:
             raise ServerError(
@@ -468,7 +486,7 @@ class SyncCommand(Command):
         local_mod_files = {
             path for path, time in local_mtimes
             if time > last_sync or not self.profile.db_file.check_exists(path)}
-        remote_mod_files = self.dest_dir.db_file.list_files(
+        remote_mod_files = self.dest_dir.db_file.get_paths(
             deleted=False, min_lastsync=last_sync)
 
         return local_mod_files, remote_mod_files
