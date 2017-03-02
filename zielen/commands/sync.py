@@ -67,8 +67,12 @@ class SyncCommand(Command):
         (local_del_files, remote_del_files,
             remote_trash_files) = self._compute_deletions()
         self._rm_local_files(local_del_files)
-        self._rm_remote_files(remote_del_files)
-        self._trash_files(remote_trash_files)
+        try:
+            self._rm_remote_files(remote_del_files)
+            self._trash_files(remote_trash_files)
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
 
         # Remove files from the remote database that were previously marked
         # for deletion and have since been deleted from the remote directory.
@@ -177,7 +181,11 @@ class SyncCommand(Command):
                     rm_files.add(excluded_path)
 
         # This doesn't accept directory paths, only file paths.
-        self._rm_remote_files(rm_files)
+        try:
+            self._rm_remote_files(rm_files)
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
 
     def _update_local(self, retain_files: Iterable[str]) -> None:
         """Update the local directory with remote files.
@@ -573,11 +581,7 @@ class SyncCommand(Command):
         # have been deleted.
         try:
             for path in file_paths:
-                try:
-                    os.remove(os.path.join(self.dest_dir.safe_path, path))
-                except FileNotFoundError:
-                    raise ServerError(
-                        "the connection to the remote directory was lost")
+                os.remove(os.path.join(self.dest_dir.safe_path, path))
                 deleted_files.append(path)
         finally:
             self.profile.db_file.rm_files(deleted_files)
@@ -595,21 +599,18 @@ class SyncCommand(Command):
                 can not be directory paths.
         """
         new_paths = [
-            timestamp_path(path, keyword="deleted") for path in file_paths]
+            (path, timestamp_path(path, keyword="deleted"))
+            for path in file_paths]
         old_renamed_files = []
         new_renamed_files = []
 
         # Make sure that the database always gets updated with whatever files
         # have been renamed.
         try:
-            for old_path, new_path in zip(file_paths, new_paths):
-                try:
-                    os.rename(
-                        os.path.join(self.dest_dir.safe_path, old_path),
-                        os.path.join(self.dest_dir.safe_path, new_path))
-                except FileNotFoundError:
-                    raise ServerError(
-                        "the connection to the remote directory was lost")
+            for old_path, new_path in new_paths:
+                os.rename(
+                    os.path.join(self.dest_dir.safe_path, old_path),
+                    os.path.join(self.dest_dir.safe_path, new_path))
                 old_renamed_files.append(old_path)
                 new_renamed_files.append(new_path)
         finally:
