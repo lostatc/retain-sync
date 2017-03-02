@@ -307,14 +307,26 @@ class SyncCommand(Command):
         # priority is calculated by finding the sum of the priorities of its
         # files and dividing by the directory size.
         for dir_path in dir_paths:
+            # Use local directory paths to avoid slowdowns with accessing
+            # the remote directory when it's on another machine. For files
+            # that aren't available locally, their symlinks are followed to
+            # the remote directory.
             full_dir_path = os.path.join(self.local_dir.path, dir_path)
             dir_priority = 0.0
             dir_size = 0
             for entry in rec_scan(full_dir_path):
                 rel_path = os.path.relpath(entry.path, self.local_dir.path)
-                dir_size += entry.stat(follow_symlinks=True).st_blocks * 512
                 if rel_path in file_priorities:
+                    # If the current file is a symlink, then it points to a
+                    # file in the remote directory and should be followed.
                     dir_priority += file_priorities[rel_path]
+                    dir_size += entry.stat(
+                        follow_symlinks=True).st_blocks * 512
+                else:
+                    # If the current file is a symlink, then it is a
+                    # user-created symlink and should not be followed.
+                    dir_size += entry.stat(
+                        follow_symlinks=False).st_blocks * 512
             if self.profile.cfg_file.vals["AccountForSize"]:
                 try:
                     dir_priorities.append((
