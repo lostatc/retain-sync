@@ -55,10 +55,10 @@ Priority
 Storage Limit
     The storage limit is the user-defined amount of data that will remain in
     the local directory. The program will fill the local directory until it
-    reaches this size, starting with the highest priority files. Excluded files
-    and symlinks pointing to files in the remote directory don't count toward
-    the storage limit. Setting it to zero will prevent any files from remaining
-    in the local directory.
+    reaches this size, starting with the highest priority files. File size is
+    calculated based on disk usage as opposed to apparent size. Excluded files
+    don't count toward the storage limit. Setting it to zero will prevent any
+    files from remaining in the local directory.
 
 GLOBAL OPTIONS
 ==============

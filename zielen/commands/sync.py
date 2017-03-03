@@ -108,18 +108,19 @@ class SyncCommand(Command):
             & set(self.dest_dir.list_files(rel=True, dirs=True)))
 
         # Decide which files and directories to keep in the local directory.
-        retain_dirs, remaining_space = self._prioritize_dirs(
+        remaining_space, selected_dirs = self._prioritize_dirs(
             self.profile.cfg_file.vals["StorageLimit"])
         if self.profile.cfg_file.vals["SyncExtraFiles"]:
-            retain_files, remaining_space = self._prioritize_files(
-                remaining_space, exclude_paths=retain_dirs)
+            remaining_space, selected_files = self._prioritize_files(
+                remaining_space, exclude_paths=selected_dirs)
         else:
-            retain_files = set()
+            selected_files = set()
 
         # Copy the selected files as well as any excluded files still in the
         # remote directory to the local directory and replace all others
         # with symlinks.
-        self._update_local(retain_dirs | retain_files | remote_excluded_files)
+        self._update_local(
+            selected_dirs | selected_files | remote_excluded_files)
 
         # Remove excluded files that are still in the remote directory.
         self._rm_excluded_files(remote_excluded_files)
@@ -243,20 +244,24 @@ class SyncCommand(Command):
                 "the connection to the remote directory was lost")
 
     def _prioritize_files(self, space_limit: int,
-                          exclude_paths=None) -> Tuple[Set[str], int]:
+                          exclude_paths=None) -> Tuple[int, Set[str]]:
         """Calculate which files will stay in the local directory.
 
         Args:
             exclude_paths: An iterable of paths of files and directories to not
                 consider when selecting files.
             space_limit: The amount of space remaining in the directory
-                (in bytes).
+                (in bytes). This assumes that all files currently exist in the
+                directory as symlinks.
 
         Returns:
             A tuple containing a list of paths of files to keep in the local
             directory and the amount of space remaining (in bytes) until the
             storage limit is reached.
         """
+        if exclude_paths is None:
+            exclude_paths = []
+
         file_priorities = self.profile.db_file.get_priorities()
         adjusted_priorities = []
         for file_path, file_priority in file_priorities.items():
@@ -286,15 +291,18 @@ class SyncCommand(Command):
 
         # Calculate which directories will stay in the local directory.
         selected_files = set()
+        # This assumes that all symlinks have a disk usage of one block.
+        symlink_size = os.stat(self.local_dir.path).st_blksize
         remaining_space = space_limit
         for file_path, file_size in prioritized_files:
-            if remaining_space - file_size > 0:
+            new_remaining_space = remaining_space - file_size + symlink_size
+            if new_remaining_space > 0:
                 selected_files.add(file_path)
-                remaining_space -= file_size
+                remaining_space = new_remaining_space
 
-        return selected_files, remaining_space
+        return remaining_space, selected_files
 
-    def _prioritize_dirs(self, space_limit: int) -> Tuple[Set[str], int]:
+    def _prioritize_dirs(self, space_limit: int) -> Tuple[int, Set[str]]:
         """Calculate which directories will stay in the local directory.
 
         Args:
@@ -351,9 +359,15 @@ class SyncCommand(Command):
         dir_sizes = {path: size for path, priority, size in dir_priorities}
 
         # Select which directories will stay in the local directory.
-        remaining_space = space_limit
         selected_dirs = set()
         selected_subdirs = set()
+        selected_files = set()
+        # Set the initial remaining space assuming that no files will stay
+        # in the local directory an that they'll all be symlinks,
+        # which should have a disk usage of one block. For evey file that is
+        # selected, one block will be added back to the remaining space.
+        symlink_size = os.stat(self.local_dir.path).st_blksize
+        remaining_space = space_limit - len(file_priorities) * symlink_size
         for dir_path in prioritized_dirs:
             full_dir_path = os.path.join(self.local_dir.path, dir_path)
             dir_size = dir_sizes[dir_path]
@@ -373,28 +387,34 @@ class SyncCommand(Command):
             # directories, using os.scandir() to search the filesystem is
             # significantly faster than checking against every other
             # directory path in memory using os.path.commonpath().
-            subdirs = set()
+            contained_files = set()
+            contained_dirs = set()
             subdirs_size = 0
             for entry in rec_scan(full_dir_path):
-                rel_subdir_path = os.path.relpath(
+                rel_sub_path = os.path.relpath(
                     entry.path, self.local_dir.path)
-                # Entries will still be added to the set even if they're not
-                # really directories. It doesn't matter as long as the set
-                # includes the directories.
-                subdirs.add(rel_subdir_path)
-                if rel_subdir_path in selected_dirs:
-                    subdirs_size += dir_sizes[rel_subdir_path]
+                if entry.is_file():
+                    contained_files.add(rel_sub_path)
+                elif entry.is_dir():
+                    contained_dirs.add(rel_sub_path)
+                if rel_sub_path in selected_dirs:
+                    subdirs_size += dir_sizes[rel_sub_path]
 
-            if remaining_space + subdirs_size - dir_size > 0:
+            new_remaining_space = (
+                remaining_space
+                - dir_size
+                + subdirs_size
+                + len(contained_files - selected_files) * symlink_size)
+            if new_remaining_space > 0:
                 # Add the current directory to the set of selected files and
                 # remove all of its subdirectories from the set.
-                selected_subdirs |= subdirs
-                selected_dirs -= subdirs
+                selected_subdirs |= contained_dirs
+                selected_files |= contained_files
+                selected_dirs -= contained_dirs
                 selected_dirs.add(dir_path)
-                remaining_space += subdirs_size
-                remaining_space -= dir_size
+                remaining_space = new_remaining_space
 
-        return selected_dirs, remaining_space
+        return remaining_space, selected_dirs
 
     def _update_remote(self, local_mod_files: Iterable[str]) -> None:
         """Update the remote directory with modified local files.
