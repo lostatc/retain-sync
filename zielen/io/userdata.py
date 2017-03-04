@@ -176,43 +176,58 @@ class SyncDir:
         return shutil.disk_usage(self.path).free
 
     def symlink_tree(self, destdir: str, exclude=None,
-                     overwrite=False) -> None:
+                     exclude_parent=True, overwrite=False) -> None:
         """Recursively copy the directory as a tree of symlinks.
 
         Args:
             destdir: The directory to create symlinks in.
+            exclude: The relative paths of files to not symlink.
+            exclude_parent: If every file in a directory is excluded, exclude
+                the directory as well.
             overwrite: Overwrite existing files in the destination directory
                 with symlinks.
-            exclude: An iterable of relative paths of files to not symlink.
         """
         if exclude is None:
             exclude = set()
         else:
             exclude = set(exclude)
 
+        # The paths of directories to remove because they contain only
+        # excluded files.
+        excluded_dirs = set()
+
         os.makedirs(destdir, exist_ok=True)
         for entry in rec_scan(self.path):
-            destfile = os.path.join(
+            dest_path = os.path.join(
                 destdir, os.path.relpath(entry.path, self.path))
             rel_path = os.path.relpath(entry.path, self.path)
             common = {
                 os.path.commonpath([path, rel_path]) for path in exclude}
             if common & exclude:
+                excluded_dirs.add(os.path.dirname(dest_path))
                 continue
             elif entry.is_dir(follow_symlinks=False):
                 try:
-                    os.mkdir(destfile)
+                    os.mkdir(dest_path)
                 except FileExistsError:
                     pass
             elif entry.is_symlink():
                 continue
             else:
+                excluded_dirs.discard(os.path.dirname(dest_path))
                 try:
-                    os.symlink(entry.path, destfile)
+                    os.symlink(entry.path, dest_path)
                 except FileExistsError:
                     if overwrite:
-                        os.remove(destfile)
-                        os.symlink(entry.path, destfile)
+                        os.remove(dest_path)
+                        os.symlink(entry.path, dest_path)
+
+        if exclude_parent:
+            for path in excluded_dirs:
+                try:
+                    os.rmdir(path)
+                except FileNotFoundError:
+                    pass
 
 
 class LocalSyncDir(SyncDir):
