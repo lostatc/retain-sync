@@ -258,17 +258,21 @@ class InitializeCommand(Command):
                     "the connection to the remote directory was lost")
 
         remote_files = set(self.dest_dir.list_files(rel=True))
+        remote_dirs = set(
+            self.dest_dir.list_files(rel=True, files=False, dirs=True))
 
-        # Generate the local file priority database.
+        # Generate the local database.
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
         self.profile.db_file.add_files(remote_files)
+        self.profile.db_file.add_files(remote_dirs, directory=True)
 
-        # Generate the remote file priority database.
+        # Generate the remote database.
         try:
             if not os.path.isfile(self.dest_dir.db_file.path):
                 self.dest_dir.db_file.create()
             self.dest_dir.db_file.add_files(remote_files)
+            self.dest_dir.db_file.add_files(remote_dirs, directory=True)
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")

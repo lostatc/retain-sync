@@ -85,7 +85,7 @@ class SyncDir:
         self.path = path.rstrip("/")
         self.tpath = os.path.join(path, "")
 
-    def _list_entries(self, rel=False, files=True, symlinks=False, dirs=False,
+    def _list_entries(self, files=True, symlinks=False, dirs=False,
                       exclude=None):
         """Yield a DirEntry object for each file meeting certain criteria."""
         if exclude is None:
@@ -125,8 +125,7 @@ class SyncDir:
             A file path for each file in the directory that meets the criteria.
         """
         for entry in self._list_entries(
-                rel=rel, files=files, symlinks=symlinks, dirs=dirs,
-                exclude=exclude):
+                files=files, symlinks=symlinks, dirs=dirs, exclude=exclude):
             if rel:
                 yield os.path.relpath(entry.path, self.path)
             else:
@@ -148,8 +147,7 @@ class SyncDir:
             criteria.
         """
         for entry in self._list_entries(
-                rel=rel, files=files, symlinks=symlinks, dirs=dirs,
-                exclude=exclude):
+                files=files, symlinks=symlinks, dirs=dirs, exclude=exclude):
             mtime = entry.stat(follow_symlinks=False).st_mtime
             if rel:
                 yield os.path.relpath(entry.path, self.path), mtime
@@ -176,14 +174,12 @@ class SyncDir:
         return shutil.disk_usage(self.path).free
 
     def symlink_tree(self, destdir: str, exclude=None,
-                     exclude_parent=True, overwrite=False) -> None:
+                     overwrite=False) -> None:
         """Recursively copy the directory as a tree of symlinks.
 
         Args:
             destdir: The directory to create symlinks in.
             exclude: The relative paths of files to not symlink.
-            exclude_parent: If every file in a directory is excluded, exclude
-                the directory as well.
             overwrite: Overwrite existing files in the destination directory
                 with symlinks.
         """
@@ -191,10 +187,6 @@ class SyncDir:
             exclude = set()
         else:
             exclude = set(exclude)
-
-        # The paths of directories to remove because they contain only
-        # excluded files.
-        excluded_dirs = set()
 
         os.makedirs(destdir, exist_ok=True)
         for entry in rec_scan(self.path):
@@ -204,7 +196,6 @@ class SyncDir:
             common = {
                 os.path.commonpath([path, rel_path]) for path in exclude}
             if common & exclude:
-                excluded_dirs.add(os.path.dirname(dest_path))
                 continue
             elif entry.is_dir(follow_symlinks=False):
                 try:
@@ -214,20 +205,12 @@ class SyncDir:
             elif entry.is_symlink():
                 continue
             else:
-                excluded_dirs.discard(os.path.dirname(dest_path))
                 try:
                     os.symlink(entry.path, dest_path)
                 except FileExistsError:
                     if overwrite:
                         os.remove(dest_path)
                         os.symlink(entry.path, dest_path)
-
-        if exclude_parent:
-            for path in excluded_dirs:
-                try:
-                    os.rmdir(path)
-                except FileNotFoundError:
-                    pass
 
 
 class LocalSyncDir(SyncDir):
@@ -268,10 +251,9 @@ class DestSyncDir(SyncDir):
             exclude = set(exclude)
         exclude.add(os.path.relpath(self.prgm_dir, self.path))
         yield from super()._list_entries(
-            rel=rel, files=files, symlinks=symlinks, dirs=dirs,
-            exclude=exclude)
+            files=files, symlinks=symlinks, dirs=dirs, exclude=exclude)
 
-    def symlink_tree(self, destdir: str, exclude=None,
+    def symlink_tree(self, destdir: str, exclude=None, files=None,
                      overwrite=False) -> None:
         """Extend parent method to automatically exclude program directory."""
         if exclude is None:
@@ -279,7 +261,8 @@ class DestSyncDir(SyncDir):
         else:
             exclude = set(exclude)
         exclude.add(os.path.relpath(self.prgm_dir, self.path))
-        super().symlink_tree(destdir, exclude=exclude, overwrite=overwrite)
+        super().symlink_tree(
+            destdir, exclude=exclude, overwrite=overwrite)
 
 
 class DestDBFile:
@@ -320,10 +303,11 @@ class DestDBFile:
 
         Database Columns:
             path: The relative path to the file.
+            directory: A boolean representing whether the file is a directory.
+            deleted: A boolean representing whether the file is marked for
+                deletion.
             lastsync: The date and time (UTC) that the file was last updated by
                 a sync in seconds since the epoch.
-            trash: A boolean representing whether the file is considered to be
-                in the trash.
 
         Raises:
             FileExistsError: The database file already exists.
@@ -339,25 +323,33 @@ class DestDBFile:
             self.cur.execute("""\
                 CREATE TABLE files (
                     path text,
-                    lastsync real,
-                    deleted bool
+                    directory bool,
+                    deleted bool,
+                    lastsync real
                 );
                 """)
 
-    def add_files(self, paths: Iterable[str], deleted=False) -> None:
+    def add_files(self, paths: Iterable[str],
+                  directory=False, deleted=False) -> None:
         """Add new file paths to the database.
+
+        Set the lastsync value for these files to the current time.
 
         Args:
             paths: The file paths to add.
-            deleted: Mark the files as deleted.
+            directory: Mark the paths as directories.
+            deleted: Mark the paths as deleted.
         """
         with self.transact():
             for path in paths:
                 self.cur.execute("""\
-                    INSERT INTO files (path, deleted)
-                    SELECT ?, ?
-                    WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
-                    """, (path, deleted, path))
+                    INSERT INTO files (path, directory, deleted)
+                    SELECT ?, ?, ?
+                    WHERE NOT EXISTS (
+                        SELECT * FROM files
+                        WHERE path = ?
+                        LIMIT 1);
+                    """, (path, directory, deleted, path))
 
         self.update_synctime(paths)
 
@@ -371,7 +363,7 @@ class DestDBFile:
             for path in paths:
                 self.cur.execute("""\
                     DELETE FROM files
-                    WHERE path=?;
+                    WHERE path = ?;
                     """, (path,))
 
     def update_synctime(self, paths: Iterable[str]) -> None:
@@ -386,12 +378,12 @@ class DestDBFile:
             for path in paths:
                 self.cur.execute("""\
                     UPDATE files
-                    SET lastsync=?
-                    WHERE path=?;
+                    SET lastsync = ?
+                    WHERE path = ?;
                     """, (time, path))
 
-    def get_mtime(self, path: str) -> float:
-        """Get the mtime of a file given the file path.
+    def get_synctime(self, path: str) -> float:
+        """Get the time of the last sync of a file given the file path.
 
         Args:
             path: The path of the file to check.
@@ -403,17 +395,20 @@ class DestDBFile:
         with self.transact():
             self.cur.execute("""\
                 SELECT lastsync FROM files
-                WHERE path=?;
+                WHERE path = ?;
                 """, (path,))
         return self.cur.fetchone()[0]
 
-    def get_paths(self, deleted=None, min_lastsync=None) -> Set[str]:
+    def get_paths(self, directory=None, deleted=None, min_lastsync=None) -> Set[str]:
         """Get a set of file paths that match certain constraints.
 
         Args:
-            deleted: Select files marked as deleted.
-            min_lastsync: Select files that were last synced more recently than
-                this time.
+            directory: Restrict results to just directories (True) or just
+                files (False).
+            deleted: Restrict results to just paths marked for deletion (True)
+                or just paths not marked for deletion (False).
+            min_lastsync: Restrict results to files that were last synced more
+                recently than this time.
 
         Returns:
             A set of file paths that match the criteria.
@@ -424,14 +419,36 @@ class DestDBFile:
             WHERE path IS NOT NULL
             """
         sql_args = []
+        if directory is not None:
+            sql_command += "AND directory = ?\n"
+            sql_args.append(directory)
         if deleted is not None:
-            sql_command += "AND deleted=?\n"
+            sql_command += "AND deleted = ?\n"
             sql_args.append(deleted)
         if min_lastsync is not None:
-            sql_command += "AND lastsync>?\n"
+            sql_command += "AND lastsync > ?\n"
             sql_args.append(min_lastsync)
         sql_command += ";"
 
         with self.transact():
+            if deleted is not False:
+                # Mark the directories as deleted if all of their files are
+                # marked as deleted.
+                self.cur.execute("""\
+                    UPDATE files
+                    SET deleted = 0
+                    WHERE directory = 1;
+                    """)
+                self.cur.execute("""\
+                    UPDATE files
+                    SET deleted = 1
+                    WHERE NOT EXISTS (
+                        SELECT * FROM files AS x
+                        WHERE x.path LIKE (files.path || "/%")
+                        AND x.path != files.path
+                        AND x.deleted = 0
+                        LIMIT 1)
+                    AND directory = 1;
+                    """)
             self.cur.execute(sql_command, sql_args)
         return {path for path, in self.cur.fetchall()}

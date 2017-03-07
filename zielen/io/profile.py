@@ -252,6 +252,7 @@ class ProfileDBFile:
         else:
             self.conn = None
             self.cur = None
+
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
         sqlite3.register_converter("bool", lambda x: bool(int(x)))
@@ -273,6 +274,7 @@ class ProfileDBFile:
 
         Database Columns:
             path: The relative path to the file.
+            directory: A boolean representing whether the file is a directory.
             priority: The priority value of the file.
 
         Raises:
@@ -289,37 +291,44 @@ class ProfileDBFile:
             self.cur.execute("""\
                 CREATE TABLE files (
                     path text,
+                    directory bool,
                     priority real
                 );
                 """)
 
-    def add_files(self, paths: Iterable[str], priority=0) -> None:
+    def add_files(self, paths: Iterable[str], directory=False,
+                  priority=0) -> None:
         """Add new file paths to the database if they do not already exist.
 
         Args:
             paths: The file paths to add.
-            priority: The starting priority of the file path.
+            directory: Mark the paths as directories.
+            priority: The starting priority of the file paths.
         """
         with self.transact():
             for path in paths:
                 self.cur.execute("""\
-                    INSERT INTO files (path, priority)
-                    SELECT ?, ?
-                    WHERE NOT EXISTS (SELECT 1 FROM files WHERE path=?);
-                    """, (path, priority, path))
+                    INSERT INTO files (path, directory, priority)
+                    SELECT ?, ?, ?
+                    WHERE NOT EXISTS (
+                        SELECT * FROM files
+                        WHERE path = ?
+                        LIMIT 1);
+                    """, (path, directory, priority, path))
 
-    def add_inflated(self, paths: Iterable[str]) -> None:
+    def add_inflated(self, paths: Iterable[str], directory=False) -> None:
         """Add new file paths to the database with an inflated priority.
 
         Args:
             paths: The file paths to add.
+            directory: Mark the paths as directories.
         """
         with self.transact():
             self.cur.execute("""\
                 SELECT MAX(priority) FROM files;
                 """)
         max_priority = self.cur.fetchone()[0]
-        self.add_files(paths, max_priority)
+        self.add_files(paths, directory=directory, priority=max_priority)
 
     def rm_files(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -331,49 +340,85 @@ class ProfileDBFile:
             for path in paths:
                 self.cur.execute("""\
                     DELETE FROM files
-                    WHERE path=?;
+                    WHERE path = ?;
                     """, (path,))
 
-    def get_priorities(self) -> Dict[str, float]:
+    def get_priorities(self, directory=None) -> Dict[str, float]:
         """Get the paths of files sorted by their priorities.
 
+        Args:
+            directory: Restrict results to just directories (True) or just
+                files (False).
+
         Returns:
-            A list of tuples, each containing a file path the corresponding
-            priority value, sorted by priority.
+            A dict containing file paths as keys that correspond to priority
+            values.
         """
+        sql_command = """\
+            SELECT path, priority
+            FROM files
+            WHERE path IS NOT NULL
+            """
+        sql_args = []
+        if directory is not None:
+            sql_command += "AND directory = ?\n"
+            sql_args.append(directory)
+        sql_command += "ORDER BY priority DESC;"
+
         with self.transact():
-            self.cur.execute("""\
-                SELECT path, priority
-                FROM files
-                ORDER BY priority DESC
-                """)
+            if directory is not False:
+                # Compute the directory priorities by finding the sum of the
+                # priorities of their files.
+                self.cur.execute("""\
+                    UPDATE files
+                    SET priority=(
+                        SELECT SUM(x.priority)
+                        FROM files AS x
+                        WHERE x.path LIKE (files.path || "/%")
+                        AND x.path != files.path)
+                    WHERE directory = 1;
+                    """)
+            self.cur.execute(sql_command, sql_args)
+
         return {path: priority for path, priority in self.cur.fetchall()}
 
-    def get_paths(self) -> Set[str]:
+    def get_paths(self, directory=None) -> Set[str]:
         """Get the paths of files in the database.
 
+        Args:
+            directory: Restrict results to just directories (True) or just
+                files (False).
         Returns:
             A set of relative file paths.
         """
+        sql_command = """\
+            SELECT path
+            FROM files
+            WHERE path IS NOT NULL
+            """
+        sql_args = []
+        if directory is not None:
+            sql_command += "AND directory = ?\n"
+            sql_args.append(directory)
+        sql_command += ";"
+
         with self.transact():
-            self.cur.execute("""\
-                SELECT path
-                FROM files
-                """)
+            self.cur.execute(sql_command, sql_args)
+
         return {path for path, in self.cur.fetchall()}
 
     def increment(self, paths: Iterable[str]) -> None:
-        """Increment the priority of some file paths by one.
+        """Increment the priority of some paths by one.
 
         Args:
-            paths: The file paths to increment the priority of.
+            paths: The paths to increment the priority of.
         """
         with self.transact():
             for path in paths:
                 self.cur.execute("""\
                     UPDATE files
-                    SET priority=priority+1
-                    WHERE path=?;
+                    SET priority = priority + 1
+                    WHERE path = ?;
                     """, (path,))
 
     def adjust_all(self, adjustment) -> None:
@@ -385,10 +430,11 @@ class ProfileDBFile:
         with self.transact():
             self.cur.execute("""\
                 UPDATE files
-                SET priority=priority*?;
+                SET priority = priority * ?;
+                WHERE directory = 0
                 """, (adjustment,))
 
-    def check_exists(self, path) -> bool:
+    def check_exists(self, path: str) -> bool:
         """Check if a record exists with a given file path.
 
         Args:
@@ -400,7 +446,7 @@ class ProfileDBFile:
         with self.transact():
             self.cur.execute("""\
                 SELECT 1 FROM files
-                WHERE path=?;
+                WHERE path = ?;
                 """, (path,))
         if self.cur.fetchone():
             return True

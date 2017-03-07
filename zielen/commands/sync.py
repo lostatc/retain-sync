@@ -91,8 +91,9 @@ class SyncCommand(Command):
             self.local_dir.path,
             exclude=self.dest_dir.db_file.get_paths(deleted=True))
 
-        # Add modified files to the local database, inflating their priority
-        # values if that option is set in the config file.
+        # Add modified files to the local database if they're not already
+        # there, inflating their priority values if that option is set in
+        # the config file.
         if self.profile.cfg_file.vals["InflatePriority"]:
             self.profile.db_file.add_inflated(
                 local_mod_files | remote_mod_files)
@@ -138,7 +139,7 @@ class SyncCommand(Command):
         """
         deleted_trash_files = (
             set(self.dest_dir.db_file.get_paths(deleted=True))
-            - set(self.dest_dir.list_files(rel=True)))
+            - set(self.dest_dir.list_files(rel=True, dirs=True)))
         self.dest_dir.db_file.rm_files(deleted_trash_files)
 
     def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
@@ -467,7 +468,8 @@ class SyncCommand(Command):
             local_mtimes.update({
                 path: os.stat(
                     os.path.join(self.local_dir.path, path)).st_mtime})
-            remote_mtimes.update({path: self.dest_dir.db_file.get_mtime(path)})
+            remote_mtimes.update({
+                path: self.dest_dir.db_file.get_synctime(path)})
 
         local_out = local_in.copy()
         remote_out = remote_in.copy()
@@ -527,7 +529,7 @@ class SyncCommand(Command):
             path for path, time in local_mtimes
             if time > last_sync or not self.profile.db_file.check_exists(path)}
         remote_mod_files = self.dest_dir.db_file.get_paths(
-            deleted=False, min_lastsync=last_sync)
+            deleted=False, dirs=False, min_lastsync=last_sync)
 
         return local_mod_files, remote_mod_files
 
@@ -543,9 +545,10 @@ class SyncCommand(Command):
             files to be deleted, remote files to be deleted and remote files
             to be marked for deletion.
         """
-        local_files = set(self.local_dir.list_files(rel=True, symlinks=True))
-        remote_files = set(self.dest_dir.list_files(rel=True))
-        known_files = {path for path in self.profile.db_file.get_paths()}
+        local_files = set(self.local_dir.list_files(
+            rel=True, dirs=True, symlinks=True))
+        remote_files = set(self.dest_dir.list_files(rel=True, dirs=True))
+        known_files = set(self.profile.db_file.get_paths())
 
         # Compute files that need to be deleted.
         local_del_files = known_files - remote_files
@@ -578,7 +581,7 @@ class SyncCommand(Command):
         # have been deleted.
         try:
             for path in file_paths:
-                os.remove(os.path.join(self.local_dir.path, path))
+                shutil.rmtree(os.path.join(self.local_dir.path, path))
                 deleted_files.append(path)
         finally:
             # If a deletion from another client was already synced to the
@@ -601,7 +604,7 @@ class SyncCommand(Command):
         # have been deleted.
         try:
             for path in file_paths:
-                os.remove(os.path.join(self.dest_dir.safe_path, path))
+                shutil.rmtree(os.path.join(self.dest_dir.safe_path, path))
                 deleted_files.append(path)
         finally:
             self.profile.db_file.rm_files(deleted_files)
