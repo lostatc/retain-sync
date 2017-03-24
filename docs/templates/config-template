@@ -22,7 +22,7 @@ Port=
 RemoteDir=
 
 # The amount of data to keep in the local directory. This accepts KB, MB, GB,
-# KiB, MiB and GiB.
+# KiB, MiB and GiB as units.
 StorageLimit=
 
 

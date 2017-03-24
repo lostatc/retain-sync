@@ -61,7 +61,7 @@ class ResetCommand(Command):
             try:
                 rclone(
                     self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.db_file.get_paths(deleted=False),
+                    files=self.dest_dir.db_file.get_tree(deleted=False),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
@@ -70,7 +70,7 @@ class ResetCommand(Command):
 
             if not self.keep_remote:
                 # Remove files marked for deletion from the remote directory.
-                for rel_path in self.dest_dir.db_file.get_paths(deleted=True):
+                for rel_path in self.dest_dir.db_file.get_tree(deleted=True):
                     try:
                         os.remove(
                             os.path.join(self.dest_dir.safe_path, rel_path))
@@ -84,21 +84,15 @@ class ResetCommand(Command):
                 self.dest_dir.db_file.conn.close()
                 shutil.rmtree(self.dest_dir.prgm_dir)
 
-                # Check that the remote directory contains only empty
-                # directories, and then remove them. Don't remove the
-                # destination directory itself, because a mountpoint can not
-                # be deleted until it is unmounted.
-                if set(self.dest_dir.list_files()):
-                    raise FileTransferError(
-                        "some files were not retrieved")
-                for entry in os.scandir(self.dest_dir.path):
-                    shutil.rmtree(entry.path)
+                # Check that the remote directory is empty.
+                if self.dest_dir.get_paths():
+                    raise FileTransferError("some files were not retrieved")
 
         # Remove non-user-created symlinks from the local directory.
-        program_links = (set(self.local_dir.list_files(
-            rel=True, files=False, symlinks=True))
-            & self.profile.db_file.get_paths())
-        for rel_path in program_links:
+        program_links = (self.local_dir.get_paths(
+            rel=True, files=False, dirs=False).keys()
+            & self.profile.db_file.get_tree())
+        for rel_path in program_links.items():
             os.remove(os.path.join(self.local_dir.path, rel_path))
 
         # Remove exclude pattern file from the program directory if it

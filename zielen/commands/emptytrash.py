@@ -19,6 +19,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
+import shutil
 
 from zielen.basecommand import Command
 
@@ -45,13 +46,10 @@ class EmptyTrashCommand(Command):
 
         # Remove files marked for deletion.
         files_deleted = 0
-        for rel_path in self.dest_dir.db_file.get_paths(deleted=True):
+        for rel_path in self.dest_dir.db_file.get_tree(deleted=True):
             try:
-                os.remove(os.path.join(self.dest_dir.path, rel_path))
-            except FileNotFoundError:
-                # The file has already been deleted, but the remote database
-                # hasn't yet been updated to reflect the change.
-                pass
-            else:
+                shutil.rmtree(os.path.join(self.dest_dir.path, rel_path))
                 files_deleted += 1
+            except FileNotFoundError:
+                pass
         print("{} files deleted".format(files_deleted))

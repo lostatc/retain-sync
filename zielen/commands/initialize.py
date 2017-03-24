@@ -32,6 +32,7 @@ from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
 from zielen.io.transfer import rclone
+from zielen.util.misc import symlink_tree
 from zielen.util.connect import SSHConnection
 
 
@@ -199,6 +200,10 @@ class InitializeCommand(Command):
 
         self._setup_remote()
 
+        # Make sure that file mtimes are updated before the time of the last
+        # sync is set in the info file.
+        os.sync()
+
         # The profile is now fully initialized. Update the info file.
         if self.profile.cfg_file.vals["RemoteHost"]:
             atexit.unregister(self.connection.unmount)
@@ -221,8 +226,8 @@ class InitializeCommand(Command):
             self.connection.mount(self.dest_dir.path)
 
         os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
-        user_symlinks = set(self.local_dir.list_files(
-            rel=True, files=False, symlinks=True))
+        user_symlinks = self.local_dir.get_paths(
+            rel=True, files=False, dirs=False).keys()
 
         if self.add_remote:
             try:
@@ -234,7 +239,7 @@ class InitializeCommand(Command):
 
             # Check that there is enough local space to accommodate remote
             # files.
-            if self.dest_dir.total_size() > self.local_dir.space_avail():
+            if self.dest_dir.disk_usage() > self.local_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough local space to accommodate remote files")
         else:
@@ -243,7 +248,7 @@ class InitializeCommand(Command):
 
             # Check that there is enough remote space to accommodate local
             # files.
-            if self.local_dir.total_size() > self.dest_dir.space_avail():
+            if self.local_dir.disk_usage() > self.dest_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough space in remote to accommodate local files")
 
@@ -257,31 +262,32 @@ class InitializeCommand(Command):
                 raise ServerError(
                     "the connection to the remote directory was lost")
 
-        remote_files = set(self.dest_dir.list_files(rel=True))
-        remote_dirs = set(
-            self.dest_dir.list_files(rel=True, files=False, dirs=True))
+        remote_files = self.dest_dir.get_paths(
+            rel=True, dirs=False, symlinks=False).keys()
+        remote_dirs = self.dest_dir.get_paths(
+            rel=True, files=False, symlinks=False).keys()
 
         # Generate the local database.
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
-        self.profile.db_file.add_files(remote_files)
-        self.profile.db_file.add_files(remote_dirs, directory=True)
+        self.profile.db_file.add_paths(remote_files, remote_dirs)
 
         # Generate the remote database.
         try:
             if not os.path.isfile(self.dest_dir.db_file.path):
                 self.dest_dir.db_file.create()
-            self.dest_dir.db_file.add_files(remote_files)
-            self.dest_dir.db_file.add_files(remote_dirs, directory=True)
+            self.dest_dir.db_file.add_paths(remote_files, remote_dirs)
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
         # Overwrite local files with symlinks to the corresponding files in the
         # remote dir.
-        self.dest_dir.symlink_tree(
-            self.local_dir.path,
-            exclude=self.dest_dir.db_file.get_paths(deleted=True),
+        symlink_tree(
+            self.dest_dir.safe_path, self.local_dir.path,
+            self.profile.db_file.get_tree(directory=False),
+            self.profile.db_file.get_tree(directory=True),
+            exclude=self.dest_dir.db_file.get_tree(deleted=True),
             overwrite=True)
 
         # Copy exclude pattern file to remote directory for use when remote dir

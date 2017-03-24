@@ -27,8 +27,8 @@ import readline
 import pwd
 import hashlib
 import datetime
-from collections import defaultdict
-from typing import Callable, Collection
+import collections
+from typing import Callable, Collection, Iterable, Generator
 
 
 def err(*args, **kwargs) -> None:
@@ -44,7 +44,7 @@ def env(var: str) -> str:
         "XDG_RUNTIME_DIR":  os.path.join("/run/user", str(os.getuid())),
         "USER":             pwd.getpwuid(os.getuid()).pw_name
         }
-    defaults = defaultdict(lambda: None, defaults)
+    defaults = collections.defaultdict(lambda: None, defaults)
     return os.getenv(var, defaults[var])
 
 
@@ -75,7 +75,7 @@ def prefill_input(prompt: str, prefill: str) -> str:
     return usr_input
 
 
-def rec_scan(path: str):
+def rec_scan(path: str) -> Generator[os.DirEntry, None, None]:
     """Recursively scan a directory tree and yield an os.DirEntry object.
 
     Args:
@@ -87,19 +87,55 @@ def rec_scan(path: str):
             yield from rec_scan(entry.path)
 
 
-def rmdir_tree(path: str):
-    """Recursively remove empty directories, leaving files alone.
+def symlink_tree(src_dir: str, dest_dir: str,
+                 src_files: Iterable[str], src_dirs: Iterable[str],
+                 exclude=None, overwrite=False) -> None:
+    """Recursively copy a directory as a tree of symlinks.
+
+    This function does not look in the source directory. Instead, the caller
+    is expected to provide the paths of all files and directories in the
+    source. Files and directories need to be passed in separately to
+    distinguish files from empty directories.
 
     Args:
-        path: The base path to remove all empty subdirectories of.
+        src_dir: The absolute path of the directory to source files from.
+        dest_dir: The absolute path of the directory to create symlinks in.
+        src_dirs: The relative paths of the directories to copy to the
+            destination.
+        src_files: The relative paths of the files to symlink in the
+            destination.
+        exclude: The relative paths of files/directories to not symlink.
+        overwrite: Overwrite existing files in the destination directory
+            with symlinks.
     """
-    for entry in os.scandir(path):
-        try:
-            os.removedirs(entry.path)
-        except NotADirectoryError:
-            pass
-        except OSError:
-            rmdir_tree(entry.path)
+    exclude = set() if exclude is None else set(exclude)
+    src_dirs = set(src_dirs)
+    src_files = set(src_files)
+    src_paths = list(src_dirs | src_files)
+
+    # Sort paths by depth from trunk to leaf.
+    src_paths.sort(key=lambda x: x.count(os.sep))
+
+    os.makedirs(dest_dir, exist_ok=True)
+    for src_path in src_paths:
+        full_src_path = os.path.join(src_dir, src_path)
+        full_dest_path = os.path.join(dest_dir, src_path)
+        common = {
+            os.path.commonpath([ex_path, src_path]) for ex_path in exclude}
+        if common & exclude:
+            continue
+        if src_path in src_dirs:
+            try:
+                os.mkdir(full_dest_path)
+            except FileExistsError:
+                pass
+        elif src_path in src_files:
+            try:
+                os.symlink(full_src_path, full_dest_path)
+            except FileExistsError:
+                if overwrite:
+                    os.remove(full_dest_path)
+                    os.symlink(full_src_path, full_dest_path)
 
 
 def shell_cmd(input_cmd: list) -> subprocess.Popen:
@@ -223,6 +259,15 @@ def print_table(data: Collection, headers: Collection) -> None:
         print(" | ".join([
              "{0:<{1}}".format(field, width)
              for field, width in zip(row, column_lengths)]))
+
+
+class FactoryDict(collections.defaultdict):
+    """A defaultdict that passes the key value into the factory function."""
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        else:
+            return self.default_factory(key)
 
 
 class DictProperty:

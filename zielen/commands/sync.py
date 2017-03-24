@@ -20,11 +20,11 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import shutil
-from typing import Iterable, Tuple, Set
+from typing import Iterable, Set, NamedTuple
 
 from zielen.exceptions import ServerError
 from zielen.basecommand import Command
-from zielen.util.misc import timestamp_path, rec_scan, rmdir_tree
+from zielen.util.misc import timestamp_path, rec_scan, symlink_tree
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
 from zielen.io.transfer import rclone
@@ -39,6 +39,18 @@ class SyncCommand(Command):
         dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the remote connection.
     """
+    _SelectedPaths = NamedTuple(
+        "_SelectedPaths",
+        [("remaining_space", int), ("paths", Set[str])])
+
+    _UpdatedPaths = NamedTuple(
+        "_UpdatedPaths",
+        [("local", Set[str]), ("remote", Set[str]), ("all", Set[str])])
+
+    _DeletedPaths = NamedTuple(
+        "_DeletedPaths",
+        [("local", Set[str]), ("remote", Set[str]), ("trash", Set[str])])
+
     def __init__(self, profile_input: str) -> None:
         super().__init__()
         self.profile = self.select_profile(profile_input)
@@ -63,57 +75,90 @@ class SyncCommand(Command):
         # Expand globbing patterns.
         self.profile.ex_file.glob(self.local_dir.path)
 
-        # Sync deletions between the local and remote directories.
-        (local_del_files, remote_del_files,
-            remote_trash_files) = self._compute_deletions()
-        self._rm_local_files(local_del_files)
-        try:
-            self._rm_remote_files(remote_del_files)
-            self._trash_files(remote_trash_files)
-        except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
+        # Scan the local and remote databases.
+        local_files = self.local_dir.get_paths(rel=True, dirs=False).keys()
+        local_dirs = self.local_dir.get_paths(
+            rel=True, files=False, symlinks=False).keys()
+        remote_files = self.dest_dir.get_paths(rel=True, dirs=False).keys()
+        remote_dirs = self.dest_dir.get_paths(
+            rel=True, files=False, symlinks=False).keys()
+        all_files = local_files | remote_files
+        all_dirs = local_dirs | remote_dirs
+        all_paths = all_files | all_dirs
 
         # Remove files from the remote database that were previously marked
         # for deletion and have since been deleted from the remote directory.
         self._cleanup_trash()
 
-        # Handle syncing conflicts.
-        local_mod_files, remote_mod_files = self._handle_conflicts(
-            *self._compute_changes())
+        # Determine which files are new since the last sync. This must
+        # happen before anything is removed from the databases.
+        new_paths = self._compute_added()
 
-        # Update the remote directory with modified local files. Update
-        # symlinks in the local directory so that, if the current sync
+        # Sync deletions between the local and remote directories.
+        del_paths = self._compute_deleted()
+        self._rm_local_files(del_paths.local)
+        try:
+            self._rm_remote_files(del_paths.remote)
+            self._trash_files(del_paths.trash)
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
+
+        # Determine which files have been modified since the last sync and
+        # handle syncing conflicts.
+        mod_paths = self._compute_modified()
+        updated_paths = self._handle_conflicts(
+            mod_paths.local | new_paths.local,
+            mod_paths.remote | new_paths.remote)
+
+        # Update the remote directory with modified local files.
+        self._update_remote(updated_paths.local)
+
+        # Update the remote directory with files that were added to the
+        # remote directory directly, and not synced there from a local
+        # directory.
+        self.dest_dir.db_file.add_paths(
+            updated_paths.remote - remote_dirs,
+            updated_paths.remote - remote_files)
+
+        # Update symlinks in the local directory so that, if the current sync
         # operation gets interrupted, those files don't get deleted from the
         # remote directory on the next sync operation.
-        self._update_remote(local_mod_files)
-        self.dest_dir.symlink_tree(
-            self.local_dir.path,
-            exclude=self.dest_dir.db_file.get_paths(deleted=True))
+        try:
+            symlink_tree(
+                self.dest_dir.safe_path, self.local_dir.path,
+                updated_paths.remote - remote_dirs,
+                updated_paths.remote - remote_files,
+                exclude=self.dest_dir.db_file.get_tree(deleted=True))
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
 
         # Add modified files to the local database if they're not already
         # there, inflating their priority values if that option is set in
         # the config file.
         if self.profile.cfg_file.vals["InflatePriority"]:
             self.profile.db_file.add_inflated(
-                local_mod_files | remote_mod_files)
+                updated_paths.all - all_dirs,
+                updated_paths.all - all_files)
         else:
-            self.profile.db_file.add_files(local_mod_files | remote_mod_files)
+            self.profile.db_file.add_paths(
+                updated_paths.all - all_dirs,
+                updated_paths.all - all_files)
 
         # At this point, the differences between the two directories have been
         # resolved.
 
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
-            self.profile.ex_file.rel_files
-            & set(self.dest_dir.list_files(rel=True, dirs=True)))
+            self.profile.ex_file.rel_files & all_paths)
 
         # Decide which files and directories to keep in the local directory.
         remaining_space, selected_dirs = self._prioritize_dirs(
             self.profile.cfg_file.vals["StorageLimit"])
         if self.profile.cfg_file.vals["SyncExtraFiles"]:
             remaining_space, selected_files = self._prioritize_files(
-                remaining_space, exclude_paths=selected_dirs)
+                remaining_space, exclude=selected_dirs)
         else:
             selected_files = set()
 
@@ -125,6 +170,10 @@ class SyncCommand(Command):
 
         # Remove excluded files that are still in the remote directory.
         self._rm_excluded_files(remote_excluded_files)
+
+        # Make sure that file mtimes are updated before the time of the last
+        # sync is updated in the info file.
+        os.sync()
 
         # The sync is now complete. Update the time of the last sync in the
         # info file.
@@ -138,9 +187,9 @@ class SyncCommand(Command):
         for deletion and have since been deleted.
         """
         deleted_trash_files = (
-            set(self.dest_dir.db_file.get_paths(deleted=True))
-            - set(self.dest_dir.list_files(rel=True, dirs=True)))
-        self.dest_dir.db_file.rm_files(deleted_trash_files)
+            self.dest_dir.db_file.get_tree(deleted=True).keys()
+            - self.dest_dir.get_paths(rel=True).keys())
+        self.dest_dir.db_file.rm_paths(deleted_trash_files)
 
     def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
         """Remove excluded files from the remote directory.
@@ -158,11 +207,8 @@ class SyncCommand(Command):
             pattern_file.glob(self.local_dir.path)
             pattern_files.append(pattern_file)
 
-        all_files = self.profile.db_file.get_paths()
-
         rm_files = set()
         for excluded_path in excluded_paths:
-            full_excluded_path = os.path.join(self.local_dir.path, excluded_path)
             for pattern_file in pattern_files:
                 if excluded_path not in pattern_file.rel_files:
                     break
@@ -170,111 +216,103 @@ class SyncCommand(Command):
                 # The file was not found in one of the exclude pattern
                 # files. Remove it from the remote directory and both
                 # databases.
-                if excluded_path not in all_files:
-                    # The current path is a directory. Add all the
-                    # directory's files to the set instead of the directory
-                    # itself.
-                    for entry in rec_scan(full_excluded_path):
-                        rel_sub_path = os.path.relpath(
-                            entry.path, self.local_dir.path)
-                        if rel_sub_path in all_files:
-                            rm_files.add(rel_sub_path)
-                else:
-                    rm_files.add(excluded_path)
+                rm_files.add(excluded_path)
 
-        # This doesn't accept directory paths, only file paths.
         try:
             self._rm_remote_files(rm_files)
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
-    def _update_local(self, retain_files: Iterable[str]) -> None:
+    def _update_local(self, update_paths: Iterable[str]) -> None:
         """Update the local directory with remote files.
 
         Args:
-            retain_files: The paths of files and directories to copy from the
+            update_paths: The paths of files and directories to copy from the
                 remote directory to the local one. All other files in the local
                 directory are replaced with symlinks.
         """
         # Create a set including all the files and directories contained in
         # each directory from the input.
-        all_retain_files = set(retain_files)
-        for retain_path in retain_files:
-            full_retain_path = os.path.join(self.local_dir.path, retain_path)
-            try:
-                for entry in rec_scan(full_retain_path):
-                    all_retain_files.add(
-                        os.path.relpath(entry.path, self.local_dir.path))
-            except NotADirectoryError:
-                pass
+        all_update_paths = set()
+        for path in update_paths:
+            all_update_paths |= self.profile.db_file.get_tree(path).keys()
 
-        all_files = set(self.local_dir.list_files(
-            rel=True, dirs=True, symlinks=True,
-            exclude=self.profile.ex_file.rel_files))
-        stale_files = list(all_files - all_retain_files)
+        # Don't include excluded files or files not in the database
+        # (e.g. user-created symlinks).
+        all_paths = (self.local_dir.get_paths(
+            rel=True, exclude=self.profile.ex_file.rel_files).keys()
+            & self.profile.db_file.get_tree().keys())
+
+        stale_paths = list(all_paths - all_update_paths)
 
         # Sort the file paths so that a directory's contents always come
         # before the directory.
-        stale_files.sort(reverse=True)
+        stale_paths.sort(key=lambda x: x.count(os.sep), reverse=True)
 
         # Remove old, unneeded files to make room for new ones.
-        for stale_path in stale_files:
+        for stale_path in stale_paths:
             full_stale_path = os.path.join(self.local_dir.path, stale_path)
             try:
-                if not os.path.islink(full_stale_path):
-                    # These files will just be replaced by symlinks anyway.
-                    # If the file is a user-created symlink, then it should
-                    # not be deleted.
-                    os.remove(full_stale_path)
+                os.remove(full_stale_path)
             except IsADirectoryError:
-                rmdir_tree(full_stale_path)
-
-        self.dest_dir.symlink_tree(
-            self.local_dir.path,
-            exclude=self.dest_dir.db_file.get_paths(deleted=True))
+                try:
+                    os.rmdir(full_stale_path)
+                except OSError:
+                    # The directory has other files in it.
+                    pass
 
         try:
+            symlink_tree(
+                self.dest_dir.safe_path, self.local_dir.path,
+                self.dest_dir.db_file.get_tree(directory=False),
+                self.dest_dir.db_file.get_tree(directory=True),
+                exclude=self.dest_dir.db_file.get_tree(deleted=True))
+
             rclone(
                 self.dest_dir.safe_path, self.local_dir.path,
-                files=retain_files,
-                exclude=self.dest_dir.db_file.get_paths(deleted=True),
+                files=update_paths,
+                exclude=self.dest_dir.db_file.get_tree(deleted=True),
                 msg="Updating local files...")
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
     def _prioritize_files(self, space_limit: int,
-                          exclude_paths=None) -> Tuple[int, Set[str]]:
+                          exclude=None) -> _SelectedPaths:
         """Calculate which files will stay in the local directory.
 
         Args:
-            exclude_paths: An iterable of paths of files and directories to not
-                consider when selecting files.
             space_limit: The amount of space remaining in the directory
                 (in bytes). This assumes that all files currently exist in the
                 directory as symlinks.
+            exclude: An iterable of paths of files and directories to not
+                consider when selecting files.
 
         Returns:
-            A tuple containing a list of paths of files to keep in the local
-            directory and the amount of space remaining (in bytes) until the
-            storage limit is reached.
+            A named tuple containing a set of paths of files to keep in the
+            local directory and the amount of space remaining (in bytes) until
+            the storage limit is reached.
         """
-        if exclude_paths is None:
-            exclude_paths = []
+        if exclude is None:
+            exclude = []
 
-        file_priorities = self.profile.db_file.get_priorities()
+        local_files = self.profile.db_file.get_tree(directory=False)
+        file_stats = self.dest_dir.get_paths(
+            rel=True, dirs=False, symlinks=False,
+            exclude=self.profile.ex_file.rel_files)
         adjusted_priorities = []
-        for file_path, file_priority in file_priorities.items():
-            full_file_path = os.path.join(self.local_dir.path, file_path)
-            for exclude_path in exclude_paths:
+
+        # Adjust directory priorities for size.
+        for file_path, file_data in local_files.items():
+            for exclude_path in exclude:
                 if (os.path.commonpath([file_path, exclude_path])
                         == exclude_path):
                     break
             else:
                 # The file is not included in the list of excluded paths.
-                file_size = os.stat(
-                    full_file_path, follow_symlinks=True).st_blocks * 512
+                file_size = file_stats[file_path].st_blocks * 512
+                file_priority = file_data.priority
                 if self.profile.cfg_file.vals["AccountForSize"]:
                     try:
                         adjusted_priorities.append((
@@ -301,9 +339,9 @@ class SyncCommand(Command):
                 selected_files.add(file_path)
                 remaining_space = new_remaining_space
 
-        return remaining_space, selected_files
+        return self._SelectedPaths(remaining_space, selected_files)
 
-    def _prioritize_dirs(self, space_limit: int) -> Tuple[int, Set[str]]:
+    def _prioritize_dirs(self, space_limit: int) -> _SelectedPaths:
         """Calculate which directories will stay in the local directory.
 
         Args:
@@ -314,50 +352,37 @@ class SyncCommand(Command):
             local directory and the amount of space remaining (in bytes) until
             the storage limit is reached.
         """
-        file_priorities = self.profile.db_file.get_priorities()
-        dir_paths = self.local_dir.list_files(
-            rel=True, files=False, dirs=True,
-            exclude=self.profile.ex_file.rel_files)
-        dir_priorities = []
+        local_files = self.profile.db_file.get_tree(directory=False)
+        local_dirs = self.profile.db_file.get_tree(directory=True)
+        dir_stats = self.dest_dir.get_paths(
+            rel=True, exclude=self.profile.ex_file.rel_files)
+        adjusted_priorities = []
 
-        # Calculate the priorities and sizes of each directory. A directory
-        # priority is calculated by finding the sum of the priorities of its
-        # files and dividing by the directory size.
-        for dir_path in dir_paths:
-            # Use local directory paths to avoid slowdowns with accessing
-            # the remote directory when it's on another machine. For files
-            # that aren't available locally, their symlinks are followed to
-            # the remote directory.
-            full_dir_path = os.path.join(self.local_dir.path, dir_path)
-            dir_priority = 0.0
+        # Calculate the sizes of each directory and adjust directory priorities
+        # for size.
+        for dir_path, dir_data in local_dirs.items():
+            dir_priority = dir_data.priority
             dir_size = 0
-            for entry in rec_scan(full_dir_path):
-                rel_path = os.path.relpath(entry.path, self.local_dir.path)
-                if rel_path in file_priorities:
-                    # If the current file is a symlink, then it points to a
-                    # file in the remote directory and should be followed.
-                    dir_priority += file_priorities[rel_path]
-                    dir_size += entry.stat(
-                        follow_symlinks=True).st_blocks * 512
-                else:
-                    # If the current file is a symlink, then it is a
-                    # user-created symlink and should not be followed.
-                    dir_size += entry.stat(
-                        follow_symlinks=False).st_blocks * 512
+            for sub_path in self.dest_dir.db_file.get_tree(start=dir_path):
+                # Get the size of the files in the remote directory, as
+                # symlinks in the local directory are not followed.
+                dir_size += dir_stats[sub_path].st_blocks * 512
+
             if self.profile.cfg_file.vals["AccountForSize"]:
                 try:
-                    dir_priorities.append((
+                    adjusted_priorities.append((
                         dir_path, dir_priority / dir_size, dir_size))
                 except ZeroDivisionError:
-                    dir_priorities.append((dir_path, 0, dir_size))
+                    adjusted_priorities.append((dir_path, 0, dir_size))
             else:
-                dir_priorities.append((dir_path, dir_priority, dir_size))
+                adjusted_priorities.append((dir_path, dir_priority, dir_size))
 
         # Sort directories by priority.
-        dir_priorities.sort(key=lambda x: x[1], reverse=True)
+        adjusted_priorities.sort(key=lambda x: x[1], reverse=True)
         prioritized_dirs = [
-            path for path, priority, size in dir_priorities]
-        dir_sizes = {path: size for path, priority, size in dir_priorities}
+            path for path, priority, size in adjusted_priorities]
+        dir_sizes = {
+            path: size for path, priority, size in adjusted_priorities}
 
         # Select which directories will stay in the local directory.
         selected_dirs = set()
@@ -368,9 +393,8 @@ class SyncCommand(Command):
         # which should have a disk usage of one block. For evey file that is
         # selected, one block will be added back to the remaining space.
         symlink_size = os.stat(self.local_dir.path).st_blksize
-        remaining_space = space_limit - len(file_priorities) * symlink_size
+        remaining_space = space_limit - len(local_files) * symlink_size
         for dir_path in prioritized_dirs:
-            full_dir_path = os.path.join(self.local_dir.path, dir_path)
             dir_size = dir_sizes[dir_path]
 
             if dir_path in selected_subdirs:
@@ -384,22 +408,18 @@ class SyncCommand(Command):
                 continue
 
             # Find all subdirectories of the current directory that are
-            # already in the set of selected files. When you have a lot of
-            # directories, using os.scandir() to search the filesystem is
-            # significantly faster than checking against every other
-            # directory path in memory using os.path.commonpath().
+            # already in the set of selected files.
             contained_files = set()
             contained_dirs = set()
             subdirs_size = 0
-            for entry in rec_scan(full_dir_path):
-                rel_sub_path = os.path.relpath(
-                    entry.path, self.local_dir.path)
-                if entry.is_file():
-                    contained_files.add(rel_sub_path)
-                elif entry.is_dir():
-                    contained_dirs.add(rel_sub_path)
-                if rel_sub_path in selected_dirs:
-                    subdirs_size += dir_sizes[rel_sub_path]
+            for subpath, subpath_data in self.profile.db_file.get_tree(
+                    start=dir_path).items():
+                if subpath_data.directory:
+                    contained_dirs.add(subpath)
+                else:
+                    contained_files.add(subpath)
+                if subpath in selected_dirs:
+                    subdirs_size += dir_sizes[subpath]
 
             new_remaining_space = (
                 remaining_space
@@ -415,35 +435,42 @@ class SyncCommand(Command):
                 selected_dirs.add(dir_path)
                 remaining_space = new_remaining_space
 
-        return remaining_space, selected_dirs
+        return self._SelectedPaths(remaining_space, selected_dirs)
 
-    def _update_remote(self, local_mod_files: Iterable[str]) -> None:
-        """Update the remote directory with modified local files.
+    def _update_remote(self, update_paths: Iterable[str]) -> None:
+        """Update the remote directory with local files.
 
+        Args:
+            update_paths: The relative paths of local files to update the
+                remote directory with.
         Raises:
             ServerError: The remote directory is unmounted.
         """
-        local_mod_files = set(local_mod_files)
+        update_paths = set(update_paths)
+        update_files = set(
+            update_paths - self.local_dir.get_paths(
+                rel=True, files=False, symlinks=False).keys())
+        update_dirs = set(
+            update_paths - self.local_dir.get_paths(
+                rel=True, dirs=False).keys())
 
         # Copy modified local files to the remote directory, excluding symbolic
         # links.
         try:
             rclone(
                 self.local_dir.path, self.dest_dir.safe_path,
-                files=local_mod_files & set(
-                    self.local_dir.list_files(rel=True)),
-                msg="Updating remote files...")
+                files=update_paths, msg="Updating remote files...")
         except FileNotFoundError:
             raise ServerError(
                 "the connection to the remote directory was lost")
 
         # Add new files to the database and update the time of the last sync
         # for existing ones.
-        self.dest_dir.db_file.add_files(local_mod_files)
+        self.dest_dir.db_file.add_paths(update_files, update_dirs)
 
     def _handle_conflicts(
-            self, local_in: Iterable[str], remote_in: Iterable[str]
-            ) -> Tuple[Set[str], Set[str]]:
+            self, local_paths: Iterable[str], remote_paths: Iterable[str]
+            ) -> _UpdatedPaths:
         """Handle sync conflicts between local and remote files.
 
         Conflicts are handled by renaming the file that was modified least
@@ -451,192 +478,262 @@ class SyncCommand(Command):
         aren't treated specially and are synced just like any other file.
 
         Args:
-            local_in: Local files that have been modified since the last sync.
-            remote_in: Remote files that have been modified since the last
-            sync.
+            local_paths: The relative paths of local files that have been
+                modified since the last sync.
+            remote_paths: The relative paths of remote files that have been
+                modified since the last sync.
 
         Returns:
-            An tuple containing an updated version of each of the input values.
+            A named tuple containing two sets of relative paths of files
+            that have been modified since the last sync: local ones and
+            remote ones.
         """
-        local_in = set(local_in)
-        remote_in = set(remote_in)
+        local_paths = set(local_paths)
+        remote_paths = set(remote_paths)
+        conflict_paths = local_paths & remote_paths
+        local_mtimes = {
+            path: data.st_mtime for path, data
+            in self.local_dir.get_paths(rel=True).items()}
+        remote_mtimes = {
+            path: data.st_mtime for path, data
+            in self.dest_dir.get_paths(rel=True).items()}
 
-        conflict_files = local_in & remote_in
-        local_mtimes = {}
-        remote_mtimes = {}
-        for path in conflict_files:
-            local_mtimes.update({
-                path: os.stat(
-                    os.path.join(self.local_dir.path, path)).st_mtime})
-            remote_mtimes.update({
-                path: self.dest_dir.db_file.get_synctime(path)})
+        new_local_files = set()
+        old_local_files = set()
+        new_remote_files = set()
+        old_remote_files = set()
 
-        local_out = local_in.copy()
-        remote_out = remote_in.copy()
-        for path in conflict_files:
-            new_path = timestamp_path(path, keyword="conflict")
-            if local_mtimes[path] < remote_mtimes[path]:
-                os.rename(
-                    os.path.join(self.local_dir.path, path),
-                    os.path.join(self.local_dir.path, new_path))
-                local_out.remove(path)
-                local_out.add(new_path)
-            elif remote_mtimes[path] < local_mtimes[path]:
-                try:
+        try:
+            for path in conflict_paths:
+                new_path = timestamp_path(path, keyword="conflict")
+                if (self.profile.db_file.get_path(path)
+                        and self.profile.db_file.get_path(path).directory):
+                    # Conflicts are resolved on a file-by-file basis.
+                    continue
+                elif local_mtimes[path] < remote_mtimes[path]:
                     os.rename(
-                        os.path.join(self.dest_dir.safe_path, path),
-                        os.path.join(self.dest_dir.safe_path, new_path))
-                except FileNotFoundError:
-                    raise ServerError(
-                        "the connection to the remote directory was lost")
-                remote_out.remove(path)
-                remote_out.add(new_path)
+                        os.path.join(self.local_dir.path, path),
+                        os.path.join(self.local_dir.path, new_path))
+                    old_local_files.add(path)
+                    new_local_files.add(new_path)
+                elif remote_mtimes[path] < local_mtimes[path]:
+                    try:
+                        os.rename(
+                            os.path.join(self.dest_dir.safe_path, path),
+                            os.path.join(self.dest_dir.safe_path, new_path))
+                    except FileNotFoundError:
+                        raise ServerError(
+                            "the connection to the remote directory was lost")
+                    old_remote_files.add(path)
+                    new_remote_files.add(new_path)
+        finally:
+            # Remove outdated file paths from the local database, but don't
+            # add new ones. If you do, and the current sync operation is
+            # interrupted, then those files will be deleted on the next sync
+            # operation. The new file paths are added to the database once
+            # the differences between the two directories have been resolved.
+            self.profile.db_file.rm_paths(old_local_files | old_remote_files)
 
-        # Remove outdated file paths from the local database, but don't add new
-        # ones. If you do, and the current sync operation is interrupted, then
-        # those files will be deleted on the next sync operation. The new file
-        # paths are added to the database once the differences between the two
-        # directories have been resolved.
-        self.profile.db_file.rm_files(local_in - local_out)
-        self.profile.db_file.rm_files(remote_in - remote_out)
+            # Update file paths in the remote database.
+            self.dest_dir.db_file.rm_paths(old_remote_files)
+            self.dest_dir.db_file.add_paths(new_remote_files, [])
 
-        # Update file paths in the remote database.
-        self.dest_dir.db_file.add_files(remote_out - remote_in)
-        self.dest_dir.db_file.rm_files(remote_in - remote_out)
+        local_mod_paths = local_paths - old_local_files | new_local_files
+        remote_mod_paths = remote_paths - old_remote_files | new_remote_files
+        return self._UpdatedPaths(
+            local_mod_paths, remote_mod_paths,
+            local_mod_paths | remote_mod_paths)
 
-        return local_out, remote_out
+    def _compute_added(self) -> _UpdatedPaths:
+        """Compute paths of files that have been added since the last sync.
 
-    def _compute_changes(self) -> Tuple[Set[str], Set[str]]:
-        """Compute files that have been modified since the last sync.
-
-        For local files, this involves checking the mtime as well as looking up
-        the file path in the database to catch new files that may not have had
-        their mtime updated when they were copied/moved into the directory.
-
-        For remote files, this involves checking the time that they were last
-        updated by a sync, which is stored in the remote database.
+        This method excludes the paths of local symlinks. A file is
+        considered to be new if it is not in the database.
 
         Returns:
-            A tuple containing two sets of relative paths of files that have
-            been modified since the last sync. The first is for local files and
-            the second is for remote files.
+            A named tuple containing two sets of relative paths of files
+            that have been added since the last sync: local ones and
+            remote ones.
+        """
+        local_new_paths = {
+            path for path in self.local_dir.get_paths(
+                rel=True, symlinks=False).keys()
+            if not self.profile.db_file.get_path(path)}
+        remote_new_paths = {
+            path for path in self.dest_dir.get_paths(rel=True).keys()
+            if not self.dest_dir.db_file.get_path(path)}
+
+        return self._UpdatedPaths(
+            local_new_paths, remote_new_paths,
+            local_new_paths | remote_new_paths)
+
+    def _compute_modified(self) -> _UpdatedPaths:
+        """Compute paths of files that have been modified since the last sync.
+
+        This method excludes the paths of directories and the paths of files
+        that are new since the last sync. A file is considered to be
+        modified if its mtime is more recent than the time of the last sync
+        and it is in the database. Additionally, remote files are considered
+        to be modified if the time they were last updated by a sync (stored
+        in the remote database) is more recent than the time of the last sync.
+
+        Returns:
+            A named tuple containing two sets of relative paths of files
+            that have been modified since the last sync: local ones and
+            remote ones.
         """
         last_sync = self.profile.info_file.vals["LastSync"]
-        local_mtimes = self.local_dir.list_mtimes(
-            rel=True, exclude=self.profile.ex_file.rel_files)
 
-        local_mod_files = {
-            path for path, time in local_mtimes
-            if time > last_sync or not self.profile.db_file.check_exists(path)}
-        remote_mod_files = self.dest_dir.db_file.get_paths(
-            deleted=False, dirs=False, min_lastsync=last_sync)
+        # Only include file paths that are in the database to exclude files
+        # that are new since the last sync.
+        local_mtimes = (
+            (path, data.st_mtime) for path, data
+            in self.local_dir.get_paths(rel=True, dirs=False).items())
+        remote_mtimes = (
+            (path, data.st_mtime) for path, data
+            in self.dest_dir.get_paths(rel=True, dirs=False).items())
 
-        return local_mod_files, remote_mod_files
+        local_mod_paths = {
+            path for path, mtime in local_mtimes
+            if mtime > last_sync and self.profile.db_file.get_path(path)}
+        remote_mod_paths = {
+            path for path, mtime in remote_mtimes
+            if mtime > last_sync and self.dest_dir.db_file.get_path(path)}
 
-    def _compute_deletions(self) -> Tuple[Set[str], Set[str], Set[str]]:
+        remote_mod_paths |= self.dest_dir.db_file.get_tree(
+            deleted=False, directory=False, min_lastsync=last_sync).keys()
+
+        return self._UpdatedPaths(
+            local_mod_paths, remote_mod_paths,
+            local_mod_paths | remote_mod_paths)
+
+    def _compute_deleted(self) -> _DeletedPaths:
         """Compute files that need to be deleted to sync the two directories.
 
         A file needs to be deleted if it is found in the local database but
         not in either the local or remote directory. A file is marked for
-        deletion if it is not found in any of the trash directories.
+        deletion if it needs to be deleted from the remote directory but is
+        not found in any of the trash directories.
 
         Returns:
-            A tuple containing three sets of relative file paths: local
-            files to be deleted, remote files to be deleted and remote files
-            to be marked for deletion.
+            A named tuple containing three sets of relative file paths: local
+            files to be deleted, remote files to be deleted and remote files to
+            be marked for deletion.
         """
-        local_files = set(self.local_dir.list_files(
-            rel=True, dirs=True, symlinks=True))
-        remote_files = set(self.dest_dir.list_files(rel=True, dirs=True))
-        known_files = set(self.profile.db_file.get_paths())
+        local_paths = self.local_dir.get_paths(rel=True).keys()
+        remote_paths = self.dest_dir.get_paths(rel=True).keys()
+        known_paths = self.profile.db_file.get_tree().keys()
 
         # Compute files that need to be deleted.
-        local_del_files = known_files - remote_files
-        remote_del_files = known_files - local_files
+        local_del_paths = known_paths - remote_paths
+        remote_del_paths = known_paths - local_paths
 
         # Compute files to be marked for deletion.
+        trash_paths = set()
         if not self.profile.cfg_file.vals["DeleteAlways"]:
             trash_dir = TrashDir(self.profile.cfg_file.vals["TrashDirs"])
-        remote_trash_files = set()
-        for path in remote_del_files:
-            dest_path = os.path.join(self.dest_dir.safe_path, path)
-            if (self.profile.cfg_file.vals["DeleteAlways"]
-                    or os.path.isfile(dest_path)
-                    and not trash_dir.check_file(dest_path)):
-                remote_trash_files.add(path)
-        remote_del_files -= remote_trash_files
+            for path in remote_del_paths:
+                dest_path = os.path.join(self.dest_dir.safe_path, path)
+                try:
+                    if (os.path.isfile(dest_path)
+                            and not trash_dir.check_file(dest_path)):
+                        trash_paths.add(path)
+                except IsADirectoryError:
+                    # Directories shouldn't be marked as deleted explicitly.
+                    # The database automatically marks directories as deleted
+                    # when all their files are.
+                    continue
+            remote_del_paths -= trash_paths
 
-        return local_del_files, remote_del_files, remote_trash_files
+        return self._DeletedPaths(
+            local_del_paths, remote_del_paths, trash_paths)
 
-    def _rm_local_files(self, file_paths: Iterable[str]) -> None:
+    def _rm_local_files(self, paths: Iterable[str]) -> None:
         """Delete local files and remove them from both databases.
 
         Args:
-            file_paths: The relative paths of files to remove. These can not
-                include directory paths.
+            paths: The relative paths of files to remove.
         """
-        deleted_files = []
+        deleted_paths = []
 
         # Make sure that the database always gets updated with whatever files
         # have been deleted.
         try:
-            for path in file_paths:
-                shutil.rmtree(os.path.join(self.local_dir.path, path))
-                deleted_files.append(path)
+            for path in paths:
+                full_path = os.path.join(self.local_dir.path, path)
+                try:
+                    os.remove(full_path)
+                except IsADirectoryError:
+                    shutil.rmtree(full_path)
+                deleted_paths.append(path)
         finally:
             # If a deletion from another client was already synced to the
             # server, then that file path should have already been removed
             # from the remote database. However, they user may have manually
             # deleted files from the remote directory since the last sync.
-            self.dest_dir.db_file.rm_files(deleted_files)
-            self.profile.db_file.rm_files(deleted_files)
+            self.dest_dir.db_file.rm_paths(deleted_paths)
+            self.profile.db_file.rm_paths(deleted_paths)
 
-    def _rm_remote_files(self, file_paths: Iterable[str]) -> None:
-        """Delete remote files and remove them from the local database.
+    def _rm_remote_files(self, paths: Iterable[str]) -> None:
+        """Delete remote files and remove them from the databases.
 
         Args:
-            file_paths: The relative paths of files to remove. These can not
-                include directory paths.
+            paths: The relative paths of files to remove.
         """
-        deleted_files = []
+        deleted_paths = []
 
         # Make sure that the database always gets updated with whatever files
         # have been deleted.
         try:
-            for path in file_paths:
-                shutil.rmtree(os.path.join(self.dest_dir.safe_path, path))
-                deleted_files.append(path)
+            for path in paths:
+                full_path = os.path.join(self.dest_dir.safe_path, path)
+                try:
+                    os.remove(full_path)
+                except IsADirectoryError:
+                    shutil.rmtree(full_path)
+                deleted_paths.append(path)
         finally:
-            self.profile.db_file.rm_files(deleted_files)
-            self.dest_dir.db_file.rm_files(deleted_files)
+            self.profile.db_file.rm_paths(deleted_paths)
+            self.dest_dir.db_file.rm_paths(deleted_paths)
 
-    def _trash_files(self, file_paths: Iterable[str]) -> None:
+    def _trash_files(self, paths: Iterable[str]) -> None:
         """Mark files in the remote directory for deletion.
 
-        This involves renaming the file to signify its state to the user and
-        updating its entry in the remote database to signify its state to the
-        program.
+        This involves renaming the file to signify its state to the user,
+        removing it from the local database and updating its entry in the
+        remote database to signify its state to the program.
 
         Args:
-            file_paths: The relative paths of files to mark for deletion. These
-                can not be directory paths.
+            paths: The relative paths of files to mark for deletion.
         """
-        new_paths = [
-            (path, timestamp_path(path, keyword="deleted"))
-            for path in file_paths]
-        old_renamed_files = []
-        new_renamed_files = []
+        new_file_paths = set()
+        new_dir_paths = set()
+        for path in paths:
+            new_path = timestamp_path(path, keyword="deleted")
+            # Separate paths into files and directories so that they can be
+            # marked accordingly when they are re-added to the database.
+            if (self.dest_dir.db_file.get_path(path)
+                    and self.dest_dir.db_file.get_path(path).directory):
+                new_dir_paths.add(new_path)
+            else:
+                new_file_paths.add(new_path)
+
+        old_renamed_paths = set()
+        new_renamed_paths = set()
 
         # Make sure that the database always gets updated with whatever files
         # have been renamed.
         try:
-            for old_path, new_path in new_paths:
+            for old_path, new_path in zip(
+                    paths, new_file_paths | new_dir_paths):
                 os.rename(
                     os.path.join(self.dest_dir.safe_path, old_path),
                     os.path.join(self.dest_dir.safe_path, new_path))
-                old_renamed_files.append(old_path)
-                new_renamed_files.append(new_path)
+                old_renamed_paths.add(old_path)
+                new_renamed_paths.add(new_path)
         finally:
-            self.profile.db_file.rm_files(old_renamed_files)
-            self.dest_dir.db_file.rm_files(old_renamed_files)
-            self.dest_dir.db_file.add_files(new_renamed_files, deleted=True)
+            self.profile.db_file.rm_paths(old_renamed_paths)
+            self.dest_dir.db_file.rm_paths(old_renamed_paths)
+            self.dest_dir.db_file.add_paths(
+                new_file_paths & new_renamed_paths,
+                new_dir_paths & new_renamed_paths, deleted=True)

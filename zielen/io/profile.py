@@ -26,9 +26,10 @@ import datetime
 import pkg_resources
 import sqlite3
 import weakref
+import collections
 from textwrap import dedent
 from contextlib import contextmanager
-from typing import Any, Iterable, Union, Generator, Set, Dict
+from typing import Any, Iterable, Union, Generator, Set, Dict, NamedTuple
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir
@@ -235,13 +236,18 @@ class ProfileInfoFile(JSONFile):
 
 
 class ProfileDBFile:
-    """Manipulate a profile file database.
+    """Manipulate a profile database for keeping track of files.
+
+    This database uses a transitive closure table to represent the file
+    hierarchy.
 
     Attributes:
         path: The path to the database file.
         conn: The sqlite connection object for the database.
         cur: The sqlite cursor object for the connection.
     """
+    _PathData = NamedTuple(
+        "_PathData", [("directory", bool), ("priority", float)])
 
     def __init__(self, path) -> None:
         self.path = path
@@ -249,13 +255,16 @@ class ProfileDBFile:
             self.conn = sqlite3.connect(
                 self.path, detect_types=sqlite3.PARSE_DECLTYPES)
             self.cur = self.conn.cursor()
+            self.cur.execute("""\
+                PRAGMA foreign_keys = ON;
+                """)
         else:
             self.conn = None
             self.cur = None
 
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
-        sqlite3.register_converter("bool", lambda x: bool(int(x)))
+        sqlite3.register_converter("BOOL", lambda x: bool(int(x)))
 
     @contextmanager
     def transact(self) -> Generator[None, None, None]:
@@ -273,8 +282,8 @@ class ProfileDBFile:
         """Create a new empty database.
 
         Database Columns:
-            path: The relative path to the file.
-            directory: A boolean representing whether the file is a directory.
+            path: The relative path of the file.
+            directory: A boolean representing whether the path is a directory.
             priority: The priority value of the file.
 
         Raises:
@@ -288,138 +297,228 @@ class ProfileDBFile:
         self.cur = self.conn.cursor()
 
         with self.transact():
-            self.cur.execute("""\
-                CREATE TABLE files (
-                    path text,
-                    directory bool,
-                    priority real
+            self.cur.executescript("""\
+                PRAGMA foreign_keys = ON;
+
+                CREATE TABLE nodes (
+                    path        TEXT    NOT NULL,
+                    directory   BOOL    NOT NULL,
+                    priority    REAL    NOT NULL,
+                    PRIMARY KEY (path)
+                );
+
+                CREATE TABLE closure (
+                    ancestor    TEXT    NOT NULL,
+                    descendant  TEXT    NOT NULL,
+                    depth       INT     DEFAULT 0,
+                    PRIMARY KEY (ancestor, descendant),
+                    FOREIGN KEY (ancestor)
+                        REFERENCES nodes(path) ON DELETE CASCADE,
+                    FOREIGN KEY (descendant)
+                        REFERENCES nodes(path) ON DELETE CASCADE
                 );
                 """)
 
-    def add_files(self, paths: Iterable[str], directory=False,
-                  priority=0) -> None:
-        """Add new file paths to the database if they do not already exist.
+    def _update_priority(self, paths: Iterable[str]) -> None:
+        """Update the priority values of directories.
+
+        Directories are checked in leaf-to-trunk order. The priority value
+        of a directory is set to the sum of the priority values of all its
+        immediate children.
 
         Args:
-            paths: The file paths to add.
-            directory: Mark the paths as directories.
+            paths: The relative paths of the directories to update the priority
+                values of.
+        """
+        # Sort paths by depth.
+        paths = list(paths)
+        paths.sort()
+        paths.sort(key=lambda x: x.count(os.sep))
+
+        # A deque is used here because a list cannot be appended to while it is
+        # being iterated over.
+        path_queue = collections.deque(paths)
+        while len(path_queue) > 0:
+            # TODO: Prevent directories from being checked multiple times
+            # while making sure that directories are checked after all their
+            # children.
+            path = path_queue.pop()
+            parent = os.path.dirname(path)
+            self.cur.execute("""\
+                UPDATE nodes
+                SET priority = (
+                    SELECT COALESCE(SUM(n.priority), 0)
+                    FROM nodes AS n
+                    JOIN closure AS c
+                    ON (n.path = c.descendant)
+                    WHERE c.ancestor = :path
+                    AND c.depth = 1)
+                WHERE path = :path;
+                """, {"path": path})
+            if parent:
+                path_queue.appendleft(parent)
+
+    def _mark_directory(self, paths: Iterable[str]) -> None:
+        """Mark paths as directories."""
+        for path in paths:
+            self.cur.execute("""\
+                UPDATE nodes
+                SET directory = 1
+                WHERE directory = 0
+                AND path = :path;
+                """, {"path": path})
+
+    def add_paths(self, files: Iterable[str], dirs: Iterable[str],
+                  priority=0) -> None:
+        """Add new file/directory paths to the database if not already there.
+
+        A file path is automatically marked as a directory when sub-paths are
+        added to the database. The purpose of the separate parameter for
+        directory paths is to distinguish empty directories from files.
+
+        Args:
+            files: The file paths to add to the database.
+            dirs: The directory paths to add to the database.
             priority: The starting priority of the file paths.
         """
+        # Sort paths by depth. A file can't be added to the database until its
+        # parent directory has been added.
+        files = set(files)
+        dirs = set(dirs)
+        paths = list(files | dirs)
+        paths.sort(key=lambda x: x.count(os.sep))
+
+        parents = set()
         with self.transact():
             for path in paths:
-                self.cur.execute("""\
-                    INSERT INTO files (path, directory, priority)
-                    SELECT ?, ?, ?
-                    WHERE NOT EXISTS (
-                        SELECT * FROM files
-                        WHERE path = ?
-                        LIMIT 1);
-                    """, (path, directory, priority, path))
+                parent = os.path.dirname(path)
+                if parent:
+                    parents.add(parent)
+                if path in dirs:
+                    directory = True
+                else:
+                    directory = False
 
-    def add_inflated(self, paths: Iterable[str], directory=False) -> None:
+                try:
+                    self.cur.execute("""\
+                        INSERT INTO nodes (path, directory, priority)
+                        VALUES (:path, :directory, :priority);
+                        """, {"path": path, "directory": directory,
+                              "priority": priority})
+                    self.cur.execute("""\
+                        INSERT INTO closure (ancestor, descendant, depth)
+                        SELECT ancestor, :path, c.depth + 1
+                        FROM closure AS c
+                        WHERE descendant = :parent
+                        UNION ALL SELECT :path, :path, 0;
+                        """, {"path": path, "parent": parent})
+                except sqlite3.IntegrityError:
+                    # If one of the paths was already in the database, silently
+                    # skip it.
+                    pass
+            self._mark_directory(parents)
+            self._update_priority(parents)
+
+    def add_inflated(self, files: Iterable[str], dirs: Iterable[str]) -> None:
         """Add new file paths to the database with an inflated priority.
 
         Args:
-            paths: The file paths to add.
-            directory: Mark the paths as directories.
+            files: The file paths to add to the database.
+            dirs: The directory paths to add to the database.
         """
-        with self.transact():
-            self.cur.execute("""\
-                SELECT MAX(priority) FROM files;
-                """)
+        self.cur.execute("""\
+            SELECT MAX(priority) FROM nodes;
+            """)
         max_priority = self.cur.fetchone()[0]
-        self.add_files(paths, directory=directory, priority=max_priority)
+        self.add_paths(files, dirs, priority=max_priority)
 
-    def rm_files(self, paths: Iterable[str]) -> None:
-        """Remove file paths from the database.
+    def rm_paths(self, paths: Iterable[str]) -> None:
+        """Remove file/directory paths from the database.
 
         Args:
-            paths: The file paths to remove.
+            paths: The file/directory paths to remove.
         """
+        parents = set()
         with self.transact():
             for path in paths:
+                parent = os.path.dirname(path)
+                if parent:
+                    parents.add(parent)
                 self.cur.execute("""\
-                    DELETE FROM files
-                    WHERE path = ?;
-                    """, (path,))
+                    DELETE FROM nodes
+                    WHERE path IN (
+                        SELECT n.path
+                        FROM nodes AS n
+                        JOIN closure AS c
+                        ON (n.path = c.descendant)
+                        WHERE c.ancestor = :path);
+                    """, {"path": path})
+            self._update_priority(parents)
 
-    def get_priorities(self, directory=None) -> Dict[str, float]:
-        """Get the paths of files sorted by their priorities.
+    def get_path(self, path: str) -> _PathData:
+        """Get data associated with a file path.
 
         Args:
-            directory: Restrict results to just directories (True) or just
-                files (False).
+            path: The file path to search the database for.
 
         Returns:
-            A dict containing file paths as keys that correspond to priority
-            values.
+            A named tuple containing the values from the other database
+            columns (directory, priority).
         """
-        sql_command = """\
-            SELECT path, priority
-            FROM files
-            WHERE path IS NOT NULL
-            """
-        sql_args = []
-        if directory is not None:
-            sql_command += "AND directory = ?\n"
-            sql_args.append(directory)
-        sql_command += "ORDER BY priority DESC;"
+        # Clear the query result set.
+        self.cur.fetchall()
 
-        with self.transact():
-            if directory is not False:
-                # Compute the directory priorities by finding the sum of the
-                # priorities of their files.
-                self.cur.execute("""\
-                    UPDATE files
-                    SET priority=(
-                        SELECT SUM(x.priority)
-                        FROM files AS x
-                        WHERE x.path LIKE (files.path || "/%")
-                        AND x.path != files.path)
-                    WHERE directory = 1;
-                    """)
-            self.cur.execute(sql_command, sql_args)
+        self.cur.execute("""\
+            SELECT * FROM nodes
+            WHERE path = :path;
+            """, {"path": path})
 
-        return {path: priority for path, priority in self.cur.fetchall()}
+        result = self.cur.fetchone()
+        if result:
+            return self._PathData(*result[1:])
 
-    def get_paths(self, directory=None) -> Set[str]:
+    def get_tree(self, start=None, directory=None) -> Dict[str, _PathData]:
         """Get the paths of files in the database.
 
         Args:
-            directory: Restrict results to just directories (True) or just
-                files (False).
+            start: A relative directory path. Results are restricted to just
+                paths under this directory path.
+            directory: Restrict results to just directory paths (True) or just
+                file paths (False).
+
         Returns:
-            A set of relative file paths.
+            A dict containing file paths as keys and named tuples as values.
+            These named tuples contain the values from the other database
+            columns (directory, priority).
         """
-        sql_command = """\
-            SELECT path
-            FROM files
-            WHERE path IS NOT NULL
-            """
-        sql_args = []
-        if directory is not None:
-            sql_command += "AND directory = ?\n"
-            sql_args.append(directory)
-        sql_command += ";"
+        # Clear the query result set.
+        self.cur.fetchall()
 
-        with self.transact():
-            self.cur.execute(sql_command, sql_args)
+        self.cur.execute("""\
+            SELECT n.* FROM nodes AS n
+            JOIN closure AS c
+            ON (n.path = c.descendant)
+            WHERE (:start IS NULL OR c.ancestor = :start)
+            AND (:directory IS NULL OR n.directory = :directory);
+            """, {"start": start, "directory": directory})
 
-        return {path for path, in self.cur.fetchall()}
+        return {path: self._PathData(directory, priority)
+                for path, directory, priority in self.cur.fetchall()}
 
-    def increment(self, paths: Iterable[str]) -> None:
-        """Increment the priority of some paths by one.
+    def increment(self, paths: Iterable[str], increment) -> None:
+        """Increment the priority of some paths by some value.
 
         Args:
             paths: The paths to increment the priority of.
+            increment: The value to increment the paths by.
         """
         with self.transact():
             for path in paths:
                 self.cur.execute("""\
-                    UPDATE files
-                    SET priority = priority + 1
-                    WHERE path = ?;
-                    """, (path,))
+                    UPDATE nodes
+                    SET priority = priority + :increment
+                    WHERE path = :path;
+                    """, {"path": path, "increment": increment})
 
     def adjust_all(self, adjustment) -> None:
         """Multiply the priorities of all file paths by a constant.
@@ -429,29 +528,10 @@ class ProfileDBFile:
         """
         with self.transact():
             self.cur.execute("""\
-                UPDATE files
-                SET priority = priority * ?;
-                WHERE directory = 0
-                """, (adjustment,))
-
-    def check_exists(self, path: str) -> bool:
-        """Check if a record exists with a given file path.
-
-        Args:
-            path: The relative file path to check the database for.
-
-        Returns:
-            A boolean value representing whether a record was found.
-        """
-        with self.transact():
-            self.cur.execute("""\
-                SELECT 1 FROM files
-                WHERE path = ?;
-                """, (path,))
-        if self.cur.fetchone():
-            return True
-        else:
-            return False
+                UPDATE nodes
+                SET priority = priority * :adjustment
+                WHERE directory = 0;
+                """, {"adjustment": adjustment})
 
 
 class ProfileConfigFile(ConfigFile):
@@ -562,6 +642,7 @@ class ProfileConfigFile(ConfigFile):
                 # profile.
                 if (not instance.profile
                         or not os.path.isfile(instance.path)
+                        or not self.profile
                         or instance.profile.name == self.profile.name):
                     # Do not include instances that do not belong to a
                     # profile, instances that do not have a config file in
@@ -772,14 +853,11 @@ class ProfileConfigFile(ConfigFile):
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
-        print(dedent("""\
-            Please enter values for the following settings. Leave blank to accept the
-            default value if one is given in parentheses.
-            """))
+        msg_printed = False
         for key in self._req_keys:
             # If the remote directory is on the local machine, then the user
             # should not be prompted for certain settings.
-            if (self.raw_vals.get("RemoteHost", None) in self._host_synonyms
+            if (self.raw_vals.get("RemoteHost") in self._host_synonyms
                     and key in self._connect_keys):
                 self.raw_vals[key] = ""
                 continue
@@ -792,7 +870,13 @@ class ProfileConfigFile(ConfigFile):
 
             # We don't use a defaultdict for this so that we can know if a
             # config file has been read based on whether raw_vals is empty.
-            if not self.raw_vals.get(key, None):
+            if not self.raw_vals.get(key):
+                if not msg_printed:
+                    print(dedent("""\
+                    Please enter values for the following settings. Leave blank to accept the
+                    default value if one is given in parentheses.
+                    """))
+                    msg_printed = True
                 while True:
                     usr_input = input(self._prompt_msgs[key]).strip()
                     if not usr_input and key in self._subs:

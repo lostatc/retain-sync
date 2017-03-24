@@ -90,7 +90,7 @@ class Daemon(Command):
             accessed_files = set()
             while self.files_queue.qsize() != 0:
                 accessed_files.add(self.files_queue.get())
-            self.profile.db_file.increment(accessed_files)
+            self.profile.db_file.increment(accessed_files, 1)
 
             self._adjust()
             time.sleep(1)
