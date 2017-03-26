@@ -21,9 +21,12 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import re
 import json
-from typing import List
+import sqlite3
+import contextlib
+import hashlib
+from typing import List, Generator, Iterable
 
-from zielen.exceptions import FileParseError
+from zielen.exceptions import FileParseError, ServerError
 from zielen.util.misc import env
 
 
@@ -123,3 +126,64 @@ class JSONFile:
         """Write object to a file."""
         with open(self.path, "w") as file:
             json.dump(self.raw_vals, file, indent=4)
+
+
+class SyncDBFile:
+    """Manage a database for keeping track of files in a sync directory.
+
+    Attributes:
+        path: The path of the database file.
+        conn: The sqlite connection object for the database.
+        cur: The sqlite cursor object for the connection.
+    """
+    def __init__(self, path: str) -> None:
+        self.path = path
+        if os.path.isfile(self.path):
+            self.conn = sqlite3.connect(
+                self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+            self.cur = self.conn.cursor()
+            self.cur.executescript("""\
+                PRAGMA foreign_keys = ON;
+                """)
+        else:
+            self.conn = None
+            self.cur = None
+        # Create adapter from python boolean to sqlite integer.
+        sqlite3.register_adapter(bool, int)
+        sqlite3.register_converter("BOOL", lambda x: bool(int(x)))
+
+    @contextlib.contextmanager
+    def _transact(self) -> Generator[None, None, None]:
+        """Check if database file exists and commit the transaction on exit.
+
+        Raises:
+            ServerError: The database file wasn't found.
+        """
+        if not os.path.isfile(self.path):
+            raise ServerError("could not connect to the database file")
+        with self.conn:
+            yield
+
+    def _mark_directory(self, paths: Iterable[str]) -> None:
+        """Mark paths as directories."""
+        nodes_values = ({
+            "path_id": self._get_path_id(path)}
+            for path in paths)
+        self.cur.executemany("""\
+            UPDATE nodes
+            SET directory = 1
+            WHERE directory = 0
+            AND id = :path_id;
+            """, nodes_values)
+
+    @staticmethod
+    def _get_path_id(path: str) -> int:
+        """Hash a file path with blake2 and return it as a 64-bit int.
+
+        Args:
+            path: The file path to return the hash of.
+        """
+        blake2_hash = hashlib.blake2b(digest_size=8)
+        blake2_hash.update(path.encode())
+        return int.from_bytes(
+            blake2_hash.digest(), byteorder="big", signed=True)
