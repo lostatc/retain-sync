@@ -40,12 +40,12 @@ class Profile:
 
     Attributes:
         name: The name of the profile.
-        path: The path to the profile directory.
-        mnt_dir: The path to the remote mountpoint.
-        ex_file: The path to the exclude pattern file.
-        info_file: The path to the JSON file for profile metadata.
-        db_file: The path to the file priority database.
-        cfg_file: The path to the profile's configuration file.
+        path: The path of the profile directory.
+        mnt_dir: The path of the remote mountpoint.
+        ex_file: The path of the exclude pattern file.
+        info_file: The path of the JSON file for profile metadata.
+        db_file: The path of the file priority database.
+        cfg_file: The path of the profile's configuration file.
     """
     def __init__(self, name: str) -> None:
         self.name = name
@@ -70,7 +70,7 @@ class ProfileExcludeFile:
 
     Attributes:
         comment_reg: Regex that denotes a comment line.
-        path: The path to the exclude pattern file.
+        path: The path of the exclude pattern file.
         files: A set of absolute file paths that match the globbing patterns.
         rel_files: A set of relative file paths that match the globbing
             patterns.
@@ -241,7 +241,7 @@ class ProfileDBFile(SyncDBFile):
     hierarchy.
 
     Attributes:
-        path: The path to the database file.
+        path: The path of the profile database file.
         conn: The sqlite connection object for the database.
         cur: The sqlite cursor object for the connection.
     """
@@ -541,7 +541,7 @@ class ProfileConfigFile(ConfigFile):
             keys.
         _prompt_msgs: The messages to use when prompting the user for required
             config values.
-        path: The path to the configuration file.
+        path: The path of the configuration file.
         profile: The Profile object that the config file belongs to.
         add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
         raw_vals: A dictionary of unmodified config value strings.

@@ -42,8 +42,8 @@ class InitializeCommand(Command):
     Attributes:
         profile_input: A string representing the selected profile.
         profile: The currently selected profile.
-        exclude: The path to a file containing exclude patterns.
-        template: The path to a template configuration file.
+        exclude: The path of a file containing exclude patterns.
+        template: The path of a template configuration file.
         add_remote: Start with a set of existing remote files.
         local_dir: A LocalSyncDir object representing the local directory.
         dest_dir: A DestSyncDir object representing the destination directory.
@@ -167,7 +167,7 @@ class InitializeCommand(Command):
             if self.template:
                 self.profile.cfg_file.write(self.template)
             else:
-                # TODO: Get the path to the master config template from
+                # TODO: Get the path of the master config template from
                 # setup.py instead of hardcoding it.
                 self.profile.cfg_file.write(os.path.join(
                     sys.prefix, "share/zielen/config-template"))

@@ -34,7 +34,7 @@ class ProgramDir:
     """Get information about the main configuration directory.
 
     Attributes:
-        path: The path to the program directory.
+        path: The path of the program directory.
         profiles_dir: The base directory containing profile directories.
     """
 
@@ -59,7 +59,7 @@ class ConfigFile:
     """Parse a configuration file.
 
     Attributes:
-        path: The path to the configuration file.
+        path: The path of the configuration file.
         raw_vals: A dictionary of unmodified config value strings.
     """
 
@@ -110,7 +110,7 @@ class JSONFile:
     """Parse a JSON-formatted file.
 
     Attributes:
-        path: The path to the JSON file.
+        path: The path of the JSON file.
         raw_vals: A dictionary or list of values from the file.
     """
     def __init__(self, path) -> None:

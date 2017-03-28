@@ -46,7 +46,7 @@ class Daemon(Command):
             time. Every ADJUST_INTERVAL seconds, the priority of every file is
             multiplied by this value.
         profile: The currently selected profile.
-        files_queue: A Queue for temporarily holding the paths of files hat
+        files_queue: A Queue for temporarily holding the paths of files that
             have been opened in the local or remote directories before they're
             updated in the database.
     """
@@ -74,6 +74,8 @@ class Daemon(Command):
         else:
             dest_dir = self.profile.cfg_file.vals["RemoteDir"]
 
+        # The 'inotify' documentation strongly recommends that directory
+        # watches be in their own process.
         local_watch_proc = multiprocessing.Process(
             target=self._watch, args=(local_dir,), daemon=True)
         local_watch_proc.start()
@@ -126,9 +128,8 @@ class Daemon(Command):
                 # Print the subprocess's stderr to stderr so that it is
                 # added to the journal.
                 for line in cmd.stderr:
-                    if not line.strip():
-                        continue
-                    err(line)
+                    if line.strip():
+                        err(line)
                 cmd.wait()
                 sys.stderr.flush()
 
@@ -137,7 +138,12 @@ class Daemon(Command):
             time.sleep(1)
 
     def _watch(self, start_path: str):
-        """Get paths of files that have been opened and add them to a queue."""
+        """Get paths of files that have been opened and add them to a queue.
+
+        Args:
+            start_path: The absolute path of the directory to watch for file
+                access.
+        """
         # This class constructor only accepts file paths in bytes form.
         adapter = inotify.adapters.InotifyTree(start_path.encode())
         for event in adapter.event_gen():
