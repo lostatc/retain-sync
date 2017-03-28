@@ -27,7 +27,7 @@ from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
 
 from zielen.exceptions import ServerError
 from zielen.io.program import SyncDBFile
-from zielen.util.misc import rec_scan, md5sum, FactoryDict
+from zielen.util.misc import rec_scan, b2sum, FactoryDict
 
 
 class TrashDir:
@@ -68,8 +68,8 @@ class TrashDir:
         overlap_files = [filepath for filepath, size in self.sizes if
                          os.stat(path).st_size == size]
         if overlap_files:
-            overlap_sums = [md5sum(filepath) for filepath in overlap_files]
-            if md5sum(path) in overlap_sums:
+            overlap_sums = [b2sum(filepath) for filepath in overlap_files]
+            if b2sum(path) in overlap_sums:
                 return True
         return False
 

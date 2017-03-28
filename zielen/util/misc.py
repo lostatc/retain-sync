@@ -196,17 +196,18 @@ def progress_bar(
     return update
 
 
-def md5sum(path: str) -> str:
-    """Get the MD5 checksum of a file, reading 4KiB at a time.
+def b2sum(path: str) -> str:
+    """Get the BLAKE2 checksum of a file, reading one chunk at a time.
 
     Args:
         path: The path of the file to find the checksum of.
     """
-    md5_hash = hashlib.md5()
+    blake2_hash = hashlib.blake2b()
+    chunk_size = os.stat(path).st_blksize
     with open(path, "rb") as file:
-        for chunk in iter(lambda: file.read(4096), b""):
-            md5_hash.update(chunk)
-    return md5_hash.hexdigest()
+        for chunk in iter(lambda: file.read(chunk_size), b""):
+            blake2_hash.update(chunk)
+    return blake2_hash.hexdigest()
 
 
 def timestamp_path(path: str, keyword="") -> str:
@@ -222,12 +223,13 @@ def timestamp_path(path: str, keyword="") -> str:
             timestamp.
     """
     keyword += "-" if keyword else keyword
+    name, extension = os.path.splitext(path)
     return (
-        os.path.splitext(path)[0]
+        name
         + "_"
         + keyword
         + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        + os.path.splitext(path)[1])
+        + extension)
 
 
 def print_table(data: Collection, headers: Collection) -> None:
