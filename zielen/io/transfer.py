@@ -66,7 +66,7 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
 
         cmd = shell_cmd(cmd_args + add_args)
 
-        if msg and sys.stdout.isatty():
+        if msg is not None and sys.stdout.isatty():
             # Print status bar.
             rsync_bar = progress_bar(0.35, msg)
             for line in cmd.stdout:
@@ -88,17 +88,18 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
                 + indent("\n".join(stderr.splitlines()[-5:]), "    "))
 
 
-def rclone(source: str, dest: str, files=None, exclude=None, msg="",
-           rm_source=False) -> None:
+def rec_clone(source: str, dest: str, files=None, exclude=None, msg="",
+              rm_source=False) -> None:
     """Recursively copy files, preserving file metadata.
 
     Args:
         source: The file to copy or directory to copy the contents of.
         dest: The location to copy the files to.
-        files: A list of relative paths of files to sync.
+        files: A list of relative paths of files to sync. Missing files are
+            ignored.
         exclude: A list of relative paths of files to exclude from syncing.
-        msg: A message to display opposite the progress bar. If empty, the bar
-            won't appear.
+        msg: A message to display opposite the progress bar. If None, the
+            progress bar won't appear.
         rm_source: Remove source files once they are copied to the destination.
 
     Raises:
@@ -110,7 +111,8 @@ def rclone(source: str, dest: str, files=None, exclude=None, msg="",
 
     # The rsync option '--archive' does not imply '--recursive' when
     # '--files-from' is specified, so we have to explicitly include it.
-    rsync_args = ["-asrHAXS", os.path.join(source, ""), dest]
+    rsync_args = [
+        "-asrHAXS", "--ignore-missing-args", os.path.join(source, ""), dest]
     if rm_source:
         rsync_args.append("--remove-source-files")
     _rsync_cmd(rsync_args, files=files, exclude=exclude, msg=msg)

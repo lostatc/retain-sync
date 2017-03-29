@@ -27,7 +27,7 @@ from zielen.basecommand import Command
 from zielen.util.misc import timestamp_path, rec_scan, symlink_tree
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
-from zielen.io.transfer import rclone
+from zielen.io.transfer import rec_clone
 
 
 class SyncCommand(Command):
@@ -218,6 +218,7 @@ class SyncCommand(Command):
                 # databases.
                 rm_files.add(excluded_path)
 
+        rm_files &= self.dest_dir.db_file.get_tree().keys()
         try:
             self._rm_remote_files(rm_files)
         except FileNotFoundError:
@@ -269,7 +270,7 @@ class SyncCommand(Command):
                 self.dest_dir.db_file.get_tree(directory=True),
                 exclude=self.dest_dir.db_file.get_tree(deleted=True))
 
-            rclone(
+            rec_clone(
                 self.dest_dir.safe_path, self.local_dir.path,
                 files=update_paths,
                 exclude=self.dest_dir.db_file.get_tree(deleted=True),
@@ -457,7 +458,7 @@ class SyncCommand(Command):
         # Copy modified local files to the remote directory, excluding symbolic
         # links.
         try:
-            rclone(
+            rec_clone(
                 self.local_dir.path, self.dest_dir.safe_path,
                 files=update_paths, msg="Updating remote files...")
         except FileNotFoundError:

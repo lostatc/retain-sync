@@ -44,6 +44,7 @@ def main() -> int:
         command = def_command(cmd_args)
         command.main()
     except ProgramError as e:
+        raise
         for message in e.args:
             err("Error: {}".format(message))
         return 1

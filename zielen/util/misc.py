@@ -197,15 +197,15 @@ def progress_bar(
 
 
 def b2sum(path: str) -> str:
-    """Get the BLAKE2 checksum of a file, reading one chunk at a time.
+    """Get the BLAKE2 checksum of a file, reading one block at a time.
 
     Args:
         path: The path of the file to find the checksum of.
     """
     blake2_hash = hashlib.blake2b()
-    chunk_size = os.stat(path).st_blksize
+    block_size = os.stat(path).st_blksize
     with open(path, "rb") as file:
-        for chunk in iter(lambda: file.read(chunk_size), b""):
+        for chunk in iter(lambda: file.read(block_size), b""):
             blake2_hash.update(chunk)
     return blake2_hash.hexdigest()
 

@@ -24,7 +24,7 @@ import shutil
 from zielen.exceptions import (
     ServerError, AvailableSpaceError, FileTransferError)
 from zielen.basecommand import Command
-from zielen.io.transfer import rclone
+from zielen.io.transfer import rec_clone
 
 
 class ResetCommand(Command):
@@ -59,7 +59,7 @@ class ResetCommand(Command):
 
             # Retrieve remote files.
             try:
-                rclone(
+                rec_clone(
                     self.dest_dir.safe_path, self.local_dir.path,
                     files=self.dest_dir.db_file.get_tree(deleted=False),
                     msg="Retrieving files...",

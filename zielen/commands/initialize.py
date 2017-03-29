@@ -31,7 +31,7 @@ from zielen.exceptions import (
 from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
-from zielen.io.transfer import rclone
+from zielen.io.transfer import rec_clone
 from zielen.util.misc import symlink_tree
 from zielen.util.connect import SSHConnection
 
@@ -254,7 +254,7 @@ class InitializeCommand(Command):
 
             # Copy local files to the server.
             try:
-                rclone(
+                rec_clone(
                     self.local_dir.path, self.dest_dir.safe_path,
                     exclude=self.profile.ex_file.rel_files | user_symlinks,
                     msg="Moving files to remote...")
