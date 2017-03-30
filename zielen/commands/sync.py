@@ -76,11 +76,11 @@ class SyncCommand(Command):
                 To fix this issue, reset and re-initialize this profile."""))
 
         def reset_status(status: str):
-            self.profile.info_file.raw_vals["Status"] = status
+            self.profile.info_file.vals["Status"] = status
             self.profile.info_file.write()
 
         atexit.register(reset_status, self.profile.info_file.vals["Status"])
-        self.profile.info_file.raw_vals["Status"] = "syncing"
+        self.profile.info_file.vals["Status"] = "syncing"
         self.profile.info_file.write()
 
         # Copy exclude pattern file to the remote.

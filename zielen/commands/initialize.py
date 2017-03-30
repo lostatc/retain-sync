@@ -207,7 +207,7 @@ class InitializeCommand(Command):
         # The profile is now fully initialized. Update the info file.
         if self.profile.cfg_file.vals["RemoteHost"]:
             atexit.unregister(self.connection.unmount)
-        self.profile.info_file.raw_vals["Status"] = "initialized"
+        self.profile.info_file.vals["Status"] = "initialized"
         self.profile.info_file.update_synctime()
         self.profile.info_file.update_adjusttime()
         self.profile.info_file.write()

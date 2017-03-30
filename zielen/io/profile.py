@@ -147,8 +147,8 @@ class ProfileInfoFile(JSONFile):
     """Parse a JSON-formatted file for profile metadata.
 
     Attributes:
-        raw_vals: A dictionary of raw values from the file.
-        vals: A read-only dictionary of parsed values from the file.
+        raw_vals: A dictionary of raw string values from the file.
+        vals: A dict property of parsed values from the file.
     """
     def __init__(self, path) -> None:
         super().__init__(path)
@@ -180,15 +180,18 @@ class ProfileInfoFile(JSONFile):
                     tzinfo=datetime.timezone.utc).timestamp()
         return value
 
+    @vals.setter
+    def vals(self, key, value) -> None:
+        self.raw_vals[key] = value
+
     def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
 
         JSON Values:
             Status: A short string describing the status of the profile.
-                "initialized": fully initialized
-                "partial": partially initialized
-            Locked: A boolean used to determine if another operation is already
-                running on the profile.
+                initialized: Fully initialized.
+                partial: Partially initialized.
+                syncing: In the process of syncing.
             LastSync: The date and time (UTC) of the last sync on the profile.
             LastAdjust: The date and time (UTC) of the last priority adjustment
                 on the profile.
@@ -208,7 +211,6 @@ class ProfileInfoFile(JSONFile):
         version = float(pkg_resources.get_distribution("zielen").version)
         self.raw_vals.update({
             "Status": "partial",
-            "Locked": True,
             "LastSync": None,
             "LastAdjust": None,
             "Version": version,
@@ -223,14 +225,14 @@ class ProfileInfoFile(JSONFile):
         """Update the time of the last sync."""
         # Store the timestamp as a human-readable string so that the file can
         # be edited manually.
-        self.raw_vals["LastSync"] = datetime.datetime.utcnow().strftime(
+        self.vals["LastSync"] = datetime.datetime.utcnow().strftime(
             "%Y-%m-%dT%H:%M:%S")
 
     def update_adjusttime(self) -> None:
         """Update the time of the last sync."""
         # Store the timestamp as a human-readable string so that the file can
         # be edited manually.
-        self.raw_vals["LastAdjust"] = datetime.datetime.utcnow().strftime(
+        self.vals["LastAdjust"] = datetime.datetime.utcnow().strftime(
             "%Y-%m-%dT%H:%M:%S")
 
 
@@ -544,8 +546,8 @@ class ProfileConfigFile(ConfigFile):
         path: The path of the configuration file.
         profile: The Profile object that the config file belongs to.
         add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
-        raw_vals: A dictionary of unmodified config value strings.
-        vals: A read-only dictionary of modified config values.
+        raw_vals: A dictionary of raw config value strings.
+        vals: A dict property of parsed config values.
     """
     _instances = weakref.WeakSet()
     _true_vals = ["yes", "true"]
@@ -837,6 +839,10 @@ class ProfileConfigFile(ConfigFile):
 
         return value
 
+    @vals.setter
+    def vals(self, key, value) -> None:
+        self.raw_vals[key] = value
+
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
         msg_printed = False
@@ -845,7 +851,7 @@ class ProfileConfigFile(ConfigFile):
             # should not be prompted for certain settings.
             if (self.raw_vals.get("RemoteHost") in self._host_synonyms
                     and key in self._connect_keys):
-                self.raw_vals[key] = ""
+                self.vals[key] = ""
                 continue
 
             if key in self._subs:
@@ -872,5 +878,5 @@ class ProfileConfigFile(ConfigFile):
                         err("Error: this value " + err_msg)
                     else:
                         break
-                self.raw_vals[key] = usr_input
+                self.vals[key] = usr_input
         print()
