@@ -48,5 +48,5 @@ class FileTransferError(ProgramError):
     """Raised whenever there is an issue with a file transfer."""
 
 
-class LockError(ProgramError):
-    """Raised whenever a locked resource is accessed."""
+class StatusError(ProgramError):
+    """Raised whenever there is an issue with the status of the program."""

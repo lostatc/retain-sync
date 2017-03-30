@@ -21,9 +21,10 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import atexit
 import abc
+import socket
 from textwrap import dedent
 
-from zielen.exceptions import UserInputError, LockError
+from zielen.exceptions import UserInputError, StatusError
 from zielen.io.program import ProgramDir
 from zielen.io.profile import Profile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
@@ -40,6 +41,7 @@ class Command(abc.ABC):
         local_dir: A LocalSyncDir object representing the local directory.
         dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the remote connection.
+        _lock_socket: A unix domain socket used for locking a profile.
     """
     def __init__(self) -> None:
         self.profiles = {
@@ -48,6 +50,7 @@ class Command(abc.ABC):
         self.local_dir = None
         self.dest_dir = None
         self.connection = None
+        self._lock_socket = None
 
     @abc.abstractmethod
     def main(self) -> None:
@@ -84,8 +87,6 @@ class Command(abc.ABC):
             UserInputError: The selected profile is only partially initialized.
         """
         self.profile.info_file.read()
-
-        # Lock profile if not already locked.
         self.lock()
 
         # Warn if profile is only partially initialized.
@@ -115,27 +116,18 @@ class Command(abc.ABC):
                 self.profile.cfg_file.vals["RemoteDir"])
 
     def lock(self) -> None:
-        """Lock the profile if not already locked."""
-        def unlock() -> None:
-            """Release the lock on the profile.
+        """Lock the profile if not already locked.
 
-            Raises:
-                LockError: The selected profile is already locked.
-            """
-            self.profile.info_file.raw_vals["Locked"] = False
-            if os.path.isfile(self.profile.info_file.path):
-                self.profile.info_file.write()
-
-        if self.profile:
-            if os.path.isfile(self.profile.info_file.path):
-                self.profile.info_file.read()
-            if self.profile.info_file.vals["Locked"]:
-                raise LockError(
-                    "another operation on this profile is already taking "
-                    "place")
-            self.profile.info_file.raw_vals["Locked"] = True
-            atexit.register(unlock)
-            self.profile.info_file.write()
+        This prevents multiple operations from running on the same profile at
+        the same time. The lock is released automatically whenever the program
+        exits, even via SIGKILL.
+        """
+        self._lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            self._lock_socket.bind("\0" + "zielen-" + self.profile.name)
+        except socket.error:
+            raise StatusError(
+                "another operation on this profile is already taking place")
 
     @staticmethod
     def print_interrupt_msg() -> None:

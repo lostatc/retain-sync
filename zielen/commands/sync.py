@@ -20,9 +20,11 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import shutil
+import atexit
+from textwrap import dedent
 from typing import Iterable, Set, NamedTuple
 
-from zielen.exceptions import ServerError
+from zielen.exceptions import ServerError, StatusError
 from zielen.basecommand import Command
 from zielen.util.misc import timestamp_path, rec_scan, symlink_tree
 from zielen.io.profile import ProfileExcludeFile
@@ -63,6 +65,23 @@ class SyncCommand(Command):
             ServerError: The connection to the remote directory was lost.
         """
         self.setup_profile()
+
+        # TODO: Implement some type of journaling so that filesystem changes
+        # can be queued up and executed before the next sync if the current one
+        # is killed.
+        if self.profile.info_file.vals["Status"] == "syncing":
+            raise StatusError(dedent("""\
+                the program was killed during a previous sync without a chance to recover
+
+                To fix this issue, reset and re-initialize this profile."""))
+
+        def reset_status(status: str):
+            self.profile.info_file.raw_vals["Status"] = status
+            self.profile.info_file.write()
+
+        atexit.register(reset_status, self.profile.info_file.vals["Status"])
+        self.profile.info_file.raw_vals["Status"] = "syncing"
+        self.profile.info_file.write()
 
         # Copy exclude pattern file to the remote.
         try:
