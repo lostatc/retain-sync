@@ -114,7 +114,7 @@ class SyncDir:
         """
         exclude = set() if exclude is None else set(exclude)
         if lookup:
-            def lookup_stat(path):
+            def lookup_stat(path: str) -> os.stat_result:
                 full_path = os.path.join(self.path, path)
                 for entry in self._sub_entries:
                     if entry.path == full_path:
@@ -126,6 +126,7 @@ class SyncDir:
             output = {}
 
         if not memoize or not self._sub_entries:
+            self._sub_entries = []
             for entry in rec_scan(self.path):
                 self._sub_entries.append(entry)
 
