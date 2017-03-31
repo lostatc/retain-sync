@@ -25,7 +25,7 @@ import contextlib
 from textwrap import indent
 
 from zielen.exceptions import FileTransferError
-from zielen.util.misc import progress_bar, shell_cmd
+from zielen.util.misc import ProgressBar, shell_cmd
 
 
 def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
@@ -68,16 +68,16 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
 
         if msg is not None and sys.stdout.isatty():
             # Print status bar.
-            rsync_bar = progress_bar(0.35, msg)
+            rsync_bar = ProgressBar(0.35, msg=msg)
             for line in cmd.stdout:
                 if not line.strip():
                     continue
                 percent = float(line.split()[1].rstrip("%"))/100
-                rsync_bar(percent)
+                rsync_bar.update(percent)
             cmd.wait()
             # Make sure that the progress bar is full once the transfer is
             # completed.
-            rsync_bar(1.0)
+            rsync_bar.update(1.0)
             print()
 
         stdout, stderr = cmd.communicate()

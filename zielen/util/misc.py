@@ -152,48 +152,57 @@ def shell_cmd(input_cmd: list) -> subprocess.Popen:
     return cmd
 
 
-def progress_bar(
-        coverage: float, msg="", r_align=True) -> Callable[[float], None]:
-    """Create a function for updating a progress bar.
+class ProgressBar:
+    """An ascii progress bar for the terminal.
 
-    Args:
+    Attributes:
         coverage: The percentage of the width of the terminal window that the
-            progress bar should cover.
+            progress bar should cover as a decimal between 0 and 1.
         msg: A message to be printed opposite the progress bar.
         r_align: Align the progress bar to the right edge of the screen as
             opposed to the left.
+        fill_char: The character that will comprise the filled portion of the
+            bar.
+        empty_char: The character that will comprise the empty portion of the
+            bar.
     """
-    coverage = float(coverage)
+    def __init__(self, coverage: float, msg="", r_align=True, fill_char="#",
+                 empty_char="-") -> None:
+        self.coverage = coverage
+        self.msg = msg
+        self.r_align = r_align
+        self.fill_char = fill_char[0]
+        self.empty_char = empty_char[0]
 
-    def update(percent: float) -> None:
-        """Update a progress bar.
+    def update(self, fill_amount: float) -> None:
+        """Print an updated progress bar.
 
         Args:
-            percent: Fill the bar to this percentage.
+            fill_amount: Fill the bar to this percentage as a decimal between 0
+                and 1.
         """
-        percent = float(percent)
-        if percent > 1 or percent < 0:
+        if fill_amount > 1 or fill_amount < 0:
             raise ValueError("expected a number between 0 and 1")
+
         term_width = shutil.get_terminal_size()[0]
-        bar_length = int(round(term_width * coverage))
-        filled_length = int(round(bar_length * percent))
+        bar_length = int(round(term_width * self.coverage))
+        filled_length = int(round(bar_length * fill_amount))
         empty_length = bar_length - filled_length
-        percent_str = str(round(percent*100)).rjust(3)
+        percent_str = str(round(fill_amount * 100)).rjust(3)
         bar_str = "[{0}] {1}%".format(
-            "#"*filled_length + "-"*empty_length, percent_str)
+            self.fill_char*filled_length + self.empty_char*empty_length,
+            percent_str)
 
         # Truncate input message so that it doesn't overlap with the bar.
-        nonlocal msg
         trunc_length = term_width - len(bar_str) - 1
-        msg = msg[:trunc_length]
+        trunc_msg = self.msg[:trunc_length]
 
-        if r_align:
-            print(msg + bar_str.rjust(term_width - len(msg)),
+        if self.r_align:
+            print(trunc_msg + bar_str.rjust(term_width - len(trunc_msg)),
                   flush=True, end="\r")
         else:
-            print(bar_str + msg.rjust(term_width - len(bar_str)),
+            print(bar_str + trunc_msg.rjust(term_width - len(bar_str)),
                   flush=True, end="\r")
-    return update
 
 
 def b2sum(path: str) -> str:
