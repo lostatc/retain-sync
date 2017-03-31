@@ -65,10 +65,13 @@ class TrashDir:
 
     def check_file(self, path: str) -> bool:
         """Check if a file is in the trash by comparing sizes and checksums."""
-        overlap_files = [filepath for filepath, size in self.sizes if
-                         os.stat(path).st_size == size]
+        file_size = os.stat(path).st_size
+        overlap_files = [
+            filepath for filepath, size in self.sizes if file_size == size]
         if overlap_files:
-            overlap_sums = [b2sum(filepath) for filepath in overlap_files]
+            overlap_sums = [
+                b2sum(filepath) for filepath in overlap_files
+                if os.path.isfile(filepath)]
             if b2sum(path) in overlap_sums:
                 return True
         return False
