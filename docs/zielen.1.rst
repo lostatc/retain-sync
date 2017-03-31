@@ -181,6 +181,9 @@ Patterns have the following format:
 * A set of brackets '[]' matches any single character contained within the
   brackets.
 * To match any of the above meta-characters literally, wrap them in brackets.
+* File names starting with a dot '.' are not matched unless the pattern
+  explicitly includes a dot.
+* Patterns ending with a slash only match directory paths.
 * Patterns starting with a slash match file paths relative to the root of the
   sync directory.
 * Patterns not starting with a slash match the ends of file paths anywhere in
