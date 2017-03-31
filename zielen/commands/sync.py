@@ -526,8 +526,8 @@ class SyncCommand(Command):
         try:
             for path in conflict_paths:
                 new_path = timestamp_path(path, keyword="conflict")
-                if (self.profile.db_file.get_path(path)
-                        and self.profile.db_file.get_path(path).directory):
+                path_data = self.profile.db_file.get_path(path)
+                if path_data and path_data.directory:
                     # Conflicts are resolved on a file-by-file basis.
                     continue
                 elif local_mtimes[path] < remote_mtimes[path]:
@@ -730,10 +730,10 @@ class SyncCommand(Command):
         new_dir_paths = set()
         for path in paths:
             new_path = timestamp_path(path, keyword="deleted")
+            path_data = self.dest_dir.db_file.get_path(path)
             # Separate paths into files and directories so that they can be
             # marked accordingly when they are re-added to the database.
-            if (self.dest_dir.db_file.get_path(path)
-                    and self.dest_dir.db_file.get_path(path).directory):
+            if path_data and path_data.directory:
                 new_dir_paths.add(new_path)
             else:
                 new_file_paths.add(new_path)

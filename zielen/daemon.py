@@ -87,12 +87,16 @@ class Daemon(Command):
         # their priority values in the database. This is done to spread out
         # the individual sqlite transactions over time so that the database
         # isn't a bottleneck. A set is used to prevent any individual file
-        # from being counted more than once per second.
+        # from being counted more than once per second. Only the priorities of
+        # regular files are incremented (not directories).
         while True:
-            accessed_files = set()
+            accessed_paths = set()
             while self.files_queue.qsize() != 0:
-                accessed_files.add(self.files_queue.get())
-            self.profile.db_file.increment(accessed_files, 1)
+                path = self.files_queue.get()
+                path_data = self.profile.db_file.get_path(path)
+                if path_data and not path_data.directory:
+                    accessed_paths.add(path)
+            self.profile.db_file.increment(accessed_paths, 1)
 
             self._adjust()
             time.sleep(1)
@@ -149,8 +153,8 @@ class Daemon(Command):
         for event in adapter.event_gen():
             if event is not None:
                 header, type_names, watch_path, filename = event
+                accessed_path = os.path.relpath(
+                    os.path.join(watch_path.decode(), filename.decode()),
+                    start_path)
                 if "IN_OPEN" in type_names:
-                    accessed_file = os.path.relpath(
-                        os.path.join(watch_path.decode(), filename.decode()),
-                        start_path)
-                    self.files_queue.put(accessed_file)
+                    self.files_queue.put(accessed_path)

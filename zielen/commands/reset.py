@@ -53,7 +53,7 @@ class ResetCommand(Command):
         if not self.no_retrieve:
             # Check if there is enough space locally to accommodate remote
             # files.
-            if self.dest_dir.total_size() > self.local_dir.space_avail():
+            if self.dest_dir.disk_usage() > self.local_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough local space to accommodate remote files")
 
@@ -75,8 +75,7 @@ class ResetCommand(Command):
                         os.remove(
                             os.path.join(self.dest_dir.safe_path, rel_path))
                     except FileNotFoundError:
-                        raise ServerError(
-                            "the connection to the remote directory was lost")
+                        pass
 
                 # Close the database connection, and then remove the program
                 # directory. If the database connection is not closed,
@@ -85,7 +84,7 @@ class ResetCommand(Command):
                 shutil.rmtree(self.dest_dir.prgm_dir)
 
                 # Check that the remote directory is empty.
-                if self.dest_dir.get_paths():
+                if self.dest_dir.get_paths(dirs=False):
                     raise FileTransferError("some files were not retrieved")
 
         # Remove non-user-created symlinks from the local directory.
