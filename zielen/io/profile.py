@@ -34,6 +34,9 @@ from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir, SyncDBFile
 from zielen.util.misc import err, env, DictProperty
 
+PathData = NamedTuple(
+    "PathData", [("directory", bool), ("priority", float)])
+
 
 class Profile:
     """Get information about a profile and its contents.
@@ -189,9 +192,8 @@ class ProfileInfoFile(JSONFile):
 
         JSON Values:
             Status: A short string describing the status of the profile.
-                initialized: Fully initialized.
-                partial: Partially initialized.
-                syncing: In the process of syncing.
+                "initialized": Fully initialized.
+                "partial": Partially initialized.
             LastSync: The date and time (UTC) of the last sync on the profile.
             LastAdjust: The date and time (UTC) of the last priority adjustment
                 on the profile.
@@ -247,9 +249,6 @@ class ProfileDBFile(SyncDBFile):
         conn: The sqlite connection object for the database.
         cur: The sqlite cursor object for the connection.
     """
-    _PathData = NamedTuple(
-        "_PathData", [("directory", bool), ("priority", float)])
-
     def create(self) -> None:
         """Create a new empty database.
 
@@ -267,7 +266,9 @@ class ProfileDBFile(SyncDBFile):
             raise FileExistsError("the database file already exists")
 
         self.conn = sqlite3.connect(
-            self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+            self.path,
+            detect_types=sqlite3.PARSE_DECLTYPES,
+            isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
 
         with self._transact():
@@ -338,7 +339,7 @@ class ProfileDBFile(SyncDBFile):
             """, nodes_values)
 
     def add_paths(self, files: Iterable[str], dirs: Iterable[str],
-                  priority=0) -> None:
+                  priority=0, replace=False) -> None:
         """Add new file paths to the database if not already there.
 
         A file path is automatically marked as a directory when sub-paths are
@@ -349,6 +350,7 @@ class ProfileDBFile(SyncDBFile):
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
             priority: The starting priority of the file paths.
+            replace: Replace existing rows instead of ignoring them.
         """
         # Sort paths by depth. A file can't be added to the database until its
         # parent directory has been added.
@@ -358,8 +360,9 @@ class ProfileDBFile(SyncDBFile):
         paths.sort(key=lambda x: x.count(os.sep))
 
         parents = set()
-        nodes_values = []
-        closure_values = []
+        insert_nodes_vals = []
+        insert_closure_vals = []
+        rm_vals = []
         for path in paths:
             path_id = self._get_path_id(path)
             parent = os.path.dirname(path)
@@ -369,29 +372,35 @@ class ProfileDBFile(SyncDBFile):
             else:
                 parent_id = path_id
 
-            nodes_values.append({
+            rm_vals.append({
+                "path_id": path_id})
+            insert_nodes_vals.append({
                 "path": path,
                 "path_id": path_id,
                 "directory": bool(path in dirs),
                 "priority": priority})
-            closure_values.append({
+            insert_closure_vals.append({
                 "path_id": path_id,
                 "parent_id": parent_id})
 
-        with self._transact():
+        if replace:
             self.cur.executemany("""\
-                INSERT INTO nodes (id, path, directory, priority)
-                VALUES (:path_id, :path, :directory, :priority);
-                """, nodes_values)
-            self.cur.executemany("""\
-                INSERT INTO closure (ancestor, descendant, depth)
-                SELECT ancestor, :path_id, c.depth + 1
-                FROM closure AS c
-                WHERE descendant = :parent_id
-                UNION ALL SELECT :path_id, :path_id, 0;
-                """, closure_values)
-            self._mark_directory(parents)
-            self._update_priority(parents)
+                DELETE FROM nodes
+                WHERE id = :path_id
+                """, rm_vals)
+        self.cur.executemany("""\
+            INSERT INTO nodes (id, path, directory, priority)
+            VALUES (:path_id, :path, :directory, :priority);
+            """, insert_nodes_vals)
+        self.cur.executemany("""\
+            INSERT INTO closure (ancestor, descendant, depth)
+            SELECT ancestor, :path_id, c.depth + 1
+            FROM closure AS c
+            WHERE descendant = :parent_id
+            UNION ALL SELECT :path_id, :path_id, 0;
+            """, insert_closure_vals)
+        self._mark_directory(parents)
+        self._update_priority(parents)
 
     def add_inflated(self, files: Iterable[str], dirs: Iterable[str]) -> None:
         """Add new file paths to the database with an inflated priority.
@@ -415,25 +424,24 @@ class ProfileDBFile(SyncDBFile):
         Args:
             paths: The file paths to remove.
         """
-        nodes_values = ({
+        rm_vals = ({
             "path_id": self._get_path_id(path)}
             for path in paths)
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
-        with self._transact():
-            self.cur.executemany("""\
-                DELETE FROM nodes
-                WHERE id IN (
-                    SELECT n.id
-                    FROM nodes AS n
-                    JOIN closure AS c
-                    ON (n.id = c.descendant)
-                    WHERE c.ancestor = :path_id);
-                """, nodes_values)
-            self._update_priority(parents)
+        self.cur.executemany("""\
+            DELETE FROM nodes
+            WHERE id IN (
+                SELECT n.id
+                FROM nodes AS n
+                JOIN closure AS c
+                ON (n.id = c.descendant)
+                WHERE c.ancestor = :path_id);
+            """, rm_vals)
+        self._update_priority(parents)
 
-    def get_path(self, path: str) -> _PathData:
+    def get_path(self, path: str) -> PathData:
         """Get data associated with a file path.
 
         Args:
@@ -455,9 +463,9 @@ class ProfileDBFile(SyncDBFile):
 
         result = self.cur.fetchone()
         if result:
-            return self._PathData(*result[1:])
+            return PathData(*result[1:])
 
-    def get_tree(self, start=None, directory=None) -> Dict[str, _PathData]:
+    def get_tree(self, start=None, directory=None) -> Dict[str, PathData]:
         """Get the paths of files in the database.
 
         Args:
@@ -484,7 +492,7 @@ class ProfileDBFile(SyncDBFile):
             AND (:directory IS NULL OR n.directory = :directory);
             """, {"start_id": start_id, "directory": directory})
 
-        return {path: self._PathData(directory, priority)
+        return {path: PathData(directory, priority)
                 for path, directory, priority in self.cur.fetchall()}
 
     def increment(self, paths: Iterable[str], increment) -> None:
@@ -494,20 +502,19 @@ class ProfileDBFile(SyncDBFile):
             paths: The paths to increment the priority of.
             increment: The value to increment the paths by.
         """
-        nodes_values = ({
+        increment_vals = ({
             "path_id": self._get_path_id(path),
             "increment": increment}
             for path in paths)
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
-        with self._transact():
-            self.cur.executemany("""\
-                UPDATE nodes
-                SET priority = priority + :increment
-                WHERE id = :path_id;
-                """, nodes_values)
-            self._update_priority(parents)
+        self.cur.executemany("""\
+            UPDATE nodes
+            SET priority = priority + :increment
+            WHERE id = :path_id;
+            """, increment_vals)
+        self._update_priority(parents)
 
     def adjust_all(self, adjustment) -> None:
         """Multiply the priorities of all file paths by a constant.
@@ -515,11 +522,10 @@ class ProfileDBFile(SyncDBFile):
         Args:
             adjustment: The constant to multiply file priorities by.
         """
-        with self._transact():
-            self.cur.execute("""\
-                UPDATE nodes
-                SET priority = priority * :adjustment;
-                """, {"adjustment": adjustment})
+        self.cur.execute("""\
+            UPDATE nodes
+            SET priority = priority * :adjustment;
+            """, {"adjustment": adjustment})
 
 
 class ProfileConfigFile(ConfigFile):

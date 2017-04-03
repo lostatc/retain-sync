@@ -271,12 +271,14 @@ class InitializeCommand(Command):
         if not os.path.isfile(self.profile.db_file.path):
             self.profile.db_file.create()
         self.profile.db_file.add_paths(remote_files, remote_dirs)
+        self.profile.db_file.conn.commit()
 
         # Generate the remote database.
         try:
             if not os.path.isfile(self.dest_dir.db_file.path):
                 self.dest_dir.db_file.create()
             self.dest_dir.db_file.add_paths(remote_files, remote_dirs)
+            self.dest_dir.db_file.conn.commit()
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")

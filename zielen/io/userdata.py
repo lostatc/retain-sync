@@ -20,7 +20,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import sqlite3
-import datetime
+import time
 import shutil
 import collections
 from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
@@ -28,6 +28,10 @@ from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
 from zielen.exceptions import ServerError
 from zielen.io.program import SyncDBFile
 from zielen.util.misc import rec_scan, b2sum, FactoryDict
+
+PathData = NamedTuple(
+    "PathData",
+    [("directory", bool), ("deleted", bool), ("lastsync", float)])
 
 
 class TrashDir:
@@ -66,12 +70,12 @@ class TrashDir:
     def check_file(self, path: str) -> bool:
         """Check if a file is in the trash by comparing sizes and checksums."""
         file_size = os.stat(path).st_size
-        overlap_files = [
-            filepath for filepath, size in self.sizes if file_size == size]
+        overlap_files = {
+            filepath for filepath, size in self.sizes if file_size == size}
         if overlap_files:
-            overlap_sums = [
+            overlap_sums = {
                 b2sum(filepath) for filepath in overlap_files
-                if os.path.isfile(filepath)]
+                if os.path.isfile(filepath)}
             if b2sum(path) in overlap_sums:
                 return True
         return False
@@ -223,10 +227,6 @@ class DestDBFile(SyncDBFile):
     Attributes:
         path: The path of the database file.
     """
-    _PathData = NamedTuple(
-        "_PathData",
-        [("directory", bool), ("deleted", bool), ("lastsync", float)])
-
     def create(self) -> None:
         """Create a new empty database.
 
@@ -247,7 +247,9 @@ class DestDBFile(SyncDBFile):
             raise FileExistsError("the database file already exists")
 
         self.conn = sqlite3.connect(
-            self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+            self.path,
+            detect_types=sqlite3.PARSE_DECLTYPES,
+            isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
 
         with self._transact():
@@ -325,38 +327,8 @@ class DestDBFile(SyncDBFile):
                 LIMIT 1);
             """, nodes_values)
 
-    def _update_synctime(self, paths: Iterable[str]) -> None:
-        """Update the time of the last sync for some files.
-
-        Args:
-            paths: The file paths to set.
-        """
-        time = datetime.datetime.utcnow().replace(
-            tzinfo=datetime.timezone.utc).timestamp()
-        nodes_values = ({
-            "path_id": self._get_path_id(path),
-            "time": time}
-            for path in paths)
-        self.cur.executemany("""\
-            UPDATE nodes
-            SET lastsync = :time
-            WHERE id = :path_id;
-            """, nodes_values)
-
-    def _mark_directory(self, paths: Iterable[str]) -> None:
-        """Mark paths as directories."""
-        nodes_values = ({
-            "path_id": self._get_path_id(path)}
-            for path in paths)
-        self.cur.executemany("""\
-            UPDATE nodes
-            SET directory = 1
-            WHERE directory = 0
-            AND id = :path_id;
-            """, nodes_values)
-
     def add_paths(self, files: Iterable[str], dirs: Iterable[str],
-                  deleted=False) -> None:
+                  deleted=False, replace=False) -> None:
         """Add new file paths to the database if not already there.
 
         A file path is automatically marked as a directory when sub-paths are
@@ -369,6 +341,7 @@ class DestDBFile(SyncDBFile):
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
             deleted: Mark the paths as deleted.
+            replace: Replace existing rows instead of ignoring them.
         """
         # Sort paths by depth. A file can't be added to the database until its
         # parent directory has been added.
@@ -378,8 +351,10 @@ class DestDBFile(SyncDBFile):
         paths.sort(key=lambda x: x.count(os.sep))
 
         parents = set()
-        nodes_values = []
-        closure_values = []
+        insert_nodes_vals = []
+        insert_closure_vals = []
+        rm_vals = []
+        timestamp = time.time()
         for path in paths:
             path_id = self._get_path_id(path)
             parent = os.path.dirname(path)
@@ -389,30 +364,36 @@ class DestDBFile(SyncDBFile):
             else:
                 parent_id = path_id
 
-            nodes_values.append({
+            rm_vals.append({
+                "path_id": path_id})
+            insert_nodes_vals.append({
                 "path": path,
                 "path_id": path_id,
                 "directory": bool(path in dirs),
-                "deleted": deleted})
-            closure_values.append({
+                "deleted": deleted,
+                "lastsync": timestamp})
+            insert_closure_vals.append({
                 "path_id": path_id,
                 "parent_id": parent_id})
 
-        with self._transact():
+        if replace:
             self.cur.executemany("""\
-                INSERT INTO nodes (id, path, directory, deleted)
-                VALUES (:path_id, :path, :directory, :deleted);
-                """, nodes_values)
-            self.cur.executemany("""\
-                INSERT INTO closure (ancestor, descendant, depth)
-                SELECT ancestor, :path_id, c.depth + 1
-                FROM closure AS c
-                WHERE descendant = :parent_id
-                UNION ALL SELECT :path_id, :path_id, 0;
-                """, closure_values)
-            self._mark_directory(parents)
-            self._update_deleted(parents)
-            self._update_synctime(paths)
+                DELETE FROM nodes
+                WHERE id = :path_id
+                """, rm_vals)
+        self.cur.executemany("""\
+            INSERT INTO nodes (id, path, directory, deleted)
+            VALUES (:path_id, :path, :directory, :deleted);
+            """, insert_nodes_vals)
+        self.cur.executemany("""\
+            INSERT INTO closure (ancestor, descendant, depth)
+            SELECT ancestor, :path_id, c.depth + 1
+            FROM closure AS c
+            WHERE descendant = :parent_id
+            UNION ALL SELECT :path_id, :path_id, 0;
+            """, insert_closure_vals)
+        self._mark_directory(parents)
+        self._update_deleted(parents)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -423,25 +404,24 @@ class DestDBFile(SyncDBFile):
         Args:
             paths: The file paths to remove.
         """
-        nodes_values = ({
+        rm_vals = ({
             "path_id": self._get_path_id(path)}
             for path in paths)
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
-        with self._transact():
-            self.cur.executemany("""\
-                DELETE FROM nodes
-                WHERE id IN (
-                    SELECT n.id
-                    FROM nodes AS n
-                    JOIN closure AS c
-                    ON (n.id = c.descendant)
-                    WHERE c.ancestor = :path_id);
-                """, nodes_values)
-            self._update_deleted(parents)
+        self.cur.executemany("""\
+            DELETE FROM nodes
+            WHERE id IN (
+                SELECT n.id
+                FROM nodes AS n
+                JOIN closure AS c
+                ON (n.id = c.descendant)
+                WHERE c.ancestor = :path_id);
+            """, rm_vals)
+        self._update_deleted(parents)
 
-    def get_path(self, path: str) -> _PathData:
+    def get_path(self, path: str) -> PathData:
         """Get data associated with a file path.
 
         Args:
@@ -463,10 +443,10 @@ class DestDBFile(SyncDBFile):
 
         result = self.cur.fetchone()
         if result:
-            return self._PathData(*result[1:])
+            return PathData(*result[1:])
 
     def get_tree(self, start=None, directory=None, deleted=None,
-                 min_lastsync=None) -> Dict[str, _PathData]:
+                 min_lastsync=None) -> Dict[str, PathData]:
         """Get a dict of values for paths that match certain constraints.
 
         Args:
@@ -500,5 +480,5 @@ class DestDBFile(SyncDBFile):
             """, {"start_id": start_id, "directory": directory,
                   "deleted": deleted, "min_lastsync": min_lastsync})
 
-        return {path: self._PathData(directory, deleted, lastsync)
+        return {path: PathData(directory, deleted, lastsync)
                 for path, directory, deleted, lastsync in self.cur.fetchall()}

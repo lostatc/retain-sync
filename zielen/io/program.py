@@ -94,7 +94,6 @@ class ConfigFile:
                             and re.search("=", line)):
                         key, value = line.partition("=")[::2]
                         key = key.strip()
-                        value = value.strip()
                         if key not in self.raw_vals:
                             continue
                         # Substitute value in the input file with the value in
@@ -140,7 +139,9 @@ class SyncDBFile:
         self.path = path
         if os.path.isfile(self.path):
             self.conn = sqlite3.connect(
-                self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+                self.path,
+                detect_types=sqlite3.PARSE_DECLTYPES,
+                isolation_level="IMMEDIATE")
             self.cur = self.conn.cursor()
             self.cur.executescript("""\
                 PRAGMA foreign_keys = ON;

@@ -28,7 +28,7 @@ import pwd
 import hashlib
 import datetime
 import collections
-from typing import Callable, Collection, Iterable, Generator
+from typing import Collection, Iterable, Generator
 
 
 def err(*args, **kwargs) -> None:
@@ -242,7 +242,7 @@ def timestamp_path(path: str, keyword="") -> str:
 
 
 def print_table(data: Collection, headers: Collection) -> None:
-    """Print input values in a formatted table.
+    """Print input values in a formatted ascii table.
 
     All values in the table are left-aligned, and columns are as wide as
     their longest value.

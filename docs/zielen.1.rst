@@ -50,7 +50,8 @@ Priority
     The priority is an internal value assigned to each file that is used to
     determine which should stay in the local directory. It is based on how
     frequently the file is accessed (weighted toward more recent access) and
-    the size of the file (favoring smaller files).
+    the size of the file (favoring smaller files). Priority values are
+    independent for each client.
 
 Storage Limit
     The storage limit is the user-defined amount of data that will remain in
@@ -149,15 +150,17 @@ that remain. This behavior can be overridden by setting **SyncExtraFiles** to
 During a sync, files that are new since the last sync have their priority
 artifically inflated in order to keep them in the local directory longer. This
 is to prevent files from being removed from the local directory as soon as
-they're created, when they're likely still being used. This behavior can be
-overridden by setting **InflatePriority** to 'no' in the profile config file.
+they're created, when they're likely still being used. This applies to both
+files that were created locally and new files synced from the remote directory.
+This behavior can be overridden by setting **InflatePriority** to 'no' in the
+profile config file.
 
 **zielen** uses **rsync** for copying files between the local and remote
-directories, and should preserve symbolic links, permissions, modification
-times, ownership, hard links, ACLs, extended attributes and sparse files as
-long as both filesystems support them. The program deliberately does not sync
-user-created symlinks. The rationale behind this is that absolute links will be
-broken when copied to another directory.
+directories, and should preserve permissions, modification times, ownership,
+hard links, ACLs, extended attributes and sparse files as long as both
+filesystems support them. The program deliberately does not sync user-created
+symlinks. The rationale behind this is that absolute links will be broken when
+copied to another directory.
 
 EXCLUDING
 =========
