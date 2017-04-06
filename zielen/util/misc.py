@@ -205,18 +205,35 @@ class ProgressBar:
                   flush=True, end="\r")
 
 
-def b2sum(path: str) -> str:
-    """Get the BLAKE2 checksum of a file, reading one block at a time.
+def sha1sum(path: str) -> str:
+    """Get the SHA-1 checksum of a file, reading one block at a time.
 
     Args:
-        path: The path of the file to find the checksum of.
+        path: The path of the file to find the checksum of. If this value is
+            the path of a directory, a checksum will be computed based on all
+            the files in the directory.
+
+    Returns:
+        The hexadecimal checksum of the file.
     """
-    blake2_hash = hashlib.blake2b()
-    block_size = os.stat(path).st_blksize
-    with open(path, "rb") as file:
-        for chunk in iter(lambda: file.read(block_size), b""):
-            blake2_hash.update(chunk)
-    return blake2_hash.hexdigest()
+    sha1_hash = hashlib.sha1()
+    checksum_paths = []
+    try:
+        for entry in rec_scan(path):
+            if entry.is_file(follow_symlinks=False):
+                checksum_paths.append(entry.path)
+    except NotADirectoryError:
+        checksum_paths.append(path)
+
+    # This is necessary to ensure that the same checksum is returned each time.
+    checksum_paths.sort()
+
+    for checksum_path in checksum_paths:
+        block_size = os.stat(checksum_path).st_blksize
+        with open(checksum_path, "rb") as file:
+            for chunk in iter(lambda: file.read(block_size), b""):
+                sha1_hash.update(chunk)
+    return sha1_hash.hexdigest()
 
 
 def timestamp_path(path: str, keyword="") -> str:
@@ -230,6 +247,9 @@ def timestamp_path(path: str, keyword="") -> str:
         path: The file path on which to base the new file path.
         keyword: A string to include in the new file path before the
             timestamp.
+
+    Returns:
+        The modified file path.
     """
     keyword += "-" if keyword else keyword
     name, extension = os.path.splitext(path)

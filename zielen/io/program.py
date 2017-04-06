@@ -179,12 +179,15 @@ class SyncDBFile:
 
     @staticmethod
     def _get_path_id(path: str) -> int:
-        """Hash a file path with BLAKE2 and return it as a 64-bit int.
+        """Hash a file path with SHA-1 and return it as a 64-bit int.
 
         Args:
             path: The file path to return the hash of.
+
+        Returns:
+            The hash of the file path as a 64-bit int.
         """
-        blake2_hash = hashlib.blake2b(digest_size=8)
-        blake2_hash.update(path.encode())
+        sha1_hash = hashlib.sha1()
+        sha1_hash.update(path.encode())
         return int.from_bytes(
-            blake2_hash.digest(), byteorder="big", signed=True)
+            sha1_hash.digest()[:8], byteorder="big", signed=True)
