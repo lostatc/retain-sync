@@ -72,13 +72,13 @@ class ProfileExcludeFile:
     excluded a given file.
 
     Attributes:
-        comment_reg: Regex that denotes a comment line.
+        comment_regex: Regex that denotes a comment line.
         path: The path of the exclude pattern file.
         files: A set of absolute file paths that match the globbing patterns.
         rel_files: A set of relative file paths that match the globbing
             patterns.
     """
-    comment_reg = re.compile(r"^\s*#")
+    comment_regex = re.compile(r"^\s*#")
 
     def __init__(self, path: str) -> None:
         self.path = path
@@ -118,7 +118,7 @@ class ProfileExcludeFile:
         """
         with open(self.path) as file:
             for line in file:
-                if not self.comment_reg.search(line):
+                if not self.comment_regex.search(line):
                     yield line
 
     def glob(self, start_path: str) -> None:
@@ -564,8 +564,8 @@ class ProfileConfigFile(ConfigFile):
         "StorageLimit"
         ]
     _opt_keys = [
-        "SyncInterval", "SshfsOptions", "TrashDirs", "DeleteAlways",
-        "SyncExtraFiles", "InflatePriority", "AccountForSize "
+        "SyncInterval", "SshfsOptions", "TrashDirs", "PriorityHalfLife",
+        "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize "
         ]
     _all_keys = _req_keys + _opt_keys
     _bool_keys = [
@@ -579,6 +579,7 @@ class ProfileConfigFile(ConfigFile):
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
         "TrashDirs":        os.path.join(env("XDG_DATA_HOME"), "Trash/files"),
+        "PriorityHalfLife": "120",
         "DeleteAlways":     "no",
         "SyncExtraFiles":   "yes",
         "InflatePriority":  "yes",
@@ -732,6 +733,9 @@ class ProfileConfigFile(ConfigFile):
             if value:
                 if re.search("(^|:)(?!~?/)", value):
                     return "only accepts absolute paths"
+        elif key == "PriorityHalfLife":
+            if not re.search("^[0-9]+$", value):
+                return "must be an integer"
 
     def check_all(self, check_empty=True, context="config file") -> None:
         """Check that file is valid and syntactically correct.
@@ -788,6 +792,7 @@ class ProfileConfigFile(ConfigFile):
             SyncInterval: Input value converted to the number of seconds.
             TrashDirs: Input value converted to a list of user-expanded,
                 normalized paths.
+            PriorityHalfLife: Input value converted to the number of seconds.
             DeleteAlways: Input value converted to a bool.
             SyncExtraFiles: Input value converted to a bool.
             InflatePriority: Input value converted to a bool.
@@ -836,6 +841,11 @@ class ProfileConfigFile(ConfigFile):
                 for index, element in enumerate(value):
                     value[index] = os.path.expanduser(
                         os.path.normpath(element))
+            elif key == "PriorityHalfLife":
+                try:
+                    value = int(value) * 60**2
+                except ValueError:
+                    pass
             elif key in self._bool_keys:
                 if isinstance(value, str):
                     if value.lower() in self._true_vals:

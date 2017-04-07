@@ -42,24 +42,20 @@ class Daemon(Command):
         ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
             between making priority adjustments. Two files accessed within this
             interval of time will be weighted the same.
-        ADJUST_CONSTANT: This is the constant used to adjust priorities for
-            time. Every ADJUST_INTERVAL seconds, the priority of every file is
-            multiplied by this value.
         profile: The currently selected profile.
         files_queue: A Queue for temporarily holding the paths of files that
             have been opened in the local or remote directories before they're
             updated in the database.
     """
-    ADJUST_INTERVAL = 20*60
-    ADJUST_CONSTANT = 0.99
+    ADJUST_INTERVAL = 10*60
 
-    def __init__(self, profile_input):
+    def __init__(self, profile_input) -> None:
         super().__init__()
         self.profile_input = profile_input
         self.profile = self.select_profile(profile_input)
         self.files_queue = multiprocessing.Queue()
 
-    def main(self):
+    def main(self) -> None:
         """Start the daemon."""
         self.profile.info_file.read()
         self.profile.cfg_file.read()
@@ -97,11 +93,12 @@ class Daemon(Command):
                 if path_data and not path_data.directory:
                     accessed_paths.add(path)
             self.profile.db_file.increment(accessed_paths, 1)
+            self.profile.db_file.conn.commit()
 
             self._adjust()
             time.sleep(1)
 
-    def _adjust(self):
+    def _adjust(self) -> None:
         """Adjust the priority values in the database every twenty minutes."""
         if (time.time() >= self.profile.info_file.vals["LastAdjust"]
                 + self.ADJUST_INTERVAL):
@@ -111,11 +108,17 @@ class Daemon(Command):
             # that value will get reset.
             self.profile.info_file.read()
 
-            self.profile.db_file.adjust_all(self.ADJUST_CONSTANT)
+            # Use the formula for half-life to calculate the constant to
+            # multiply each priority value by.
+            adjust_constant = (0.5 ** (
+                    self.ADJUST_INTERVAL
+                    / self.profile.cfg_file.vals["PriorityHalfLife"]))
+
+            self.profile.db_file.adjust_all(adjust_constant)
             self.profile.info_file.update_adjusttime()
             self.profile.info_file.write()
 
-    def _sync(self):
+    def _sync(self) -> None:
         """Initiate a sync at a regular interval."""
         last_attempt = self.profile.info_file.vals["LastSync"]
         while True:
@@ -141,7 +144,7 @@ class Daemon(Command):
                 last_attempt = time.time()
             time.sleep(1)
 
-    def _watch(self, start_path: str):
+    def _watch(self, start_path: str) -> None:
         """Get paths of files that have been opened and add them to a queue.
 
         Args:
