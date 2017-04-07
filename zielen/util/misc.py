@@ -75,7 +75,7 @@ def prefill_input(prompt: str, prefill: str) -> str:
     return usr_input
 
 
-def rec_scan(path: str) -> Generator[os.DirEntry, None, None]:
+def rec_scan(path: str):
     """Recursively scan a directory tree and yield an os.DirEntry object.
 
     Args:
