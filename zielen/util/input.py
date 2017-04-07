@@ -65,8 +65,7 @@ def usage(command: str) -> None:
                     their profiles.
 
                 {1}empty-trash{0} {2}name{0}|{2}path{0}
-                    Permanently delete all files in the remote directory that are marked
-                    for deletion.""")
+                    Permanently delete all files in the remote trash directory.""")
 
     elif command == "initialize":
         help_msg = dedent("""\
@@ -114,8 +113,7 @@ def usage(command: str) -> None:
     elif command == "empty-trash":
         help_msg = dedent("""\
             {1}empty-trash{0} {2}name{0}|{2}path{0}
-                Permanently delete all files in the remote directory that are marked for
-                deletion.""")
+                Permanently delete all files in the remote trash directory.""")
 
     help_msg = help_msg.format(normal, strong, emphasis)
     print(help_msg)

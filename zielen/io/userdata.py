@@ -27,11 +27,9 @@ from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
 
 from zielen.exceptions import ServerError
 from zielen.io.program import SyncDBFile
-from zielen.util.misc import rec_scan, b2sum, FactoryDict
+from zielen.util.misc import rec_scan, sha1sum, FactoryDict
 
-PathData = NamedTuple(
-    "PathData",
-    [("directory", bool), ("deleted", bool), ("lastsync", float)])
+PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
 
 
 class TrashDir:
@@ -56,14 +54,16 @@ class TrashDir:
         if not self._sizes:
             output = []
             for path in self.paths:
-                for entry in rec_scan(path):
+                for entry in os.scandir(path):
+                    file_size = entry.stat(follow_symlinks=False).st_size
                     if not entry.is_dir():
-                        # Because this is being used to determine if files
-                        # are identical, the apparent size should be used
-                        # instead of the disk usage.
-                        output.append((
-                            entry.path,
-                            entry.stat(follow_symlinks=False).st_size))
+                        output.append((entry.path, file_size))
+                    else:
+                        total_size = file_size
+                        for sub_entry in rec_scan(entry.path):
+                            total_size += sub_entry.stat().st_size
+                        output.append((entry.path, total_size))
+
             self._sizes = output
         return self._sizes
 
@@ -74,9 +74,9 @@ class TrashDir:
             filepath for filepath, size in self.sizes if file_size == size}
         if overlap_files:
             overlap_sums = {
-                b2sum(filepath) for filepath in overlap_files
-                if os.path.isfile(filepath)}
-            if b2sum(path) in overlap_sums:
+                sha1sum(filepath) for filepath in overlap_files
+                if os.path.lexists(filepath)}
+            if sha1sum(path) in overlap_sums:
                 return True
         return False
 
@@ -209,6 +209,7 @@ class DestSyncDir(SyncDir):
         self.prgm_dir = os.path.join(self.path, ".zielen")
         self.safe_path = os.path.join(self.prgm_dir, "..")
         self.ex_dir = os.path.join(self.prgm_dir, "exclude")
+        self.trash_dir = os.path.join(self.prgm_dir, "Trash")
         self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))
 
     def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
@@ -235,8 +236,6 @@ class DestDBFile(SyncDBFile):
                 primary key over the path for performance reasons.
             path: The relative path of the file.
             directory: A boolean representing whether the path is a directory.
-            deleted: A boolean representing whether the file is marked for
-                deletion.
             lastsync: The date and time (UTC) that the file was last updated by
                 a sync in seconds since the epoch.
 
@@ -260,7 +259,6 @@ class DestDBFile(SyncDBFile):
                     id          INTEGER NOT NULL,
                     path        TEXT    NOT NULL,
                     directory   BOOL    NOT NULL,
-                    deleted     BOOL    NOT NULL,
                     lastsync    REAL,
                     PRIMARY KEY (id) ON CONFLICT IGNORE
                 );
@@ -277,58 +275,8 @@ class DestDBFile(SyncDBFile):
                 ) WITHOUT ROWID;
                 """)
 
-    def _update_deleted(self, paths: Iterable[str]) -> None:
-        """Mark directories as deleted if all their immediate children are.
-
-        Directories are checked in leaf-to-trunk order. For every directory
-        that's checked, all of its ancestors up the tree are also checked.
-
-        Args:
-            paths: The relative paths of the directories to update the status
-                of.
-        """
-        # A deque is used here because a list cannot be appended to while it is
-        # being iterated over.
-        path_queue = collections.deque(paths)
-        check_paths = set()
-        while len(path_queue) > 0:
-            path = path_queue.pop()
-            check_paths.add(path)
-            parent = os.path.dirname(path)
-            if parent:
-                path_queue.appendleft(parent)
-
-        # Sort paths by depth.
-        nodes_values = []
-        for path in sorted(
-                check_paths, key=lambda x: x.count(os.sep), reverse=True):
-            path_id = self._get_path_id(path)
-            nodes_values.append({"path_id": path_id})
-
-        self.cur.executemany("""\
-            UPDATE nodes
-            SET deleted = 0
-            WHERE id = :path_id
-            AND deleted = 1;
-            """, nodes_values)
-        self.cur.executemany("""\
-            UPDATE nodes
-            SET deleted = 1
-            WHERE id = :path_id
-            AND deleted = 0
-            AND NOT EXISTS (
-                SELECT n.*
-                FROM nodes AS n
-                JOIN closure AS c
-                ON (n.id = c.descendant)
-                WHERE c.ancestor = :path_id
-                AND c.depth = 1
-                AND n.deleted = 0
-                LIMIT 1);
-            """, nodes_values)
-
     def add_paths(self, files: Iterable[str], dirs: Iterable[str],
-                  deleted=False, replace=False) -> None:
+                  replace=False) -> None:
         """Add new file paths to the database if not already there.
 
         A file path is automatically marked as a directory when sub-paths are
@@ -340,7 +288,6 @@ class DestDBFile(SyncDBFile):
         Args:
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
-            deleted: Mark the paths as deleted.
             replace: Replace existing rows instead of ignoring them.
         """
         # Sort paths by depth. A file can't be added to the database until its
@@ -370,7 +317,6 @@ class DestDBFile(SyncDBFile):
                 "path": path,
                 "path_id": path_id,
                 "directory": bool(path in dirs),
-                "deleted": deleted,
                 "lastsync": timestamp})
             insert_closure_vals.append({
                 "path_id": path_id,
@@ -382,8 +328,8 @@ class DestDBFile(SyncDBFile):
                 WHERE id = :path_id
                 """, rm_vals)
         self.cur.executemany("""\
-            INSERT INTO nodes (id, path, directory, deleted)
-            VALUES (:path_id, :path, :directory, :deleted);
+            INSERT INTO nodes (id, path, directory)
+            VALUES (:path_id, :path, :directory);
             """, insert_nodes_vals)
         self.cur.executemany("""\
             INSERT INTO closure (ancestor, descendant, depth)
@@ -393,7 +339,6 @@ class DestDBFile(SyncDBFile):
             UNION ALL SELECT :path_id, :path_id, 0;
             """, insert_closure_vals)
         self._mark_directory(parents)
-        self._update_deleted(parents)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -407,8 +352,6 @@ class DestDBFile(SyncDBFile):
         rm_vals = ({
             "path_id": self._get_path_id(path)}
             for path in paths)
-        parents = {
-            os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
         self.cur.executemany("""\
             DELETE FROM nodes
@@ -419,7 +362,6 @@ class DestDBFile(SyncDBFile):
                 ON (n.id = c.descendant)
                 WHERE c.ancestor = :path_id);
             """, rm_vals)
-        self._update_deleted(parents)
 
     def get_path(self, path: str) -> PathData:
         """Get data associated with a file path.
@@ -429,14 +371,14 @@ class DestDBFile(SyncDBFile):
 
         Returns:
             A named tuple containing the values from the other database
-            columns (directory, deleted, lastsync).
+            columns (directory, lastsync).
         """
         # Clear the query result set.
         self.cur.fetchall()
 
         path_id = self._get_path_id(path)
         self.cur.execute("""\
-            SELECT path, directory, deleted, lastsync
+            SELECT path, directory, lastsync
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
@@ -445,7 +387,7 @@ class DestDBFile(SyncDBFile):
         if result:
             return PathData(*result[1:])
 
-    def get_tree(self, start=None, directory=None, deleted=None,
+    def get_tree(self, start=None, directory=None,
                  min_lastsync=None) -> Dict[str, PathData]:
         """Get a dict of values for paths that match certain constraints.
 
@@ -454,8 +396,6 @@ class DestDBFile(SyncDBFile):
                 paths under this directory path.
             directory: Restrict results to just directory paths (True) or just
                 file paths (False).
-            deleted: Restrict results to just paths marked for deletion (True)
-                or just paths not marked for deletion (False).
             min_lastsync: Restrict results to files that were last synced more
                 recently than this time.
 
@@ -469,16 +409,15 @@ class DestDBFile(SyncDBFile):
 
         start_id = self._get_path_id(start) if start else None
         self.cur.execute("""\
-            SELECT n.path, n.directory, n.deleted, n.lastsync
+            SELECT n.path, n.directory, n.lastsync
             FROM nodes AS n
             JOIN closure AS c
             ON (n.id = c.descendant)
             WHERE (:start_id IS NULL OR c.ancestor = :start_id)
             AND (:directory IS NULL OR n.directory = :directory)
-            AND (:deleted IS NULL OR n.deleted = :deleted)
             AND (:min_lastsync IS NULL OR n.lastsync > :min_lastsync);
             """, {"start_id": start_id, "directory": directory,
-                  "deleted": deleted, "min_lastsync": min_lastsync})
+                  "min_lastsync": min_lastsync})
 
-        return {path: PathData(directory, deleted, lastsync)
-                for path, directory, deleted, lastsync in self.cur.fetchall()}
+        return {path: PathData(directory, lastsync)
+                for path, directory, lastsync in self.cur.fetchall()}

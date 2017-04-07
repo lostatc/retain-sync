@@ -289,7 +289,6 @@ class InitializeCommand(Command):
             self.dest_dir.safe_path, self.local_dir.path,
             self.profile.db_file.get_tree(directory=False),
             self.profile.db_file.get_tree(directory=True),
-            exclude=self.dest_dir.db_file.get_tree(deleted=True),
             overwrite=True)
 
         # Copy exclude pattern file to remote directory for use when remote dir

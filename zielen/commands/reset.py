@@ -61,7 +61,7 @@ class ResetCommand(Command):
             try:
                 rec_clone(
                     self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.db_file.get_tree(deleted=False),
+                    files=self.dest_dir.db_file.get_tree(),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
@@ -69,14 +69,6 @@ class ResetCommand(Command):
                     "the connection to the remote directory was lost")
 
             if not self.keep_remote:
-                # Remove files marked for deletion from the remote directory.
-                for rel_path in self.dest_dir.db_file.get_tree(deleted=True):
-                    try:
-                        os.remove(
-                            os.path.join(self.dest_dir.safe_path, rel_path))
-                    except FileNotFoundError:
-                        pass
-
                 # Check that the remote directory contains only empty
                 # directories and the program directory.
                 if self.dest_dir.get_paths(dirs=False, memoize=False):

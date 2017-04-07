@@ -123,9 +123,9 @@ COMMANDS
     directories.
 
 **empty-trash** *name*\ \|\ *path*
-    Permanently delete all files in the remote directory that are marked for
-    deletion (see TRASH_). This command accpets the *name* of a profile or the
-    absolute *path* of its local directory.
+    Permanently delete all files in the remote trash directory (see TRASH_).
+    This command accpets the *name* of a profile or the absolute *path* of its
+    local directory.
 
 SYNCING
 =======
@@ -196,15 +196,14 @@ TRASH
 =====
 Before **zielen** deletes a file in the remote directory, it first searches for
 the file in the user's local trash directory by comparing file sizes first and
-then checksums. If it finds a copy of the file in the user's trash, it
-permanently deletes the file in the remote directory. Otherwise, it only marks
-the file for deletion. Files marked for deletion are kept in the remote
-directory and renamed to include the word "deleted" and the time and date of
-the sync. This behavior can be overridden by setting **DeleteAlways** to \'yes'
-in the profile config file. The command **empty-trash** can be used to
-permanently delete all files in the remote directory that are marked for
-deletion. The list of directories that are searched for deleted files can be
-altered in the profile config file.
+then checksums. If it finds a copy of the file in the user's local trash, it
+permanently deletes the file in the remote directory. Otherwise, it moves the
+file to a remote trash directory. This directory is '.zielen/Trash' under the
+root of the remote directory. This behavior can be overridden by setting
+**DeleteAlways** to 'yes' in the profile config file. The command
+**empty-trash** can be used to permanently delete all files in the remote trash
+directory. The list of local directories that are searched for deleted files
+can be altered in the profile config file.
 
 FILES
 =====

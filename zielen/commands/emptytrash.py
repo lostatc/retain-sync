@@ -25,7 +25,7 @@ from zielen.basecommand import Command
 
 
 class EmptyTrashCommand(Command):
-    """Delete all files in the remote directory marked for deletion.
+    """Permanently delete all files in the remote trash directory.
 
     Attributes:
         profile: The currently selected profile.
@@ -44,11 +44,13 @@ class EmptyTrashCommand(Command):
         """Run the command."""
         self.setup_profile()
 
-        # Remove files marked for deletion.
         files_deleted = 0
-        for rel_path in self.dest_dir.db_file.get_tree(deleted=True):
+        for path in os.scandir(self.dest_dir.trash_dir):
             try:
-                shutil.rmtree(os.path.join(self.dest_dir.path, rel_path))
+                os.remove(path)
+                files_deleted += 1
+            except IsADirectoryError:
+                shutil.rmtree(path)
                 files_deleted += 1
             except FileNotFoundError:
                 pass
