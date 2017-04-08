@@ -615,8 +615,7 @@ class SyncCommand(Command):
                     trash_paths.add(path)
             remote_del_paths -= trash_paths
 
-        return DeletedPaths(
-            local_del_paths, remote_del_paths, trash_paths)
+        return DeletedPaths(local_del_paths, remote_del_paths, trash_paths)
 
     def _rm_local_files(self, paths: Iterable[str]) -> None:
         """Delete local files and remove them from both databases.

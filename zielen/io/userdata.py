@@ -54,15 +54,16 @@ class TrashDir:
         if not self._sizes:
             output = []
             for path in self.paths:
-                for entry in os.scandir(path):
-                    file_size = entry.stat(follow_symlinks=False).st_size
-                    if not entry.is_dir():
-                        output.append((entry.path, file_size))
-                    else:
-                        total_size = file_size
-                        for sub_entry in rec_scan(entry.path):
-                            total_size += sub_entry.stat().st_size
-                        output.append((entry.path, total_size))
+                if os.path.isdir(path):
+                    for entry in os.scandir(path):
+                        file_size = entry.stat(follow_symlinks=False).st_size
+                        if not entry.is_dir():
+                            output.append((entry.path, file_size))
+                        else:
+                            total_size = file_size
+                            for sub_entry in rec_scan(entry.path):
+                                total_size += sub_entry.stat().st_size
+                            output.append((entry.path, total_size))
 
             self._sizes = output
         return self._sizes
