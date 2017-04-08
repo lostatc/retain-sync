@@ -27,6 +27,7 @@ import pkg_resources
 import sqlite3
 import weakref
 import collections
+import uuid
 from textwrap import dedent
 from typing import Any, Iterable, Union, Generator, Dict, NamedTuple
 
@@ -199,8 +200,8 @@ class ProfileInfoFile(JSONFile):
                 on the profile.
             Version: The version of the program that the profile was
                 initialized by.
-            ID: A unique ID consisting of the machine ID, username and profile
-                name.
+            ID: A UUID to identify the profile among all profiles that share a
+                remote directory.
             InitOpts: A dictionary of options given at the command line at
                 initialization.
 
@@ -208,8 +209,7 @@ class ProfileInfoFile(JSONFile):
             name: The name of the profile to use for the unique ID.
             add_remote: The '--add-remote' command-line option is set.
         """
-        with open("/etc/machine-id") as id_file:
-            unique_id = "-".join([id_file.read(8), env("USER"), name])
+        unique_id = uuid.uuid4().hex
         version = float(pkg_resources.get_distribution("zielen").version)
         self.raw_vals.update({
             "Status": "partial",
