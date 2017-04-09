@@ -260,7 +260,7 @@ class DestDBFile(SyncDBFile):
                     id          INTEGER NOT NULL,
                     path        TEXT    NOT NULL,
                     directory   BOOL    NOT NULL,
-                    lastsync    REAL,
+                    lastsync    REAL    NOT NULL,
                     PRIMARY KEY (id) ON CONFLICT IGNORE
                 );
 
@@ -329,8 +329,8 @@ class DestDBFile(SyncDBFile):
                 WHERE id = :path_id
                 """, rm_vals)
         self.cur.executemany("""\
-            INSERT INTO nodes (id, path, directory)
-            VALUES (:path_id, :path, :directory);
+            INSERT INTO nodes (id, path, directory, lastsync)
+            VALUES (:path_id, :path, :directory, :lastsync);
             """, insert_nodes_vals)
         self.cur.executemany("""\
             INSERT INTO closure (ancestor, descendant, depth)

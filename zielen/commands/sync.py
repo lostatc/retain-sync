@@ -27,11 +27,10 @@ from typing import Iterable, Set, NamedTuple
 
 from zielen.exceptions import ServerError, StatusError
 from zielen.basecommand import Command
-from zielen.util.misc import (
-    timestamp_path, rec_scan, symlink_tree, is_unsafe_symlink)
+from zielen.util.misc import timestamp_path, rec_scan, is_unsafe_symlink
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
-from zielen.io.transfer import rec_clone
+from zielen.io.transfer import rec_clone, symlink_tree
 
 DeletedPaths = NamedTuple(
     "DeletedPaths",

@@ -18,17 +18,17 @@ You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import sys
-import os
-import subprocess
 import atexit
-import shutil
-import readline
-import pwd
-import hashlib
-import datetime
 import collections
-from typing import Collection, Iterable, Generator
+import datetime
+import hashlib
+import os
+import pwd
+import readline
+import shutil
+import subprocess
+import sys
+from typing import Collection
 
 
 def err(*args, **kwargs) -> None:
@@ -85,57 +85,6 @@ def rec_scan(path: str):
         yield entry
         if entry.is_dir(follow_symlinks=False):
             yield from rec_scan(entry.path)
-
-
-def symlink_tree(src_dir: str, dest_dir: str,
-                 src_files: Iterable[str], src_dirs: Iterable[str],
-                 exclude=None, overwrite=False) -> None:
-    """Recursively copy a directory as a tree of symlinks.
-
-    This function does not look in the source directory. Instead, the caller
-    is expected to provide the paths of all files and directories in the
-    source. Files and directories need to be passed in separately to
-    distinguish files from empty directories.
-
-    Args:
-        src_dir: The absolute path of the directory to source files from.
-        dest_dir: The absolute path of the directory to create symlinks in.
-        src_dirs: The relative paths of the directories to copy to the
-            destination.
-        src_files: The relative paths of the files to symlink in the
-            destination.
-        exclude: The relative paths of files/directories to not symlink.
-        overwrite: Overwrite existing files in the destination directory
-            with symlinks.
-    """
-    exclude = set() if exclude is None else set(exclude)
-    src_dirs = set(src_dirs)
-    src_files = set(src_files)
-    src_paths = list(src_dirs | src_files)
-
-    # Sort paths by depth from trunk to leaf.
-    src_paths.sort(key=lambda x: x.count(os.sep))
-
-    os.makedirs(dest_dir, exist_ok=True)
-    for src_path in src_paths:
-        full_src_path = os.path.join(src_dir, src_path)
-        full_dest_path = os.path.join(dest_dir, src_path)
-        common = {
-            os.path.commonpath([ex_path, src_path]) for ex_path in exclude}
-        if common & exclude:
-            continue
-        if src_path in src_dirs:
-            try:
-                os.mkdir(full_dest_path)
-            except FileExistsError:
-                pass
-        elif src_path in src_files:
-            try:
-                os.symlink(full_src_path, full_dest_path)
-            except FileExistsError:
-                if overwrite:
-                    os.remove(full_dest_path)
-                    os.symlink(full_src_path, full_dest_path)
 
 
 def shell_cmd(input_cmd: list) -> subprocess.Popen:

@@ -31,8 +31,8 @@ from zielen.exceptions import (
 from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
-from zielen.io.transfer import rec_clone
-from zielen.util.misc import symlink_tree, is_unsafe_symlink
+from zielen.io.transfer import rec_clone, symlink_tree
+from zielen.util.misc import is_unsafe_symlink
 from zielen.util.connect import SSHConnection
 
 

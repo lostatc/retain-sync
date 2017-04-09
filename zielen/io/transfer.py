@@ -23,6 +23,7 @@ import sys
 import tempfile
 import contextlib
 from textwrap import indent
+from typing import Iterable
 
 from zielen.exceptions import FileTransferError
 from zielen.util.misc import ProgressBar, shell_cmd
@@ -116,3 +117,54 @@ def rec_clone(source: str, dest: str, files=None, exclude=None, msg="",
     if rm_source:
         rsync_args.append("--remove-source-files")
     _rsync_cmd(rsync_args, files=files, exclude=exclude, msg=msg)
+
+
+def symlink_tree(src_dir: str, dest_dir: str,
+                 src_files: Iterable[str], src_dirs: Iterable[str],
+                 exclude=None, overwrite=False) -> None:
+    """Recursively copy a directory as a tree of symlinks.
+
+    This function does not look in the source directory. Instead, the caller
+    is expected to provide the paths of all files and directories in the
+    source. Files and directories need to be passed in separately to
+    distinguish files from empty directories.
+
+    Args:
+        src_dir: The absolute path of the directory to source files from.
+        dest_dir: The absolute path of the directory to create symlinks in.
+        src_dirs: The relative paths of the directories to copy to the
+            destination.
+        src_files: The relative paths of the files to symlink in the
+            destination.
+        exclude: The relative paths of files/directories to not symlink.
+        overwrite: Overwrite existing files in the destination directory
+            with symlinks.
+    """
+    exclude = set() if exclude is None else set(exclude)
+    src_dirs = set(src_dirs)
+    src_files = set(src_files)
+    src_paths = list(src_dirs | src_files)
+
+    # Sort paths by depth from trunk to leaf.
+    src_paths.sort(key=lambda x: x.count(os.sep))
+
+    os.makedirs(dest_dir, exist_ok=True)
+    for src_path in src_paths:
+        full_src_path = os.path.join(src_dir, src_path)
+        full_dest_path = os.path.join(dest_dir, src_path)
+        common = {
+            os.path.commonpath([ex_path, src_path]) for ex_path in exclude}
+        if common & exclude:
+            continue
+        if src_path in src_dirs:
+            try:
+                os.mkdir(full_dest_path)
+            except FileExistsError:
+                pass
+        elif src_path in src_files:
+            try:
+                os.symlink(full_src_path, full_dest_path)
+            except FileExistsError:
+                if overwrite:
+                    os.remove(full_dest_path)
+                    os.symlink(full_src_path, full_dest_path)
