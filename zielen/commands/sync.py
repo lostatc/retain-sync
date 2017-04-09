@@ -27,7 +27,8 @@ from typing import Iterable, Set, NamedTuple
 
 from zielen.exceptions import ServerError, StatusError
 from zielen.basecommand import Command
-from zielen.util.misc import timestamp_path, rec_scan, symlink_tree
+from zielen.util.misc import (
+    timestamp_path, rec_scan, symlink_tree, is_unsafe_symlink)
 from zielen.io.profile import ProfileExcludeFile
 from zielen.io.userdata import TrashDir
 from zielen.io.transfer import rec_clone
@@ -271,7 +272,7 @@ class SyncCommand(Command):
 
         local_files = self.profile.db_file.get_tree(directory=False)
         file_stats = self.dest_dir.get_paths(
-            rel=True, dirs=False, symlinks=False,
+            rel=True, dirs=False,
             exclude=self.profile.ex_file.rel_files)
         adjusted_priorities = []
 
@@ -512,8 +513,9 @@ class SyncCommand(Command):
     def _compute_added(self) -> UpdatedPaths:
         """Compute paths of files that have been added since the last sync.
 
-        This method excludes the paths of local symlinks. A file is
-        considered to be new if it is not in the database.
+        This method excludes the paths of local symlinks that are absolute
+        or point to files outside the local directory. A file is considered
+        to be new if it is not in the local database.
 
         Returns:
             A named tuple containing two sets of relative paths of files
@@ -521,12 +523,13 @@ class SyncCommand(Command):
             remote ones.
         """
         local_new_paths = {
-            path for path in self.local_dir.get_paths(
-                rel=True, symlinks=False).keys()
-            if not self.profile.db_file.get_path(path)}
+            path for path in self.local_dir.get_paths(rel=True).keys()
+            if not self.profile.db_file.get_path(path)
+            and not is_unsafe_symlink(
+                os.path.join(self.local_dir.path, path), self.local_dir.path)}
         remote_new_paths = {
             path for path in self.dest_dir.get_paths(rel=True).keys()
-            if not self.dest_dir.db_file.get_path(path)}
+            if not self.profile.db_file.get_path(path)}
 
         return UpdatedPaths(local_new_paths, remote_new_paths)
 
@@ -561,7 +564,7 @@ class SyncCommand(Command):
             if mtime > last_sync and self.profile.db_file.get_path(path)}
         remote_mod_paths = {
             path for path, mtime in remote_mtimes
-            if mtime > last_sync and self.dest_dir.db_file.get_path(path)}
+            if mtime > last_sync and self.profile.db_file.get_path(path)}
 
         remote_mod_paths |= self.dest_dir.db_file.get_tree(
             directory=False, min_lastsync=last_sync).keys()

@@ -115,8 +115,8 @@ COMMANDS
         Don't retrieve files from the remote directory. This still
         de-initializes the local directory, but leaves it with whatever files
         are already in it. Remote files stay in the remote directory, and
-        symlinks to remote files are removed from the local directory. This
-        option supersedes **--keep-remote**.
+        symbolic links to remote files are removed from the local directory.
+        This option supersedes **--keep-remote**.
 
 **list**
     Print a table of all profiles names and the paths of their local
@@ -158,9 +158,9 @@ profile config file.
 **zielen** uses **rsync** for copying files between the local and remote
 directories, and should preserve permissions, modification times, ownership,
 hard links, ACLs, extended attributes and sparse files as long as both
-filesystems support them. The program deliberately does not sync user-created
-symlinks. The rationale behind this is that absolute links will be broken when
-copied to another directory.
+filesystems support them. The program automatically excludes absolute symbolic
+links and symbolic links that point to files outside the local directory, but
+relative symbolic links are still synced.
 
 EXCLUDING
 =========

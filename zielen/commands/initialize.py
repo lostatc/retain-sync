@@ -32,7 +32,7 @@ from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
 from zielen.io.transfer import rec_clone
-from zielen.util.misc import symlink_tree
+from zielen.util.misc import symlink_tree, is_unsafe_symlink
 from zielen.util.connect import SSHConnection
 
 
@@ -226,10 +226,14 @@ class InitializeCommand(Command):
             self.connection.mount(self.dest_dir.path)
 
         os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
-        user_symlinks = self.local_dir.get_paths(
-            rel=True, files=False, dirs=False).keys()
-
         if self.add_remote:
+            unsafe_symlinks = {
+                link_path for link_path in self.dest_dir.get_paths(
+                    rel=True, files=False, dirs=False).keys()
+                if is_unsafe_symlink(
+                    os.path.join(self.dest_dir.path, link_path),
+                    self.dest_dir.path)}
+
             try:
                 # Expand exclude globbing patterns.
                 self.profile.ex_file.glob(self.dest_dir.safe_path)
@@ -243,6 +247,13 @@ class InitializeCommand(Command):
                 raise AvailableSpaceError(
                     "not enough local space to accommodate remote files")
         else:
+            unsafe_symlinks = {
+                link_path for link_path in self.local_dir.get_paths(
+                    rel=True, files=False, dirs=False).keys()
+                if is_unsafe_symlink(
+                    os.path.join(self.local_dir.path, link_path),
+                    self.local_dir.path)}
+
             # Expand exclude globbing patterns.
             self.profile.ex_file.glob(self.local_dir.path)
 
@@ -256,14 +267,14 @@ class InitializeCommand(Command):
             try:
                 rec_clone(
                     self.local_dir.path, self.dest_dir.safe_path,
-                    exclude=self.profile.ex_file.rel_files | user_symlinks,
+                    exclude=self.profile.ex_file.rel_files | unsafe_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
                 raise ServerError(
                     "the connection to the remote directory was lost")
 
         remote_files = self.dest_dir.get_paths(
-            rel=True, dirs=False, symlinks=False).keys()
+            rel=True, dirs=False).keys() - unsafe_symlinks
         remote_dirs = self.dest_dir.get_paths(
             rel=True, files=False, symlinks=False).keys()
 
