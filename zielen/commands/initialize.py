@@ -267,7 +267,7 @@ class InitializeCommand(Command):
             try:
                 rec_clone(
                     self.local_dir.path, self.dest_dir.safe_path,
-                    exclude=self.profile.ex_file.rel_files | unsafe_symlinks,
+                    exclude=self.profile.ex_file.matches | unsafe_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
                 raise ServerError(

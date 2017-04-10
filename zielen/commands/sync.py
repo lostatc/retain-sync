@@ -20,12 +20,9 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import shutil
-import atexit
-import re
-from textwrap import dedent
 from typing import Iterable, Set, NamedTuple
 
-from zielen.exceptions import ServerError, StatusError
+from zielen.exceptions import ServerError
 from zielen.basecommand import Command
 from zielen.util.misc import timestamp_path, rec_scan, is_unsafe_symlink
 from zielen.io.profile import ProfileExcludeFile
@@ -127,7 +124,7 @@ class SyncCommand(Command):
 
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
-            self.profile.ex_file.rel_files
+            self.profile.ex_file.matches
             & self.dest_dir.get_paths(rel=True).keys())
 
         # Decide which files and directories to keep in the local directory.
@@ -157,98 +154,7 @@ class SyncCommand(Command):
         self.profile.db_file.conn.commit()
         self.dest_dir.db_file.conn.commit()
         self.profile.info_file.update_synctime()
-        self.profile.info_file.vals["Status"] = "initialized"
         self.profile.info_file.write()
-
-    def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
-        """Remove excluded files from the remote directory.
-
-        Remove files from the remote directory only if they've been excluded
-        by each client. Also remove them from both databases.
-
-        Args:
-            excluded_paths: The paths of excluded files to remove.
-        """
-        # Expand globbing patterns for each client's exclude pattern file.
-        pattern_files = []
-        for entry in os.scandir(self.dest_dir.ex_dir):
-            pattern_file = ProfileExcludeFile(entry.path)
-            pattern_file.glob(self.local_dir.path)
-            pattern_files.append(pattern_file)
-
-        rm_files = set()
-        for excluded_path in excluded_paths:
-            for pattern_file in pattern_files:
-                if excluded_path not in pattern_file.rel_files:
-                    break
-            else:
-                # The file was not found in one of the exclude pattern
-                # files. Remove it from the remote directory and both
-                # databases.
-                rm_files.add(excluded_path)
-
-        rm_files &= self.dest_dir.db_file.get_tree().keys()
-        try:
-            self._rm_remote_files(rm_files)
-        except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
-
-    def _update_local(self, update_paths: Iterable[str]) -> None:
-        """Update the local directory with remote files.
-
-        Args:
-            update_paths: The paths of files and directories to copy from the
-                remote directory to the local one. All other files in the local
-                directory are replaced with symlinks.
-        """
-        update_paths = set(update_paths)
-
-        # Create a set including all the files and directories contained in
-        # each directory from the input.
-        all_update_paths = set()
-        for path in update_paths:
-            all_update_paths |= self.profile.db_file.get_tree(
-                start=path).keys()
-
-        # Don't include excluded files or files not in the local database
-        # (e.g. user-created symlinks).
-        all_paths = (self.local_dir.get_paths(
-            rel=True, exclude=self.profile.ex_file.rel_files).keys()
-            & self.profile.db_file.get_tree().keys())
-
-        stale_paths = list(all_paths - all_update_paths)
-
-        # Sort the file paths so that a directory's contents always come
-        # before the directory.
-        stale_paths.sort(key=lambda x: x.count(os.sep), reverse=True)
-
-        # Remove old, unneeded files to make room for new ones.
-        for stale_path in stale_paths:
-            full_stale_path = os.path.join(self.local_dir.path, stale_path)
-            try:
-                os.remove(full_stale_path)
-            except IsADirectoryError:
-                try:
-                    os.rmdir(full_stale_path)
-                except OSError:
-                    # The directory has other files in it. It should be
-                    # ignored.
-                    pass
-
-        try:
-            symlink_tree(
-                self.dest_dir.safe_path, self.local_dir.path,
-                self.dest_dir.db_file.get_tree(directory=False),
-                self.dest_dir.db_file.get_tree(directory=True))
-
-            rec_clone(
-                self.dest_dir.safe_path, self.local_dir.path,
-                files=update_paths,
-                msg="Updating local files...")
-        except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
 
     def _prioritize_files(self, space_limit: int,
                           exclude=None) -> SelectedPaths:
@@ -272,7 +178,7 @@ class SyncCommand(Command):
         local_files = self.profile.db_file.get_tree(directory=False)
         file_stats = self.dest_dir.get_paths(
             rel=True, dirs=False,
-            exclude=self.profile.ex_file.rel_files)
+            exclude=self.profile.ex_file.matches)
         adjusted_priorities = []
 
         # Adjust directory priorities for size.
@@ -327,7 +233,7 @@ class SyncCommand(Command):
         local_files = self.profile.db_file.get_tree(directory=False)
         local_dirs = self.profile.db_file.get_tree(directory=True)
         dir_stats = self.dest_dir.get_paths(
-            rel=True, exclude=self.profile.ex_file.rel_files)
+            rel=True, exclude=self.profile.ex_file.matches)
         adjusted_priorities = []
 
         # Calculate the sizes of each directory and adjust directory priorities
@@ -409,6 +315,62 @@ class SyncCommand(Command):
 
         return SelectedPaths(remaining_space, selected_dirs)
 
+    def _update_local(self, update_paths: Iterable[str]) -> None:
+        """Update the local directory with remote files.
+
+        Args:
+            update_paths: The paths of files and directories to copy from the
+                remote directory to the local one. All other files in the local
+                directory are replaced with symlinks.
+        """
+        update_paths = set(update_paths)
+
+        # Create a set including all the files and directories contained in
+        # each directory from the input.
+        all_update_paths = set()
+        for path in update_paths:
+            all_update_paths |= self.profile.db_file.get_tree(
+                start=path).keys()
+
+        # Don't include excluded files or files not in the local database
+        # (e.g. unsafe symlinks).
+        all_paths = (self.local_dir.get_paths(
+            rel=True, exclude=self.profile.ex_file.matches).keys()
+                     & self.profile.db_file.get_tree().keys())
+
+        stale_paths = list(all_paths - all_update_paths)
+
+        # Sort the file paths so that a directory's contents always come
+        # before the directory.
+        stale_paths.sort(key=lambda x: x.count(os.sep), reverse=True)
+
+        # Remove old, unneeded files to make room for new ones.
+        for stale_path in stale_paths:
+            full_stale_path = os.path.join(self.local_dir.path, stale_path)
+            try:
+                os.remove(full_stale_path)
+            except IsADirectoryError:
+                try:
+                    os.rmdir(full_stale_path)
+                except OSError:
+                    # The directory has other files in it. It should be
+                    # ignored.
+                    pass
+
+        try:
+            symlink_tree(
+                self.dest_dir.safe_path, self.local_dir.path,
+                self.dest_dir.db_file.get_tree(directory=False),
+                self.dest_dir.db_file.get_tree(directory=True))
+
+            rec_clone(
+                self.dest_dir.safe_path, self.local_dir.path,
+                files=update_paths,
+                msg="Updating local files...")
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
+
     def _update_remote(self, update_paths: Iterable[str]) -> None:
         """Update the remote directory with local files.
 
@@ -426,8 +388,7 @@ class SyncCommand(Command):
             update_paths - self.local_dir.get_paths(
                 rel=True, dirs=False).keys())
 
-        # Copy modified local files to the remote directory, excluding symbolic
-        # links.
+        # Copy modified local files to the remote directory.
         try:
             rec_clone(
                 self.local_dir.path, self.dest_dir.safe_path,
@@ -521,16 +482,17 @@ class SyncCommand(Command):
             that have been added since the last sync: local ones and
             remote ones.
         """
-        local_new_paths = {
+        new_local_paths = {
             path for path in self.local_dir.get_paths(rel=True).keys()
             if not self.profile.db_file.get_path(path)
             and not is_unsafe_symlink(
                 os.path.join(self.local_dir.path, path), self.local_dir.path)}
-        remote_new_paths = {
+        new_local_paths -= self.profile.ex_file.all_matches
+        new_remote_paths = {
             path for path in self.dest_dir.get_paths(rel=True).keys()
             if not self.profile.db_file.get_path(path)}
 
-        return UpdatedPaths(local_new_paths, remote_new_paths)
+        return UpdatedPaths(new_local_paths, new_remote_paths)
 
     def _compute_modified(self) -> UpdatedPaths:
         """Compute paths of files that have been modified since the last sync.
@@ -549,18 +511,20 @@ class SyncCommand(Command):
         """
         last_sync = self.profile.info_file.vals["LastSync"]
 
+        local_mtimes = (
+            (path, data.st_mtime) for path, data in self.local_dir.get_paths(
+                rel=True, dirs=False).items())
+        remote_mtimes = (
+            (path, data.st_mtime) for path, data in self.dest_dir.get_paths(
+                rel=True, dirs=False).items())
+
         # Only include file paths that are in the database to exclude files
         # that are new since the last sync.
-        local_mtimes = (
-            (path, data.st_mtime) for path, data
-            in self.local_dir.get_paths(rel=True, dirs=False).items())
-        remote_mtimes = (
-            (path, data.st_mtime) for path, data
-            in self.dest_dir.get_paths(rel=True, dirs=False).items())
-
         local_mod_paths = {
             path for path, mtime in local_mtimes
-            if mtime > last_sync and self.profile.db_file.get_path(path)}
+            if mtime > last_sync and self.profile.db_file.get_path(path)
+            and not is_unsafe_symlink(
+                os.path.join(self.local_dir.path, path), self.local_dir.path)}
         remote_mod_paths = {
             path for path, mtime in remote_mtimes
             if mtime > last_sync and self.profile.db_file.get_path(path)}
@@ -619,13 +583,52 @@ class SyncCommand(Command):
 
         return DeletedPaths(local_del_paths, remote_del_paths, trash_paths)
 
+    def _rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
+        """Remove excluded files from the remote directory.
+
+        Remove files from the remote directory only if they've been excluded
+        by each client. Also remove them from both databases.
+
+        Args:
+            excluded_paths: The paths of excluded files to remove.
+        """
+        # Expand globbing patterns for each client's exclude pattern file.
+        pattern_files = []
+        for entry in os.scandir(self.dest_dir.ex_dir):
+            pattern_file = ProfileExcludeFile(entry.path)
+            pattern_file.glob(self.local_dir.path)
+            pattern_files.append(pattern_file)
+
+        rm_files = set()
+        for excluded_path in excluded_paths:
+            for pattern_file in pattern_files:
+                if excluded_path not in pattern_file.matches:
+                    break
+            else:
+                # The file was not found in one of the exclude pattern
+                # files. Remove it from the remote directory and both
+                # databases.
+                rm_files.add(excluded_path)
+
+        rm_files &= self.dest_dir.db_file.get_tree().keys()
+        try:
+            self._rm_remote_files(rm_files)
+        except FileNotFoundError:
+            raise ServerError(
+                "the connection to the remote directory was lost")
+
     def _rm_local_files(self, paths: Iterable[str]) -> None:
         """Delete local files and remove them from both databases.
+
+        If the files are excluded, don't delete them, but still remove them
+        from both databases.
 
         Args:
             paths: The relative paths of files to remove.
         """
         for path in paths:
+            if path in self.profile.ex_file.all_matches:
+                continue
             full_path = os.path.join(self.local_dir.path, path)
             try:
                 os.remove(full_path)

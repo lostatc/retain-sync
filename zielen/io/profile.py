@@ -33,7 +33,7 @@ from typing import Any, Iterable, Union, Generator, Dict, NamedTuple
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir, SyncDBFile
-from zielen.util.misc import err, env, DictProperty
+from zielen.util.misc import err, env, DictProperty, rec_scan
 
 PathData = NamedTuple(
     "PathData", [("directory", bool), ("priority", float)])
@@ -75,16 +75,17 @@ class ProfileExcludeFile:
     Attributes:
         comment_regex: Regex that denotes a comment line.
         path: The path of the exclude pattern file.
-        files: A set of absolute file paths that match the globbing patterns.
-        rel_files: A set of relative file paths that match the globbing
+        matches: A set of relative paths of files that match the globbing
             patterns.
+        all_matches: A set of relative paths of files that match the globbing
+            patterns and all files under them.
     """
     comment_regex = re.compile(r"^\s*#")
 
     def __init__(self, path: str) -> None:
         self.path = path
-        self.files = set()
-        self.rel_files = set()
+        self.matches = set()
+        self.all_matches = set()
 
     def generate(self, infile=None) -> None:
         """Generate a new file with comments.
@@ -141,10 +142,17 @@ class ProfileExcludeFile:
             else:
                 # Glob patterns without a leading slash search the whole tree.
                 glob_str = os.path.join(start_path, "**", line)
-            self.files.update(glob.glob(glob_str, recursive=True))
 
-        self.rel_files = {
-            os.path.relpath(path, start_path) for path in self.files}
+            for match_path in glob.glob(glob_str, recursive=True):
+                rel_match_path = os.path.relpath(match_path, start_path)
+                self.matches.add(rel_match_path)
+                self.all_matches.add(rel_match_path)
+                try:
+                    for entry in rec_scan(match_path):
+                        self.all_matches.add(
+                            os.path.relpath(entry.path, start_path))
+                except NotADirectoryError:
+                    pass
 
 
 class ProfileInfoFile(JSONFile):

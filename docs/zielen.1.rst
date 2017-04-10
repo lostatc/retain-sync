@@ -167,13 +167,13 @@ EXCLUDING
 Files and directories can be excluded from syncing using the exclude pattern
 file (see FILES_). Each line in the file specifies a shell globbing pattern
 that represents files to exclude. Excluded files stay in the local directory
-and don't count toward the storage limit. If a file is not already in the local
-directory, it is copied from the remote directory during the next sync. In
-single-client configurations, the file is then removed from the remote
-directory. In multi-client configurations, a file is removed from the remote
-directory only when it has been excluded by each client that shares that remote
-directory. Until then, a copy remains in the remote directory and all copies of
-the file stay in sync.
+and don't count toward the storage limit. If an excluded file is not already in
+the local directory, it is copied from the remote directory during the next
+sync. In single-client configurations, files are removed from the remote
+directory once they are excluded. In multi-client configurations, a file is
+removed from the remote directory only when it has been excluded by each client
+that shares that remote directory. Until then, a copy remains in the remote
+directory and all copies of the file stay in sync.
 
 Patterns have the following format:
 
@@ -190,7 +190,8 @@ Patterns have the following format:
 * Patterns starting with a slash match file paths relative to the root of the
   sync directory.
 * Patterns not starting with a slash match the ends of file paths anywhere in
-  the tree.
+  the tree. This is the equivalent of starting the pattern with a double
+  asterisk.
 
 TRASH
 =====
