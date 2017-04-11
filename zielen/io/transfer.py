@@ -156,16 +156,17 @@ def symlink_tree(src_dir: str, dest_dir: str,
             if (src_path == exclude_path
                     or src_path.startswith(
                         exclude_path.rstrip(os.sep) + os.sep)):
-                continue
-        if src_path in src_dirs:
-            try:
-                os.mkdir(full_dest_path)
-            except FileExistsError:
-                pass
-        elif src_path in src_files:
-            try:
-                os.symlink(full_src_path, full_dest_path)
-            except FileExistsError:
-                if overwrite:
-                    os.remove(full_dest_path)
+                break
+        else:
+            if src_path in src_dirs:
+                try:
+                    os.mkdir(full_dest_path)
+                except FileExistsError:
+                    pass
+            elif src_path in src_files:
+                try:
                     os.symlink(full_src_path, full_dest_path)
+                except FileExistsError:
+                    if overwrite:
+                        os.remove(full_dest_path)
+                        os.symlink(full_src_path, full_dest_path)

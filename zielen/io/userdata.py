@@ -90,7 +90,7 @@ class SyncDir:
     """
 
     def __init__(self, path: str) -> None:
-        self.path = path.rstrip("/")
+        self.path = path.rstrip(os.sep)
         self._sub_entries = []
 
     def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
@@ -149,13 +149,14 @@ class SyncDir:
                     if (rel_path == exclude_path
                             or rel_path.startswith(
                                 exclude_path.rstrip(os.sep) + os.sep)):
-                        continue
-                if rel:
-                    output.update({
-                        rel_path: entry.stat(follow_symlinks=False)})
+                        break
                 else:
-                    output.update({
-                        entry.path: entry.stat(follow_symlinks=False)})
+                    if rel:
+                        output.update({
+                            rel_path: entry.stat(follow_symlinks=False)})
+                    else:
+                        output.update({
+                            entry.path: entry.stat(follow_symlinks=False)})
 
         return output
 
