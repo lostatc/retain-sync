@@ -418,7 +418,8 @@ class ProfileDBFile(SyncDBFile):
             dirs: The paths of directories to add to the database.
         """
         self.cur.execute("""\
-            SELECT MAX(priority) FROM nodes;
+            SELECT MAX(priority) FROM nodes
+            WHERE directory = 0;
             """)
         max_priority = self.cur.fetchone()[0]
         self.add_paths(files, dirs, priority=max_priority)
