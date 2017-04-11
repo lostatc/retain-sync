@@ -184,8 +184,9 @@ class SyncCommand(Command):
         # Adjust directory priorities for size.
         for file_path, file_data in local_files.items():
             for exclude_path in exclude:
-                if (os.path.commonpath([file_path, exclude_path])
-                        == exclude_path):
+                if (file_path == exclude_path
+                        or file_path.startswith(
+                            exclude_path.rstrip(os.sep) + os.sep)):
                     break
             else:
                 # The file is not included in the list of excluded paths.

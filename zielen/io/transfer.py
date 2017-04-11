@@ -152,10 +152,11 @@ def symlink_tree(src_dir: str, dest_dir: str,
     for src_path in src_paths:
         full_src_path = os.path.join(src_dir, src_path)
         full_dest_path = os.path.join(dest_dir, src_path)
-        common = {
-            os.path.commonpath([ex_path, src_path]) for ex_path in exclude}
-        if common & exclude:
-            continue
+        for exclude_path in exclude:
+            if (src_path == exclude_path
+                    or src_path.startswith(
+                        exclude_path.rstrip(os.sep) + os.sep)):
+                continue
         if src_path in src_dirs:
             try:
                 os.mkdir(full_dest_path)

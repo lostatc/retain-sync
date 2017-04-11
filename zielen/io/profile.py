@@ -29,7 +29,7 @@ import weakref
 import collections
 import uuid
 from textwrap import dedent
-from typing import Any, Iterable, Union, Generator, Dict, NamedTuple
+from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
 
 from zielen.exceptions import FileParseError
 from zielen.io.program import JSONFile, ConfigFile, ProgramDir, SyncDBFile
@@ -613,7 +613,7 @@ class ProfileConfigFile(ConfigFile):
         self.add_remote = add_remote
         self._instances.add(self)
 
-    def _check_values(self, key: str, value: str) -> Union[str, None]:
+    def _check_values(self, key: str, value: str) -> Optional[str]:
         """Check the syntax of a config option and return an error message.
 
         Args:
@@ -636,7 +636,9 @@ class ProfileConfigFile(ConfigFile):
             if not re.search("^~?/", value):
                 return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if os.path.commonpath([value, ProgramDir.path]) == value:
+            if (ProgramDir.path == value
+                    or value.startswith(
+                        ProgramDir.path.rstrip(os.sep) + os.sep)):
                 return "must not contain zielen config files"
 
             overlap_profiles = []

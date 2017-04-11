@@ -213,8 +213,8 @@ def timestamp_path(path: str, keyword="") -> str:
 def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
     """Check if file is a symlink that can't be transferred.
 
-    A symlink is safe to transfer if it is a relative symlink and points to a
-    file not outside parent_path.
+    A symlink is unsafe to transfer if it is an absolute symlink or points to a
+    file outside parent_path.
 
     Args:
         link_path: The absolute path of the symlink to check.
@@ -232,7 +232,9 @@ def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
     if not os.path.isabs(link_dest):
         abs_link_dest = os.path.normpath(
             os.path.join(os.path.dirname(link_path), link_dest))
-        if os.path.commonpath([abs_link_dest, parent_path]) == parent_path:
+        if (abs_link_dest == parent_path
+                or abs_link_dest.startswith(
+                    parent_path.rstrip(os.sep) + os.sep)):
             return False
     return True
 

@@ -121,7 +121,7 @@ class SyncDir:
         if lookup:
             def lookup_stat(path: str) -> os.stat_result:
                 full_path = os.path.join(self.path, path)
-                for entry in self._sub_entries:
+                for entry, rel_path in self._sub_entries:
                     if entry.path == full_path:
                         return entry.stat()
                 return os.stat(full_path, follow_symlinks=False)
@@ -133,9 +133,11 @@ class SyncDir:
         if not memoize or not self._sub_entries:
             self._sub_entries = []
             for entry in rec_scan(self.path):
-                self._sub_entries.append(entry)
+                # Computing the relative path is expensive to do each time.
+                rel_path = os.path.relpath(entry.path, self.path)
+                self._sub_entries.append((entry, rel_path))
 
-        for entry in self._sub_entries:
+        for entry, rel_path in self._sub_entries:
             if entry.is_file(follow_symlinks=False) and not files:
                 continue
             elif entry.is_dir(follow_symlinks=False) and not dirs:
@@ -143,13 +145,12 @@ class SyncDir:
             elif entry.is_symlink() and not symlinks:
                 continue
             else:
-                rel_path = os.path.relpath(entry.path, self.path)
-                common = {
-                    os.path.commonpath([path, rel_path]) for path in exclude}
-                if common & exclude:
-                    # File is excluded or is in an excluded directory.
-                    continue
-                elif rel:
+                for exclude_path in exclude:
+                    if (rel_path == exclude_path
+                            or rel_path.startswith(
+                                exclude_path.rstrip(os.sep) + os.sep)):
+                        continue
+                if rel:
                     output.update({
                         rel_path: entry.stat(follow_symlinks=False)})
                 else:
