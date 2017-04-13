@@ -200,8 +200,8 @@ class InitializeCommand(Command):
 
         self._setup_remote()
 
-        # Make sure that file mtimes are updated before the time of the last
-        # sync is set in the info file.
+        # The database can only be committed once all files are written to
+        # disk. This is to protect against interruption.
         os.sync()
 
         # The profile is now fully initialized. Update the info file.
