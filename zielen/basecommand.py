@@ -124,7 +124,11 @@ class Command(abc.ABC):
         """
         self._lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
-            self._lock_socket.bind("\0" + "zielen-" + self.profile.name)
+            # We can't use the profile ID here because during
+            # initialization, the info file hasn't been generated yet.
+            instance_id = "-".join([
+                "zielen", str(os.getuid()), self.profile.name])
+            self._lock_socket.bind("\0" + instance_id)
         except socket.error:
             raise StatusError(
                 "another operation on this profile is already taking place")
