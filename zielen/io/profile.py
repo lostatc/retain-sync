@@ -278,6 +278,7 @@ class ProfileDBFile(SyncDBFile):
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
+        self.cur.arraysize = 10
 
         with self._transact():
             self.cur.executescript("""\
@@ -457,8 +458,8 @@ class ProfileDBFile(SyncDBFile):
             path: The file path to search the database for.
 
         Returns:
-            A named tuple containing the values from the other database
-            columns (directory, priority).
+            A named tuple containing a bool representing whether the file is a
+            directory and the file priority.
         """
         # Clear the query result set.
         self.cur.fetchall()
@@ -485,12 +486,9 @@ class ProfileDBFile(SyncDBFile):
 
         Returns:
             A dict containing file paths as keys and named tuples as values.
-            These named tuples contain the values from the other database
-            columns (directory, priority).
+            These named tuples contain a bool representing whether the file
+            is a directory and the file priority.
         """
-        # Clear the query result set.
-        self.cur.fetchall()
-
         start_id = self._get_path_id(start) if start else None
         self.cur.execute("""\
             SELECT n.path, n.directory, n.priority
@@ -501,8 +499,10 @@ class ProfileDBFile(SyncDBFile):
             AND (:directory IS NULL OR n.directory = :directory);
             """, {"start_id": start_id, "directory": directory})
 
+        # As long as self.cur.arraysize is greater than 1, fetchmany() is
+        # significantly faster than fetchall().
         return {path: PathData(directory, priority)
-                for path, directory, priority in self.cur.fetchall()}
+                for path, directory, priority in iter(self.cur.fetchmany())}
 
     def increment(self, paths: Iterable[str], increment) -> None:
         """Increment the priority of some paths by some value.

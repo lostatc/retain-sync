@@ -253,6 +253,7 @@ class DestDBFile(SyncDBFile):
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
+        self.cur.arraysize = 10
 
         with self._transact():
             self.cur.executescript("""\
@@ -373,12 +374,10 @@ class DestDBFile(SyncDBFile):
             path: The file path to search the database for.
 
         Returns:
-            A named tuple containing the values from the other database
-            columns (directory, lastsync).
+            A named tuple containing a bool representing whether the file is
+            a directory and the time that the file was last updated by a
+            sync as a unix timestamp.
         """
-        # Clear the query result set.
-        self.cur.fetchall()
-
         path_id = self._get_path_id(path)
         self.cur.execute("""\
             SELECT path, directory, lastsync
@@ -404,12 +403,10 @@ class DestDBFile(SyncDBFile):
 
         Returns:
             A dict containing file paths as keys and named tuples as values.
-            These named tuples contain the values from the other database
-            columns.
+            These named tuples contain a bool representing whether the file
+            is a directory and the time that the file was last updated by a
+            sync as a unix timestamp.
         """
-        # Clear the query result set.
-        self.cur.fetchall()
-
         start_id = self._get_path_id(start) if start else None
         self.cur.execute("""\
             SELECT n.path, n.directory, n.lastsync
@@ -422,5 +419,7 @@ class DestDBFile(SyncDBFile):
             """, {"start_id": start_id, "directory": directory,
                   "min_lastsync": min_lastsync})
 
+        # As long as self.cur.arraysize is greater than 1, fetchmany() is
+        # significantly faster than fetchall().
         return {path: PathData(directory, lastsync)
-                for path, directory, lastsync in self.cur.fetchall()}
+                for path, directory, lastsync in iter(self.cur.fetchmany())}
