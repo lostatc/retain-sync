@@ -145,10 +145,6 @@ class SyncCommand(Command):
         # Remove excluded files that are still in the remote directory.
         self._rm_excluded_files(remote_excluded_files)
 
-        # The database can only be committed once all files are written to
-        # disk. This is to protect against interruption.
-        os.sync()
-
         # The sync is now complete. Update the time of the last sync in the
         # info file.
         self.profile.db_file.conn.commit()

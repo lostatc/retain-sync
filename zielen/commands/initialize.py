@@ -200,10 +200,6 @@ class InitializeCommand(Command):
 
         self._setup_remote()
 
-        # The database can only be committed once all files are written to
-        # disk. This is to protect against interruption.
-        os.sync()
-
         # The profile is now fully initialized. Update the info file.
         if self.profile.cfg_file.vals["RemoteHost"]:
             atexit.unregister(self.connection.unmount)
