@@ -143,7 +143,7 @@ class SyncDBFile:
                 detect_types=sqlite3.PARSE_DECLTYPES,
                 isolation_level="IMMEDIATE")
             self.cur = self.conn.cursor()
-            self.cur.arraysize = 10
+            self.cur.arraysize = 20
             self.cur.executescript("""\
                 PRAGMA foreign_keys = ON;
                 """)

@@ -228,8 +228,15 @@ class DestSyncDir(SyncDir):
 class DestDBFile(SyncDBFile):
     """Manipulate the remote file database.
 
+    This database uses a transitive closure table to represent the file
+    hierarchy. Because it uses a 64-bit hash of the file path as a primary
+    key, it can't handle more than a few tens of millions of files without
+    running into collision issues.
+
     Attributes:
         path: The path of the database file.
+        conn: The sqlite connection object for the database.
+        cur: The sqlite cursor object for the connection.
     """
     def create(self) -> None:
         """Create a new empty database.
@@ -253,7 +260,7 @@ class DestDBFile(SyncDBFile):
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
-        self.cur.arraysize = 10
+        self.cur.arraysize = 20
 
         with self._transact():
             self.cur.executescript("""\
@@ -419,7 +426,9 @@ class DestDBFile(SyncDBFile):
             """, {"start_id": start_id, "directory": directory,
                   "min_lastsync": min_lastsync})
 
-        # As long as self.cur.arraysize is greater than 1, fetchmany() is
-        # significantly faster than fetchall().
-        return {path: PathData(directory, lastsync)
-                for path, directory, lastsync in iter(self.cur.fetchmany())}
+        # As long as self.cur.arraysize is greater than 1, fetchmany() should
+        # be more efficient than fetchall().
+        return {
+            path: PathData(directory, lastsync)
+            for array in iter(lambda: self.cur.fetchmany(), [])
+            for path, directory, lastsync in array}

@@ -250,7 +250,9 @@ class ProfileDBFile(SyncDBFile):
     """Manipulate a profile database for keeping track of files.
 
     This database uses a transitive closure table to represent the file
-    hierarchy.
+    hierarchy. Because it uses a 64-bit hash of the file path as a primary
+    key, it can't handle more than a few tens of millions of files without
+    running into collision issues.
 
     Attributes:
         path: The path of the profile database file.
@@ -278,7 +280,7 @@ class ProfileDBFile(SyncDBFile):
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
         self.cur = self.conn.cursor()
-        self.cur.arraysize = 10
+        self.cur.arraysize = 20
 
         with self._transact():
             self.cur.executescript("""\
@@ -499,10 +501,12 @@ class ProfileDBFile(SyncDBFile):
             AND (:directory IS NULL OR n.directory = :directory);
             """, {"start_id": start_id, "directory": directory})
 
-        # As long as self.cur.arraysize is greater than 1, fetchmany() is
-        # significantly faster than fetchall().
-        return {path: PathData(directory, priority)
-                for path, directory, priority in iter(self.cur.fetchmany())}
+        # As long as self.cur.arraysize is greater than 1, fetchmany() should
+        # be more efficient than fetchall().
+        return {
+            path: PathData(directory, priority)
+            for array in iter(lambda: self.cur.fetchmany(), [])
+            for path, directory, priority in array}
 
     def increment(self, paths: Iterable[str], increment) -> None:
         """Increment the priority of some paths by some value.
