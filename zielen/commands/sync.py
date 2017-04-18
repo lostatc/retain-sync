@@ -67,7 +67,6 @@ class SyncCommand(Command):
         """Run the command.
 
         Raises:
-            UserInputError: The specified profile has already been initialized.
             ServerError: The connection to the remote directory was lost.
         """
         self.setup_profile()

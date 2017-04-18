@@ -121,6 +121,9 @@ class Command(abc.ABC):
         This prevents multiple operations from running on the same profile at
         the same time. The lock is released automatically whenever the program
         exits, even via SIGKILL.
+
+        Raises:
+            StatusError: The program is already locked for this profile.
         """
         self._lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:

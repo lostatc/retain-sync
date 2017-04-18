@@ -1,4 +1,4 @@
-"""Perform operations on the program's files and directories.
+"""Base classes for filesystem objects.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 

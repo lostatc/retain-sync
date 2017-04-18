@@ -46,10 +46,10 @@ class Profile:
         name: The name of the profile.
         path: The path of the profile directory.
         mnt_dir: The path of the remote mountpoint.
-        ex_file: The path of the exclude pattern file.
-        info_file: The path of the JSON file for profile metadata.
-        db_file: The path of the file priority database.
-        cfg_file: The path of the profile's configuration file.
+        ex_file: An object for the exclude pattern file.
+        info_file: An object for the JSON file for profile metadata.
+        db_file: An object for the file priority database.
+        cfg_file: An object for the profile's configuration file.
     """
     def __init__(self, name: str) -> None:
         self.name = name
@@ -170,7 +170,7 @@ class ProfileInfoFile(JSONFile):
     def vals(self, key) -> Any:
         """Parse individual values from the info file.
 
-        Output Values:
+        Returns:
             LastSync: Input value converted to the number of seconds since the
                 epoch.
             LastAdjustment: Input value converted to the number of seconds
@@ -184,16 +184,17 @@ class ProfileInfoFile(JSONFile):
         if value is not None:
             if key == "LastSync":
                 value = datetime.datetime.strptime(
-                    self.raw_vals["LastSync"], "%Y-%m-%dT%H:%M:%S").replace(
-                    tzinfo=datetime.timezone.utc).timestamp()
+                    value, "%Y-%m-%dT%H:%M:%S").replace(
+                        tzinfo=datetime.timezone.utc).timestamp()
             if key == "LastAdjust":
                 value = datetime.datetime.strptime(
-                    self.raw_vals["LastAdjust"], "%Y-%m-%dT%H:%M:%S").replace(
-                    tzinfo=datetime.timezone.utc).timestamp()
+                    value, "%Y-%m-%dT%H:%M:%S").replace(
+                        tzinfo=datetime.timezone.utc).timestamp()
         return value
 
     @vals.setter
     def vals(self, key, value) -> None:
+        """Set individual values."""
         self.raw_vals[key] = value
 
     def generate(self, name: str, add_remote=False) -> None:
@@ -618,7 +619,7 @@ class ProfileConfigFile(ConfigFile):
         self.add_remote = add_remote
         self._instances.add(self)
 
-    def _check_values(self, key: str, value: str) -> Optional[str]:
+    def _check_value(self, key: str, value: str) -> Optional[str]:
         """Check the syntax of a config option and return an error message.
 
         Args:
@@ -767,7 +768,7 @@ class ProfileConfigFile(ConfigFile):
 
         # Check that all key names are valid.
         missing_keys = set(self._req_keys) - self.raw_vals.keys()
-        unrecognized_keys = self.raw_vals.keys() - self._all_keys
+        unrecognized_keys = self.raw_vals.keys() - set(self._all_keys)
         if unrecognized_keys or missing_keys:
             for key in missing_keys:
                 errors.append(
@@ -785,7 +786,7 @@ class ProfileConfigFile(ConfigFile):
                 continue
 
             if check_empty or not check_empty and value:
-                err_msg = self._check_values(key, value)
+                err_msg = self._check_value(key, value)
                 if err_msg:
                     errors.append("{0}: '{1}' ".format(context, key) + err_msg)
 
@@ -793,21 +794,24 @@ class ProfileConfigFile(ConfigFile):
             raise FileParseError(*errors)
 
     @DictProperty
-    def vals(self, key) -> Any:
+    def vals(self, key: str) -> Any:
         """Parse individual config values.
 
-        Output Values:
+        Returns:
             LocalDir: Input value converted to a user-expanded, normalized
-                path.
+                path as a str.
             RemoteHost: 'None' if value is in self._host_synonyms, and the
-                input value otherwise.
+                input value as a str otherwise.
+            RemoteUser: Input value unmodified as a str.
+            Port: Input value unmodified as a str.
             RemoteDir: Input value converted to a user-expanded, normalized
-                path.
-            StorageLimit: Input value converted to the number of bytes.
-            SyncInterval: Input value converted to the number of seconds.
-            TrashDirs: Input value converted to a list of user-expanded,
-                normalized paths.
-            PriorityHalfLife: Input value converted to the number of seconds.
+                path as a str.
+            StorageLimit: Input value converted to bytes as an int.
+            SyncInterval: Input value converted to seconds as an int.
+            SshfsOptions: Input value unmodified as a str.
+            TrashDirs: Input value converted to user-expanded, normalized paths
+                as a list of strings.
+            PriorityHalfLife: Input value converted to seconds as an int.
             DeleteAlways: Input value converted to a bool.
             SyncExtraFiles: Input value converted to a bool.
             InflatePriority: Input value converted to a bool.
@@ -871,7 +875,8 @@ class ProfileConfigFile(ConfigFile):
         return value
 
     @vals.setter
-    def vals(self, key, value) -> None:
+    def vals(self, key: str, value: str) -> None:
+        """Set individual config values."""
         self.raw_vals[key] = value
 
     def prompt(self) -> None:
@@ -904,7 +909,7 @@ class ProfileConfigFile(ConfigFile):
                     usr_input = input(self._prompt_msgs[key]).strip()
                     if not usr_input and key in self._subs:
                         usr_input = self._subs[key]
-                    err_msg = self._check_values(key, usr_input)
+                    err_msg = self._check_value(key, usr_input)
                     if err_msg:
                         err("Error: this value " + err_msg)
                     else:
