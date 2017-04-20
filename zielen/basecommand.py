@@ -24,7 +24,7 @@ import socket
 from textwrap import dedent
 
 from zielen import PROFILES_DIR
-from zielen.exceptions import UserInputError, StatusError
+from zielen.exceptions import InputError, StatusError
 from zielen.io.profile import Profile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
 from zielen.util.connect import SSHConnection
@@ -64,7 +64,7 @@ class Command(abc.ABC):
             A Profile object for the selected profile.
 
         Raises:
-            UserInputError: The input doesn't refer to any profile.
+            InputError: The input doesn't refer to any profile.
         """
         # Check if input is the name of an existing profile.
         if input_str in self.profiles:
@@ -78,14 +78,14 @@ class Command(abc.ABC):
                 if os.path.samefile(
                         input_path, profile.cfg_file.vals["LocalDir"]):
                     return profile
-        raise UserInputError(
+        raise InputError(
             "argument is not a profile name or local directory path")
 
     def setup_profile(self):
         """Perform some initial setup and assignments.
 
         Raises:
-            UserInputError: The selected profile is only partially initialized.
+            InputError: The selected profile is only partially initialized.
         """
         self.profile.info_file.read()
         self.lock()
@@ -93,7 +93,7 @@ class Command(abc.ABC):
         # Warn if profile is only partially initialized.
         if self.profile.info_file.vals["Status"] == "partial":
             atexit.register(self.print_interrupt_msg)
-            raise UserInputError("invalid profile")
+            raise InputError("invalid profile")
 
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()

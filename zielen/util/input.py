@@ -23,7 +23,7 @@ import argparse
 import pkg_resources
 from textwrap import dedent
 
-from zielen.exceptions import UserInputError
+from zielen.exceptions import InputError
 
 
 def usage(command: str) -> None:
@@ -121,7 +121,7 @@ def usage(command: str) -> None:
 class CustomArgumentParser(argparse.ArgumentParser):
     """Set custom formatting of error messages for argparse."""
     def error(self, message) -> None:
-        raise UserInputError(message)
+        raise InputError(message)
 
 
 class HelpAction(argparse.Action):

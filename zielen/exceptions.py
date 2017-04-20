@@ -35,7 +35,7 @@ class AvailableSpaceError(ProgramError):
     """Raised whenever there is not enough space to accommodate files."""
 
 
-class UserInputError(ProgramError):
+class InputError(ProgramError):
     """Raised whenever user-provided input is invalid."""
 
 

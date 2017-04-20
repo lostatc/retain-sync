@@ -27,7 +27,7 @@ import abc
 from textwrap import indent
 
 from zielen import XDG_RUNTIME_DIR
-from zielen.exceptions import ServerError, UserInputError
+from zielen.exceptions import ServerError, InputError
 from zielen.util.misc import shell_cmd
 
 
@@ -65,7 +65,7 @@ class Connection(abc.ABC):
                 empty.
 
         Raises:
-            UserInputError: The remote directory is invalid.
+            InputError: The remote directory is invalid.
         """
 
 
@@ -94,7 +94,7 @@ class SSHConnection(Connection):
                 empty.
 
         Raises:
-            UserInputError: The remote directory is invalid.
+            InputError: The remote directory is invalid.
         """
         # Initiate a master connection if not already connected.
         if "-S" not in self._ssh_args:
@@ -103,20 +103,20 @@ class SSHConnection(Connection):
         if self._check_exists():
             if self._check_isdir():
                 if not self._check_iswritable():
-                    raise UserInputError(
+                    raise InputError(
                         "remote directory must be writable")
                 elif not add_remote and not self._check_isempty():
-                    raise UserInputError(
+                    raise InputError(
                         "remote directory must be empty")
             else:
-                raise UserInputError(
+                raise InputError(
                     "remote directory must be a directory")
         else:
             if add_remote:
-                raise UserInputError(
+                raise InputError(
                     "remote directory must be an existing directory")
             elif not self._mkdir():
-                raise UserInputError(
+                raise InputError(
                     "remote directory must be writable")
 
     def mount(self, mountpoint: str) -> None:

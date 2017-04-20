@@ -26,7 +26,7 @@ import sqlite3
 from textwrap import dedent
 
 from zielen.exceptions import (
-    UserInputError, ServerError, AvailableSpaceError)
+    InputError, ServerError, AvailableSpaceError)
 from zielen.basecommand import Command
 from zielen.io.profile import Profile, ProfileConfigFile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
@@ -64,7 +64,7 @@ class InitializeCommand(Command):
         """Run the command.
 
         Raises:
-            UserInputError: The command-line arguments were invalid.
+            InputError: The command-line arguments were invalid.
             ServerError: The connection to the remote directory was lost.
             AvailableSpaceError: There is not enough space in the local or
                 remote filesystem.
@@ -86,19 +86,19 @@ class InitializeCommand(Command):
 
         # Check that value of profile name is valid.
         if re.search(r"\s+", self.profile_input):
-            raise UserInputError("profile name must not contain spaces")
+            raise InputError("profile name must not contain spaces")
         elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_input):
-            raise UserInputError(
+            raise InputError(
                 "profile name must not contain special symbols")
 
         # Check the arguments of command-line options.
         if self.exclude:
             if not os.path.isfile(self.exclude):
-                raise UserInputError(
+                raise InputError(
                     "argument for '--exclude' is not a valid file")
         if self.template:
             if not os.path.isfile(self.template):
-                raise UserInputError(
+                raise InputError(
                     "argument for '--template' is not a valid file")
 
         self.profile = Profile(self.profile_input)
@@ -108,7 +108,7 @@ class InitializeCommand(Command):
 
         # Check if the profile has already been initialized.
         if self.profile.info_file.vals["Status"] == "initialized":
-            raise UserInputError("this profile already exists")
+            raise InputError("this profile already exists")
 
         # Lock profile if not already locked.
         self.lock()
