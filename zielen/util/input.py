@@ -155,13 +155,12 @@ class QuietAction(argparse.Action):
         sys.stdout = open(os.devnull, "a")
 
 
-def parse_args() -> dict:
+def parse_args() -> argparse.Namespace:
     """Create a dictionary of parsed command-line arguments.
 
     Returns:
-        A dict of command-line argument names and their values.
+        A namepsace of command-line argument names and their values.
     """
-
     parser = CustomArgumentParser(add_help=False)
     parser.add_argument("--help", action=HelpAction)
     parser.add_argument("--version", action=VersionAction)
@@ -199,4 +198,4 @@ def parse_args() -> dict:
     parser_emptytrash.add_argument("profile", metavar="profile name or path")
     parser_emptytrash.set_defaults(command="empty-trash")
 
-    return vars(parser.parse_args())
+    return parser.parse_args()

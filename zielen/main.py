@@ -69,22 +69,22 @@ def daemon(profile_name) -> int:
     return 0
 
 
-def def_command(cmd_args: dict) -> Command:
+def def_command(cmd_args) -> Command:
     """Get an Command subclass instance from the command-line input."""
-    if cmd_args["command"] == "initialize":
+    if cmd_args.command == "initialize":
         return InitializeCommand(
-            cmd_args["profile"], cmd_args["exclude"], cmd_args["template"],
-            cmd_args["add_remote"])
-    elif cmd_args["command"] == "sync":
-        return SyncCommand(cmd_args["profile"])
-    elif cmd_args["command"] == "reset":
+            cmd_args.profile, cmd_args.exclude, cmd_args.template,
+            cmd_args.add_remote)
+    elif cmd_args.command == "sync":
+        return SyncCommand(cmd_args.profile)
+    elif cmd_args.command == "reset":
         return ResetCommand(
-            cmd_args["profile"], cmd_args["keep_remote"],
-            cmd_args["no_retrieve"])
-    elif cmd_args["command"] == "list":
+            cmd_args.profile, cmd_args.keep_remote,
+            cmd_args.no_retrieve)
+    elif cmd_args.command == "list":
         return ListCommand()
-    elif cmd_args["command"] == "empty-trash":
-        return EmptyTrashCommand(cmd_args["profile"])
+    elif cmd_args.command == "empty-trash":
+        return EmptyTrashCommand(cmd_args.profile)
 
 
 def signal_exception_handler(signum: int, frame) -> None:
