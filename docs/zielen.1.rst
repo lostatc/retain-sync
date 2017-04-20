@@ -69,6 +69,9 @@ GLOBAL OPTIONS
 **--version**
     Print the version number and exit.
 
+**--debug**
+    Print a full stack trace instead of an error message if an error occurs.
+
 **-q**, **--quiet**
     Suppress all non-error output.
 

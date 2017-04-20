@@ -44,6 +44,8 @@ def usage(command: str) -> None:
             Global options:
                     {1}--help{0}          Print a usage message and exit.
                     {1}--version{0}       Print the version number and exit.
+                    {1}--debug{0}         Print a full stack trace instead of an error message if an
+                                        error occurs.
                 {1}-q{0}, {1}--quiet{0}         Suppress all non-error output.
 
             Commands:
@@ -164,6 +166,7 @@ def parse_args() -> argparse.Namespace:
     parser = CustomArgumentParser(add_help=False)
     parser.add_argument("--help", action=HelpAction)
     parser.add_argument("--version", action=VersionAction)
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument("--quiet", "-q", action=QuietAction)
 
     subparsers = parser.add_subparsers(dest="command")

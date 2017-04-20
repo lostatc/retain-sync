@@ -1,4 +1,4 @@
-"""The main module for the client.
+"""The main module for the program.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -43,29 +43,32 @@ def main() -> int:
         cmd_args = parse_args()
         command = def_command(cmd_args)
         command.main()
-    except ProgramError as e:
-        for message in e.args:
+    except ProgramError as error:
+        try:
+            if cmd_args.debug:
+                raise
+        except NameError:
+            pass
+        for message in error.args:
             err("Error: {}".format(message))
         return 1
     return 0
 
 
 def daemon(profile_name) -> int:
-    """Start the daemon."""
-    try:
-        # Exit properly on SIGTERM, SIGHUP or SIGINT. SIGTERM is the method
-        # by which the daemon will normally exit, and should not raise an
-        # exception.
-        signal.signal(signal.SIGTERM, signal_exit_handler)
-        signal.signal(signal.SIGHUP, signal_exception_handler)
-        signal.signal(signal.SIGINT, signal_exception_handler)
+    """Start the daemon.
 
-        ghost = Daemon(profile_name)
-        ghost.main()
-    except ProgramError as e:
-        for message in e.args:
-            err("Error: {}".format(message))
-        return 1
+    Always print a full stack trace instead of an error message.
+    """
+    # Exit properly on SIGTERM, SIGHUP or SIGINT. SIGTERM is the method
+    # by which the daemon will normally exit, and should not raise an
+    # exception.
+    signal.signal(signal.SIGTERM, signal_exit_handler)
+    signal.signal(signal.SIGHUP, signal_exception_handler)
+    signal.signal(signal.SIGINT, signal_exception_handler)
+
+    ghost = Daemon(profile_name)
+    ghost.main()
     return 0
 
 
