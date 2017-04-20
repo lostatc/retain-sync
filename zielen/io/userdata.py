@@ -25,7 +25,7 @@ import collections
 from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
 
 from zielen.exceptions import ServerError
-from zielen.io.program import SyncDBFile
+from zielen.io.base import SyncDBFile
 from zielen.util.misc import rec_scan, sha1sum, FactoryDict
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])

@@ -32,7 +32,7 @@ from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
 
 from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
 from zielen.exceptions import FileParseError
-from zielen.io.program import JSONFile, ConfigFile, SyncDBFile
+from zielen.io.base import JSONFile, ConfigFile, SyncDBFile
 from zielen.util.misc import err, DictProperty, rec_scan
 
 PathData = NamedTuple(
