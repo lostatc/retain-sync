@@ -17,7 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-
 import os
 import re
 import json
@@ -27,32 +26,6 @@ import hashlib
 from typing import List, Generator, Iterable
 
 from zielen.exceptions import FileParseError, ServerError
-from zielen.util.misc import env
-
-
-class ProgramDir:
-    """Get information about the main configuration directory.
-
-    Attributes:
-        path: The path of the program directory.
-        profiles_dir: The base directory containing profile directories.
-    """
-
-    path = os.path.join(env("XDG_CONFIG_HOME"), "zielen")
-    profiles_dir = os.path.join(path, "profiles")
-
-    @classmethod
-    def list_profiles(cls) -> List[str]:
-        """Get the names of all existing profiles.
-
-        Returns:
-            A list containing the name of each profile.
-        """
-        profile_names = []
-        for entry in os.scandir(cls.profiles_dir):
-            if entry.is_dir(follow_symlinks=False):
-                profile_names.append(entry.name)
-        return profile_names
 
 
 class ConfigFile:

@@ -17,7 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-
 import atexit
 import collections
 import datetime
@@ -34,18 +33,6 @@ from typing import Collection
 def err(*args, **kwargs) -> None:
     """Print to standard error."""
     print(*args, file=sys.stderr, **kwargs)
-
-
-def env(var: str) -> str:
-    """Return a default value if environment variable is unset."""
-    defaults = {
-        "XDG_CONFIG_HOME":  os.path.join(os.getenv("HOME"), ".config"),
-        "XDG_DATA_HOME":    os.path.join(os.getenv("HOME"), ".local/share"),
-        "XDG_RUNTIME_DIR":  os.path.join("/run/user", str(os.getuid())),
-        "USER":             pwd.getpwuid(os.getuid()).pw_name
-        }
-    defaults = collections.defaultdict(lambda: None, defaults)
-    return os.getenv(var, defaults[var])
 
 
 def tty_input(prompt: str) -> str:

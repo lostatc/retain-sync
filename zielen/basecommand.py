@@ -17,15 +17,14 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-
 import os
 import atexit
 import abc
 import socket
 from textwrap import dedent
 
+from zielen import PROFILES_DIR
 from zielen.exceptions import UserInputError, StatusError
-from zielen.io.program import ProgramDir
 from zielen.io.profile import Profile
 from zielen.io.userdata import LocalSyncDir, DestSyncDir
 from zielen.util.connect import SSHConnection
@@ -45,7 +44,9 @@ class Command(abc.ABC):
     """
     def __init__(self) -> None:
         self.profiles = {
-            name: Profile(name) for name in ProgramDir.list_profiles()}
+            entry.name: Profile(entry.name)
+            for entry in os.scandir(PROFILES_DIR)
+            if entry.is_dir(follow_symlinks=False)}
         self.profile = None
         self.local_dir = None
         self.dest_dir = None

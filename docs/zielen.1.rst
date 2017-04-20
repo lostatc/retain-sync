@@ -209,7 +209,7 @@ can be altered in the profile config file.
 FILES
 =====
 ~/.config/zielen/
-    This is the **zielen** config directory. The program will respect
+    This is the **zielen** program directory. The program will respect
     XDG_CONFIG_HOME and, if it is set, put the directory there instead.
 
     profiles/<name>/

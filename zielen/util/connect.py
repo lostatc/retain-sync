@@ -17,7 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-
 import os
 import shlex
 import subprocess
@@ -27,8 +26,9 @@ import tempfile
 import abc
 from textwrap import indent
 
+from zielen import XDG_RUNTIME_DIR
 from zielen.exceptions import ServerError, UserInputError
-from zielen.util.misc import env, shell_cmd
+from zielen.util.misc import shell_cmd
 
 
 class Connection(abc.ABC):
@@ -84,7 +84,6 @@ class SSHConnection(Connection):
         if self._port:
             self._ssh_args.extend(["-p", self._port])
 
-        self._runtime_dir = os.path.join(env("XDG_RUNTIME_DIR"), "zielen")
         self._guess_env()
 
     def check_remote(self, add_remote: bool) -> None:
@@ -175,7 +174,7 @@ class SSHConnection(Connection):
     @staticmethod
     def _guess_env() -> bool:
         """Guess environment variables for ssh-agent."""
-        if not env("SSH_AUTH_SOCK"):
+        if not os.getenv("SSH_AUTH_SOCK"):
             # Search for ssh-agent auth socket in it's default location.
             for entry in os.scandir(tempfile.gettempdir()):
                 if (re.search("^ssh-", entry.name)
@@ -193,8 +192,8 @@ class SSHConnection(Connection):
 
     def _connect(self) -> None:
         """Start an ssh master connection and stop on program exit."""
-        os.makedirs(self._runtime_dir, exist_ok=True)
-        self._ssh_args.extend(["-S", os.path.join(self._runtime_dir, "%C")])
+        os.makedirs(XDG_RUNTIME_DIR, exist_ok=True)
+        self._ssh_args.extend(["-S", os.path.join(XDG_RUNTIME_DIR, "%C")])
         shell_cmd(self._ssh_args + ["-NM"])
 
     def _execute(self, remote_cmd: list) -> subprocess.Popen:

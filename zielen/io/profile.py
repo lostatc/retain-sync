@@ -17,7 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-
 import sys
 import os
 import re
@@ -31,9 +30,10 @@ import uuid
 from textwrap import dedent
 from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
 
+from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
 from zielen.exceptions import FileParseError
-from zielen.io.program import JSONFile, ConfigFile, ProgramDir, SyncDBFile
-from zielen.util.misc import err, env, DictProperty, rec_scan
+from zielen.io.program import JSONFile, ConfigFile, SyncDBFile
+from zielen.util.misc import err, DictProperty, rec_scan
 
 PathData = NamedTuple(
     "PathData", [("directory", bool), ("priority", float)])
@@ -53,7 +53,7 @@ class Profile:
     """
     def __init__(self, name: str) -> None:
         self.name = name
-        self.path = os.path.join(ProgramDir.profiles_dir, self.name)
+        self.path = os.path.join(PROFILES_DIR, self.name)
         os.makedirs(self.path, exist_ok=True)
         self.mnt_dir = os.path.join(self.path, "mnt")
         self.ex_file = ProfileExcludeFile(
@@ -592,7 +592,7 @@ class ProfileConfigFile(ConfigFile):
         "SyncInterval":     "20",
         "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
                              "ServerAliveCountMax=3"),
-        "TrashDirs":        os.path.join(env("XDG_DATA_HOME"), "Trash/files"),
+        "TrashDirs":        os.path.join(XDG_DATA_HOME, "Trash/files"),
         "PriorityHalfLife": "120",
         "DeleteAlways":     "no",
         "SyncExtraFiles":   "yes",
@@ -601,7 +601,7 @@ class ProfileConfigFile(ConfigFile):
         }
     _subs = {
         "RemoteHost":   _host_synonyms[0],
-        "RemoteUser":   env("USER"),
+        "RemoteUser":   os.getenv("LOGNAME"),
         "Port":         "22"
         }
     _prompt_msgs = {
@@ -641,10 +641,10 @@ class ProfileConfigFile(ConfigFile):
         if key == "LocalDir":
             if not re.search("^~?/", value):
                 return "must be an absolute path"
+
             value = os.path.expanduser(os.path.normpath(value))
-            if (ProgramDir.path == value
-                    or value.startswith(
-                        ProgramDir.path.rstrip(os.sep) + os.sep)):
+            if (os.path.commonpath([value, PROGRAM_DIR])
+                    in [value, PROGRAM_DIR]):
                 return "must not contain zielen config files"
 
             overlap_profiles = []
