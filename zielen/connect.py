@@ -17,18 +17,18 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import os
-import shlex
-import subprocess
-import re
-import stat
-import tempfile
 import abc
+import os
+import re
+import shlex
+import stat
+import subprocess
+import tempfile
 from textwrap import indent
 
 from zielen import XDG_RUNTIME_DIR
+from zielen.util import shell_cmd
 from zielen.exceptions import ServerError, InputError
-from zielen.util.misc import shell_cmd
 
 
 class Connection(abc.ABC):

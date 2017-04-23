@@ -17,10 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-# Some of these exceptions closely resemble builtins. The point of having them
-# separate is to differentiate errors that should print a user-friendly error
-# message as opposed to a stack trace. We don't inherit from both ProgramError
-# and a related builtin exception because doing so truncates the argument list.
 
 
 class ProgramError(Exception):

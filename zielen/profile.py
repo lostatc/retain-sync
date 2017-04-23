@@ -17,23 +17,25 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import sys
+import collections
+import datetime
+import glob
 import os
 import re
-import glob
-import datetime
-import pkg_resources
 import sqlite3
-import weakref
-import collections
+import sys
+import textwrap
 import uuid
-from textwrap import dedent
+import weakref
 from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
 
+import pkg_resources
+
 from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
+from zielen.container import JSONFile, ConfigFile, SyncDBFile
+from zielen.io import rec_scan
+from zielen.util import DictProperty
 from zielen.exceptions import FileParseError
-from zielen.io.base import JSONFile, ConfigFile, SyncDBFile
-from zielen.util.misc import err, DictProperty, rec_scan
 
 PathData = NamedTuple(
     "PathData", [("directory", bool), ("priority", float)])
@@ -94,7 +96,7 @@ class ProfileExcludeFile:
             infile: If supplied, copy lines from this file into the new one.
         """
         with open(self.path, "w") as outfile:
-            outfile.write(dedent("""\
+            outfile.write(textwrap.dedent("""\
                 # This file contains patterns representing files and directories to exclude
                 # from syncing.
                 #
@@ -900,7 +902,7 @@ class ProfileConfigFile(ConfigFile):
             # config file has been read based on whether raw_vals is empty.
             if not self.raw_vals.get(key):
                 if not msg_printed:
-                    print(dedent("""\
+                    print(textwrap.dedent("""\
                     Please enter values for the following settings. Leave blank to accept the
                     default value if one is given in parentheses.
                     """))
@@ -911,7 +913,7 @@ class ProfileConfigFile(ConfigFile):
                         usr_input = self._subs[key]
                     err_msg = self._check_value(key, usr_input)
                     if err_msg:
-                        err("Error: this value " + err_msg)
+                        print("Error: this value " + err_msg, file=sys.stderr)
                     else:
                         break
                 self.vals[key] = usr_input

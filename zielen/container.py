@@ -1,4 +1,4 @@
-"""Base classes for filesystem objects.
+"""Base classes for persistently storing data.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 

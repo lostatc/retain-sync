@@ -18,15 +18,14 @@ You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import os
+import shutil
 import sqlite3
 import time
-import shutil
-import collections
-from typing import Tuple, Iterable, List, Set, Generator, Dict, NamedTuple
+from typing import Tuple, Iterable, List, Dict, NamedTuple
 
-from zielen.exceptions import ServerError
-from zielen.io.base import SyncDBFile
-from zielen.util.misc import rec_scan, sha1sum, FactoryDict
+from zielen.container import SyncDBFile
+from zielen.io import rec_scan, sha1sum
+from zielen.util import FactoryDict
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
 

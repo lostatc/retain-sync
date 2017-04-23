@@ -26,7 +26,6 @@ import subprocess
 import inotify.adapters
 
 from zielen.basecommand import Command
-from zielen.util.misc import err
 
 
 class Daemon(Command):
@@ -135,7 +134,7 @@ class Daemon(Command):
                 # added to the journal.
                 for line in cmd.stderr:
                     if line.strip():
-                        err(line)
+                        print(line, file=sys.stderr)
                 cmd.wait()
                 sys.stderr.flush()
 

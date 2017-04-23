@@ -17,22 +17,22 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import os
-import sys
-import re
 import atexit
+import os
+import re
 import shutil
 import sqlite3
+import sys
 from textwrap import dedent
 
+
+from zielen.connect import SSHConnection
+from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
+from zielen.userdata import LocalSyncDir, DestSyncDir
+from zielen.profile import Profile, ProfileConfigFile
+from zielen.basecommand import Command
 from zielen.exceptions import (
     InputError, ServerError, AvailableSpaceError)
-from zielen.basecommand import Command
-from zielen.io.profile import Profile, ProfileConfigFile
-from zielen.io.userdata import LocalSyncDir, DestSyncDir
-from zielen.io.transfer import rec_clone, symlink_tree
-from zielen.util.misc import is_unsafe_symlink
-from zielen.util.connect import SSHConnection
 
 
 class InitializeCommand(Command):

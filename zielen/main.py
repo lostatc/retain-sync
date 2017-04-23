@@ -17,19 +17,18 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import sys
 import signal
+import sys
 
-from zielen.exceptions import ProgramError
+from zielen.input import parse_args
 from zielen.basecommand import Command
-from zielen.daemon import Daemon
-from zielen.commands.initialize import InitializeCommand
-from zielen.commands.sync import SyncCommand
-from zielen.commands.reset import ResetCommand
-from zielen.commands.list import ListCommand
 from zielen.commands.emptytrash import EmptyTrashCommand
-from zielen.util.input import parse_args
-from zielen.util.misc import err
+from zielen.commands.initialize import InitializeCommand
+from zielen.commands.list import ListCommand
+from zielen.commands.reset import ResetCommand
+from zielen.commands.sync import SyncCommand
+from zielen.daemon import Daemon
+from zielen.exceptions import ProgramError
 
 
 def main() -> int:
@@ -50,7 +49,7 @@ def main() -> int:
         except NameError:
             pass
         for message in error.args:
-            err("Error: {}".format(message))
+            print("Error: {}".format(message), file=sys.stderr)
         return 1
     return 0
 

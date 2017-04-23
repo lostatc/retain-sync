@@ -1,4 +1,4 @@
-"""Run file transfer operations.
+"""Access or modify the filesystem.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -17,15 +17,16 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
+import contextlib
+import hashlib
 import os
 import sys
 import tempfile
-import contextlib
 from textwrap import indent
 from typing import Iterable
 
+from zielen.util import shell_cmd, ProgressBar
 from zielen.exceptions import FileTransferError
-from zielen.util.misc import ProgressBar, shell_cmd
 
 
 def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
@@ -169,3 +170,75 @@ def symlink_tree(src_dir: str, dest_dir: str,
                     if overwrite:
                         os.remove(full_dest_path)
                         os.symlink(full_src_path, full_dest_path)
+
+
+def rec_scan(path: str):
+    """Recursively scan a directory tree and yield an os.DirEntry object.
+
+    Args:
+        path: The path of the directory to scan.
+    """
+    for entry in os.scandir(path):
+        yield entry
+        if entry.is_dir(follow_symlinks=False):
+            yield from rec_scan(entry.path)
+
+
+def sha1sum(path: str) -> str:
+    """Get the SHA-1 checksum of a file, reading one block at a time.
+
+    Args:
+        path: The path of the file to find the checksum of. If this value is
+            the path of a directory, a checksum will be computed based on all
+            the files in the directory.
+
+    Returns:
+        The hexadecimal checksum of the file.
+    """
+    sha1_hash = hashlib.sha1()
+    checksum_paths = []
+    try:
+        for entry in rec_scan(path):
+            if entry.is_file(follow_symlinks=False):
+                checksum_paths.append(entry.path)
+    except NotADirectoryError:
+        checksum_paths.append(path)
+
+    # This is necessary to ensure that the same checksum is returned each time.
+    checksum_paths.sort()
+
+    for checksum_path in checksum_paths:
+        block_size = os.stat(checksum_path).st_blksize
+        with open(checksum_path, "rb") as file:
+            for chunk in iter(lambda: file.read(block_size), b""):
+                sha1_hash.update(chunk)
+    return sha1_hash.hexdigest()
+
+
+def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
+    """Check if file is a symlink that can't be safely transferred.
+
+    A symlink is unsafe to transfer if it is an absolute symlink or points to a
+    file outside parent_path.
+
+    Args:
+        link_path: The absolute path of the symlink to check.
+        parent_path: The absolute path of the parent directory to check the
+            symlink destination against.
+
+    Returns:
+        True if the symlink is safe and False if it is not.
+    """
+    try:
+        link_dest = os.readlink(link_path)
+    except OSError:
+        # The file is not a symlink.
+        return False
+    if not os.path.isabs(link_dest):
+        abs_link_dest = os.path.normpath(
+            os.path.join(os.path.dirname(link_path), link_dest))
+        if (abs_link_dest == parent_path
+                or abs_link_dest.startswith(
+                    parent_path.rstrip(os.sep) + os.sep)):
+            return False
+    return True

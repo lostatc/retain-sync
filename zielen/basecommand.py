@@ -1,4 +1,4 @@
-"""Define base class for program commands.
+"""Base class for program commands.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -17,18 +17,19 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import os
-import atexit
 import abc
+import atexit
+import os
 import socket
+import sys
 from textwrap import dedent
 
+
 from zielen import PROFILES_DIR
+from zielen.userdata import LocalSyncDir, DestSyncDir
+from zielen.connect import SSHConnection
+from zielen.profile import Profile
 from zielen.exceptions import InputError, StatusError
-from zielen.io.profile import Profile
-from zielen.io.userdata import LocalSyncDir, DestSyncDir
-from zielen.util.connect import SSHConnection
-from zielen.util.misc import err
 
 
 class Command(abc.ABC):
@@ -140,6 +141,8 @@ class Command(abc.ABC):
     @staticmethod
     def print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
-        err(dedent("""
-            Initialization was interrupted.
-            Please run 'zielen initialize' to complete it or 'zielen reset' to cancel it."""))
+        print(
+            dedent("""
+                Initialization was interrupted.
+                Please run 'zielen initialize' to complete it or 'zielen reset' to cancel it."""),
+            file=sys.stderr)
