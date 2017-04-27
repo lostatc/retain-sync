@@ -88,7 +88,7 @@ class InitializeCommand(Command):
         # Check that value of profile name is valid.
         if re.search(r"\s+", self.profile_input):
             raise InputError("profile name must not contain spaces")
-        elif not re.search(r"^[a-zA-Z0-9_-]+$", self.profile_input):
+        elif not re.search(r"^[\w-]+$", self.profile_input):
             raise InputError(
                 "profile name must not contain special symbols")
 
