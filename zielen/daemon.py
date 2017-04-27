@@ -40,12 +40,15 @@ class Daemon(Command):
         ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
             between making priority adjustments. Two files accessed within this
             interval of time will be weighted the same.
+        INCREMENT_AMOUNT: A constant value to add to the priority value every
+            time a file is accessed.
         profile: The currently selected profile.
         files_queue: A Queue for temporarily holding the paths of files that
             have been opened in the local or remote directories before they're
             updated in the database.
     """
     ADJUST_INTERVAL = 10*60
+    INCREMENT_AMOUNT = 1
 
     def __init__(self, profile_input) -> None:
         super().__init__()
@@ -90,7 +93,8 @@ class Daemon(Command):
                 path_data = self.profile.db_file.get_path(path)
                 if path_data and not path_data.directory:
                     accessed_paths.add(path)
-            self.profile.db_file.increment(accessed_paths, 1)
+            self.profile.db_file.increment(
+                accessed_paths, self.INCREMENT_AMOUNT)
             self.profile.db_file.conn.commit()
 
             self._adjust()

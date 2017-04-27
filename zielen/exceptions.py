@@ -32,7 +32,7 @@ class AvailableSpaceError(ProgramError):
 
 
 class InputError(ProgramError):
-    """Raised whenever user-provided input is invalid."""
+    """Raised whenever input is invalid."""
 
 
 class FileParseError(ProgramError):

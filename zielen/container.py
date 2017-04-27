@@ -32,12 +32,13 @@ class ConfigFile:
     """Parse a configuration file.
 
     Attributes:
+        COMMENT_REGEX: This is a regex object that represents a comment line.
+        SEPARATOR: This is the string that separates keys from values.
         path: The path of the configuration file.
         raw_vals: A dictionary of unmodified config value strings.
     """
-
-    # This is regex that denotes a comment line.
-    comment_reg = re.compile(r"^\s*#")
+    COMMENT_REGEX = re.compile(r"^\s*#")
+    SEPARATOR = "="
 
     def __init__(self, path: str) -> None:
         self.path = path
@@ -49,9 +50,9 @@ class ConfigFile:
             with open(self.path) as file:
                 for line in file:
                     # Skip line if it is a comment.
-                    if (not self.comment_reg.search(line)
-                            and re.search("=", line)):
-                        key, value = line.partition("=")[::2]
+                    if (not self.COMMENT_REGEX.search(line)
+                            and self.SEPARATOR in line):
+                        key, value = line.partition(self.SEPARATOR)[::2]
                         self.raw_vals[key.strip()] = value.strip()
         except OSError:
             raise FileParseError("could not open the configuration file")
@@ -63,16 +64,21 @@ class ConfigFile:
                     self.path, "w") as outfile:
                 for line in infile:
                     # Skip line if it is a comment.
-                    if (not self.comment_reg.search(line)
-                            and re.search("=", line)):
-                        key, value = line.partition("=")[::2]
+                    new_line = line
+                    if (not self.COMMENT_REGEX.search(line)
+                            and self.SEPARATOR in line):
+                        key, value = line.partition(self.SEPARATOR)[::2]
                         key = key.strip()
                         if key not in self.raw_vals:
                             continue
                         # Substitute value in the input file with the value in
                         # self.raw_vals.
-                        line = key + "=" + self.raw_vals.get(key, "") + "\n"
-                    outfile.write(line)
+                        new_line = (
+                            key
+                            + self.SEPARATOR
+                            + self.raw_vals.get(key, "")
+                            + "\n")
+                    outfile.write(new_line)
 
         except OSError:
             raise FileParseError("could not open the configuration file")

@@ -11,12 +11,11 @@ LocalDir=
 # remote directory is on the local machine.
 RemoteHost=
 
-# The user name on the server. This is ignored if 'RemoteHost' refers to the
-# local machine.
+# The user name on the server. This is ignored if 'RemoteHost' is 'localhost'.
 RemoteUser=
 
-# The port number for the connection. This is ignored if 'RemoteHost' refers
-# to the local machine.
+# The port number for the connection. This is ignored if 'RemoteHost' is
+# 'localhost'.
 Port=
 
 # The path of the remote sync directory.
