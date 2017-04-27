@@ -23,6 +23,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import time
 from textwrap import dedent
 
 
@@ -203,8 +204,8 @@ class InitializeCommand(Command):
         if self.profile.cfg_file.vals["RemoteHost"]:
             atexit.unregister(self.connection.unmount)
         self.profile.info_file.vals["Status"] = "initialized"
-        self.profile.info_file.update_synctime()
-        self.profile.info_file.update_adjusttime()
+        self.profile.info_file.vals["LastSync"] = time.time()
+        self.profile.info_file.vals["LastAdjust"] = time.time()
         self.profile.info_file.write()
         atexit.unregister(self.print_interrupt_msg)
 

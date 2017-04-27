@@ -117,7 +117,7 @@ class Daemon(Command):
                     / self.profile.cfg_file.vals["PriorityHalfLife"]))
 
             self.profile.db_file.adjust_all(adjust_constant)
-            self.profile.info_file.update_adjusttime()
+            self.profile.info_file.vals["LastAdjust"] = time.time()
             self.profile.info_file.write()
 
     def _sync(self) -> None:

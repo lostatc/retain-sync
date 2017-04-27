@@ -19,6 +19,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import os
 import shutil
+import time
 from typing import Iterable, Set, NamedTuple
 
 
@@ -148,7 +149,7 @@ class SyncCommand(Command):
         # info file.
         self.profile.db_file.conn.commit()
         self.dest_dir.db_file.conn.commit()
-        self.profile.info_file.update_synctime()
+        self.profile.info_file.vals["LastSync"] = time.time()
         self.profile.info_file.write()
 
     def _prioritize_files(self, space_limit: int,

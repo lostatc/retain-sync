@@ -1,4 +1,4 @@
-"""Manipulate files in the profile directory.
+"""Classes for files in the profile directory.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -184,19 +184,22 @@ class ProfileInfoFile(JSONFile):
             value = None
 
         if value is not None:
-            if key == "LastSync":
+            if key == "LastSync" or key == "LastAdjust":
                 value = datetime.datetime.strptime(
-                    value, "%Y-%m-%dT%H:%M:%S").replace(
-                        tzinfo=datetime.timezone.utc).timestamp()
-            if key == "LastAdjust":
-                value = datetime.datetime.strptime(
-                    value, "%Y-%m-%dT%H:%M:%S").replace(
+                    value, "%Y-%m-%dT%H:%M:%S.%f").replace(
                         tzinfo=datetime.timezone.utc).timestamp()
         return value
 
     @vals.setter
     def vals(self, key, value) -> None:
         """Set individual values."""
+        if value is not None:
+            if key == "LastSync" or key == "LastAdjust":
+                # Use strftime() instead of isoformat() because the latter
+                # doesn't print the decimal point if the microsecond is 0,
+                # which would prevent it from being parsed by strptime().
+                value = datetime.datetime.utcfromtimestamp(
+                    value).strftime("%Y-%m-%dT%H:%M:%S.%f")
         self.raw_vals[key] = value
 
     def generate(self, name: str, add_remote=False) -> None:
@@ -233,20 +236,6 @@ class ProfileInfoFile(JSONFile):
                 }
             })
         self.write()
-
-    def update_synctime(self) -> None:
-        """Update the time of the last sync."""
-        # Store the timestamp as a human-readable string so that the file can
-        # be edited manually.
-        self.vals["LastSync"] = datetime.datetime.utcnow().strftime(
-            "%Y-%m-%dT%H:%M:%S")
-
-    def update_adjusttime(self) -> None:
-        """Update the time of the last sync."""
-        # Store the timestamp as a human-readable string so that the file can
-        # be edited manually.
-        self.vals["LastAdjust"] = datetime.datetime.utcnow().strftime(
-            "%Y-%m-%dT%H:%M:%S")
 
 
 class ProfileDBFile(SyncDBFile):
