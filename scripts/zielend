@@ -2,7 +2,7 @@
 
 import sys
 
-from zielen.main import daemon
+from zielen.cli import daemon
 
 if __name__ == "__main__":
     sys.exit(daemon(sys.argv[1]))

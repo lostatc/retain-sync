@@ -138,7 +138,7 @@ class Daemon(Command):
                 # added to the journal.
                 for line in cmd.stderr:
                     if line.strip():
-                        print(line, file=sys.stderr)
+                        print(line, file=sys.stderr, end="")
                 cmd.wait()
                 sys.stderr.flush()
 

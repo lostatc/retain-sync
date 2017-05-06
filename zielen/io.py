@@ -25,7 +25,7 @@ import tempfile
 from textwrap import indent
 from typing import Iterable
 
-from zielen.util import shell_cmd, ProgressBar
+from zielen.utils import shell_cmd, ProgressBar
 from zielen.exceptions import FileTransferError
 
 

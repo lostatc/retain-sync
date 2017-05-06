@@ -25,7 +25,7 @@ from typing import Tuple, Iterable, List, Dict, NamedTuple
 
 from zielen.container import SyncDBFile
 from zielen.io import rec_scan, sha1sum
-from zielen.util import FactoryDict
+from zielen.utils import FactoryDict
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
 

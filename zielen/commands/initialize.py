@@ -27,13 +27,12 @@ import time
 from textwrap import dedent
 
 
+from zielen.exceptions import InputError, ServerError, AvailableSpaceError
 from zielen.connect import SSHConnection
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.userdata import LocalSyncDir, DestSyncDir
 from zielen.profile import Profile, ProfileConfigFile
 from zielen.basecommand import Command
-from zielen.exceptions import (
-    InputError, ServerError, AvailableSpaceError)
 
 
 class InitializeCommand(Command):

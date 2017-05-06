@@ -34,7 +34,7 @@ import pkg_resources
 from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
 from zielen.container import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
-from zielen.util import DictProperty
+from zielen.utils import DictProperty
 from zielen.exceptions import FileParseError
 
 PathData = NamedTuple(

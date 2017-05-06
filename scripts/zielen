@@ -2,7 +2,7 @@
 
 import sys
 
-from zielen.main import main
+from zielen.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

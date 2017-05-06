@@ -180,7 +180,7 @@ directory and all copies of the file stay in sync.
 
 Patterns have the following format:
 
-* Lines starting with a pound sign '#' serve as comments.
+* Lines starting with a hash symbol '#' serve as comments.
 * An asterisk '*' matches anything, but stops at slashes.
 * A double asterisk '**' matches anything, including slashes.
 * A question mark '?' matches any single character.

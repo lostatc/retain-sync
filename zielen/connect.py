@@ -27,7 +27,7 @@ import tempfile
 from textwrap import indent
 
 from zielen import XDG_RUNTIME_DIR
-from zielen.util import shell_cmd
+from zielen.utils import shell_cmd
 from zielen.exceptions import ServerError, InputError
 
 

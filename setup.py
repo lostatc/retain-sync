@@ -23,6 +23,6 @@ setup(
             ["docs/_build/man/zielen.1"])
         ],
     packages=[
-        "zielen", "zielen.io", "zielen.util", "zielen.commands"
+        "zielen", "zielen.commands"
         ]
     )

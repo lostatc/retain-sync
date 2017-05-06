@@ -23,12 +23,12 @@ import time
 from typing import Iterable, Set, NamedTuple
 
 
+from zielen.exceptions import ServerError
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.userdata import TrashDir
-from zielen.util import timestamp_path
+from zielen.utils import timestamp_path
 from zielen.profile import ProfileExcludeFile
 from zielen.basecommand import Command
-from zielen.exceptions import ServerError
 
 DeletedPaths = NamedTuple(
     "DeletedPaths",

@@ -17,13 +17,21 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
+import signal
 import sys
 import os
 import argparse
 import pkg_resources
 from textwrap import dedent
 
-from zielen.exceptions import InputError
+from zielen.basecommand import Command
+from zielen.daemon import Daemon
+from zielen.exceptions import ProgramError, InputError
+from zielen.commands.emptytrash import EmptyTrashCommand
+from zielen.commands.initialize import InitializeCommand
+from zielen.commands.list import ListCommand
+from zielen.commands.reset import ResetCommand
+from zielen.commands.sync import SyncCommand
 
 
 def usage(command: str) -> None:
@@ -37,6 +45,10 @@ def usage(command: str) -> None:
         # Don't use colors if stdout isn't a tty.
         normal = emphasis = strong = ""
 
+    # Repeat the command descriptions in the code so that one can be made
+    # more detailed in the future. textwrap.wrap() can't be used here in leu
+    # of manual formatting because it doesn't account for the terminal
+    # control codes.
     if not command:
         help_msg = dedent("""\
             Usage: {1}zielen{0} [{2}global_options{0}] {2}command{0} [{2}command_options{0}] [{2}command_args{0}]
@@ -115,6 +127,8 @@ def usage(command: str) -> None:
         help_msg = dedent("""\
             {1}empty-trash{0} {2}name{0}|{2}path{0}
                 Permanently delete all files in the remote trash directory.""")
+    else:
+        help_msg = ""
 
     help_msg = help_msg.format(normal, strong, emphasis)
     print(help_msg)
@@ -202,3 +216,71 @@ def parse_args() -> argparse.Namespace:
     parser_emptytrash.set_defaults(command="empty-trash")
 
     return parser.parse_args()
+
+
+def main() -> int:
+    """Start the program."""
+    try:
+        # Exit properly on SIGTERM, SIGHUP or SIGINT.
+        signal.signal(signal.SIGTERM, signal_exception_handler)
+        signal.signal(signal.SIGHUP, signal_exception_handler)
+        signal.signal(signal.SIGINT, signal_exception_handler)
+
+        cmd_args = parse_args()
+        command = def_command(cmd_args)
+        command.main()
+    except ProgramError as error:
+        try:
+            if cmd_args.debug:
+                raise
+        except NameError:
+            pass
+        for message in error.args:
+            print("Error: {}".format(message), file=sys.stderr)
+        return 1
+    return 0
+
+
+def daemon(profile_name) -> int:
+    """Start the daemon.
+
+    Always print a full stack trace instead of an error message.
+    """
+    # Exit properly on SIGTERM, SIGHUP or SIGINT. SIGTERM is the method
+    # by which the daemon will normally exit, and should not raise an
+    # exception.
+    signal.signal(signal.SIGTERM, signal_exit_handler)
+    signal.signal(signal.SIGHUP, signal_exception_handler)
+    signal.signal(signal.SIGINT, signal_exception_handler)
+
+    ghost = Daemon(profile_name)
+    ghost.main()
+    return 0
+
+
+def def_command(cmd_args) -> Command:
+    """Get an Command subclass instance from the command-line input."""
+    if cmd_args.command == "initialize":
+        return InitializeCommand(
+            cmd_args.profile, cmd_args.exclude, cmd_args.template,
+            cmd_args.add_remote)
+    elif cmd_args.command == "sync":
+        return SyncCommand(cmd_args.profile)
+    elif cmd_args.command == "reset":
+        return ResetCommand(
+            cmd_args.profile, cmd_args.keep_remote,
+            cmd_args.no_retrieve)
+    elif cmd_args.command == "list":
+        return ListCommand()
+    elif cmd_args.command == "empty-trash":
+        return EmptyTrashCommand(cmd_args.profile)
+
+
+def signal_exception_handler(signum: int, frame) -> None:
+    """Raise an exception with error message for an interruption by signal."""
+    raise ProgramError("program received " + signal.Signals(signum).name)
+
+
+def signal_exit_handler(signum: int, frame) -> None:
+    """Exit the program normally in response to an interruption by signal."""
+    sys.exit(0)
