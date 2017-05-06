@@ -130,8 +130,8 @@ class Daemon(Command):
                 # after the daemon exits and so that functions registered
                 # with atexit execute correctly.
                 cmd = subprocess.Popen(
-                    ["zielen", "sync", self.profile_input], bufsize=1,
-                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    ["zielen", "--debug", "sync", self.profile_input],
+                    bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, universal_newlines=True)
 
                 # Print the subprocess's stderr to stderr so that it is
