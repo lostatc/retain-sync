@@ -20,10 +20,12 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import sys
 import time
-import multiprocessing
+import queue
+import threading
 import subprocess
+from typing import Tuple
 
-import inotify.adapters
+import pyinotify
 
 from zielen.basecommand import Command
 
@@ -31,10 +33,10 @@ from zielen.basecommand import Command
 class Daemon(Command):
     """Watch for file access in the local directory and adjust priorities.
 
-    Every time a file is opened in the local directory, increment its
-    priority value by one. Every twenty minutes, multiply the priority
-    values of each file by a constant. Run the 'sync' command at a regular
-    user-defined interval.
+    Every time a file or symlink is opened in the local directory, increment
+    its priority value by a constant. At regular intervals, multiply the
+    priority values of each file by a constant. Run the 'sync' command at a
+    regular user-defined interval.
 
     Attributes:
         ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
@@ -43,9 +45,6 @@ class Daemon(Command):
         INCREMENT_AMOUNT: A constant value to add to the priority value every
             time a file is accessed.
         profile: The currently selected profile.
-        files_queue: A Queue for temporarily holding the paths of files that
-            have been opened in the local or remote directories before they're
-            updated in the database.
     """
     ADJUST_INTERVAL = 10*60
     INCREMENT_AMOUNT = 1
@@ -54,7 +53,6 @@ class Daemon(Command):
         super().__init__()
         self.profile_input = profile_input
         self.profile = self.select_profile(profile_input)
-        self.files_queue = multiprocessing.Queue()
 
     def main(self) -> None:
         """Start the daemon."""
@@ -62,8 +60,8 @@ class Daemon(Command):
         self.profile.cfg_file.read()
         self.profile.cfg_file.check_all()
 
-        sync_proc = multiprocessing.Process(target=self._sync, daemon=True)
-        sync_proc.start()
+        sync_thread = threading.Thread(target=self._sync, daemon=True)
+        sync_thread.start()
 
         local_dir = self.profile.cfg_file.vals["LocalDir"]
         if self.profile.cfg_file.vals["RemoteHost"]:
@@ -71,34 +69,45 @@ class Daemon(Command):
         else:
             dest_dir = self.profile.cfg_file.vals["RemoteDir"]
 
-        # The 'inotify' documentation strongly recommends that directory
-        # watches be in their own process.
-        local_watch_proc = multiprocessing.Process(
-            target=self._watch, args=(local_dir,), daemon=True)
-        local_watch_proc.start()
-        remote_watch_proc = multiprocessing.Process(
-            target=self._watch, args=(dest_dir,), daemon=True)
-        remote_watch_proc.start()
+        wm = pyinotify.WatchManager()
+        files_queue = queue.Queue()
+        notifier = pyinotify.ThreadedNotifier(
+            wm, files_queue.put, read_freq=1)
+        notifier.coalesce_events()
+        notifier.daemon = True
+        notifier.start()
 
-        # Every second, get a set of file paths from the queue and increment
-        # their priority values in the database. This is done to spread out
-        # the individual sqlite transactions over time so that the database
-        # isn't a bottleneck. A set is used to prevent any individual file
-        # from being counted more than once per second. Only the priorities of
-        # regular files are incremented (not directories).
+        mask = pyinotify.IN_OPEN | pyinotify.IN_CREATE
+        watch_paths = [local_dir, dest_dir]
+        for watch_path in watch_paths:
+            wm.add_watch(watch_path, mask, rec=True, auto_add=True)
+
+        # Every few seconds, get a set of file paths from the queue and
+        # increment their priority values in the database. This is done to
+        # spread out the individual sqlite transactions over time so that
+        # the database isn't a bottleneck.
         while True:
-            accessed_paths = set()
-            while self.files_queue.qsize() != 0:
-                path = self.files_queue.get()
-                path_data = self.profile.db_file.get_path(path)
-                if path_data and not path_data.directory:
-                    accessed_paths.add(path)
+            accessed_paths = []
+            while not files_queue.empty():
+                event = files_queue.get()
+                for watch_path in watch_paths:
+                    if os.path.commonpath([
+                            event.pathname, watch_path]) == watch_path:
+                        rel_path = os.path.relpath(event.pathname, watch_path)
+                        break
+
+                if not event.dir and self.profile.db_file.get_path(rel_path):
+                    # The file is in the local database and is not a directory.
+                    # New files do not have a priority value until the first
+                    # sync after they are added.
+                    accessed_paths.append(rel_path)
+
             self.profile.db_file.increment(
                 accessed_paths, self.INCREMENT_AMOUNT)
             self.profile.db_file.conn.commit()
 
             self._adjust()
-            time.sleep(1)
+            time.sleep(3)
 
     def _adjust(self) -> None:
         """Adjust the priority values in the database every twenty minutes."""
@@ -112,16 +121,15 @@ class Daemon(Command):
 
             # Use the formula for half-life to calculate the constant to
             # multiply each priority value by.
-            adjust_constant = (0.5 ** (
-                    self.ADJUST_INTERVAL
-                    / self.profile.cfg_file.vals["PriorityHalfLife"]))
+            half_life = self.profile.cfg_file.vals["PriorityHalfLife"]
+            adjust_constant = (0.5 ** (self.ADJUST_INTERVAL / half_life))
 
             self.profile.db_file.adjust_all(adjust_constant)
             self.profile.info_file.vals["LastAdjust"] = time.time()
             self.profile.info_file.write()
 
     def _sync(self) -> None:
-        """Initiate a sync at a regular interval."""
+        """Initiate a sync in a subprocess at a regular interval."""
         last_attempt = self.profile.info_file.vals["LastSync"]
         while True:
             if (time.time() >= last_attempt
@@ -137,7 +145,7 @@ class Daemon(Command):
                 # Print the subprocess's stderr to stderr so that it is
                 # added to the journal.
                 for line in cmd.stderr:
-                    if line.strip():
+                    if line:
                         print(line, file=sys.stderr, end="")
                 cmd.wait()
                 sys.stderr.flush()
@@ -145,21 +153,3 @@ class Daemon(Command):
                 # If a sync fails, wait the full interval before trying again.
                 last_attempt = time.time()
             time.sleep(1)
-
-    def _watch(self, start_path: str) -> None:
-        """Get paths of files that have been opened and add them to a queue.
-
-        Args:
-            start_path: The absolute path of the directory to watch for file
-                access.
-        """
-        # This class constructor only accepts file paths in bytes form.
-        adapter = inotify.adapters.InotifyTree(start_path.encode())
-        for event in adapter.event_gen():
-            if event is not None:
-                header, type_names, watch_path, filename = event
-                accessed_path = os.path.relpath(
-                    os.path.join(watch_path.decode(), filename.decode()),
-                    start_path)
-                if "IN_OPEN" in type_names:
-                    self.files_queue.put(accessed_path)
