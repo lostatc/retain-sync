@@ -23,7 +23,6 @@ import time
 import queue
 import threading
 import subprocess
-from typing import Tuple
 
 import pyinotify
 
@@ -34,9 +33,10 @@ class Daemon(Command):
     """Watch for file access in the local directory and adjust priorities.
 
     Every time a file or symlink is opened in the local directory, increment
-    its priority value by a constant. At regular intervals, multiply the
-    priority values of each file by a constant. Run the 'sync' command at a
-    regular user-defined interval.
+    its priority value by a constant. There is a "cooldown" period that
+    coalesces quick successive openings of the same file. At regular
+    intervals, multiply the priority values of each file by a constant. Run
+    the 'sync' command at a regular user-defined interval.
 
     Attributes:
         ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
@@ -44,15 +44,25 @@ class Daemon(Command):
             interval of time will be weighted the same.
         INCREMENT_AMOUNT: A constant value to add to the priority value every
             time a file is accessed.
+        COOLDOWN_PERIOD: The number of seconds that must pass after a file has
+            had its priority incremented before its priority can be incremented
+            again.
         profile: The currently selected profile.
+        _files_queue: A queue of filesystem events that are waiting to be
+            processed.
+        _cooldown_files: A dict of file paths that have been opened within the
+            past COOLDOWN_PERIOD seconds and their timestamps.
     """
     ADJUST_INTERVAL = 10*60
     INCREMENT_AMOUNT = 1
+    COOLDOWN_PERIOD = 1
 
-    def __init__(self, profile_input) -> None:
+    def __init__(self, profile_input: str) -> None:
         super().__init__()
         self.profile_input = profile_input
         self.profile = self.select_profile(profile_input)
+        self._files_queue = queue.Queue()
+        self._cooldown_files = {}
 
     def main(self) -> None:
         """Start the daemon."""
@@ -70,10 +80,7 @@ class Daemon(Command):
             dest_dir = self.profile.cfg_file.vals["RemoteDir"]
 
         wm = pyinotify.WatchManager()
-        files_queue = queue.Queue()
-        notifier = pyinotify.ThreadedNotifier(
-            wm, files_queue.put, read_freq=1)
-        notifier.coalesce_events()
+        notifier = pyinotify.ThreadedNotifier(wm, self._queue_event)
         notifier.daemon = True
         notifier.start()
 
@@ -88,8 +95,8 @@ class Daemon(Command):
         # the database isn't a bottleneck.
         while True:
             accessed_paths = []
-            while not files_queue.empty():
-                event = files_queue.get()
+            while not self._files_queue.empty():
+                event, timestamp = self._files_queue.get()
                 for watch_path in watch_paths:
                     if os.path.commonpath([
                             event.pathname, watch_path]) == watch_path:
@@ -100,17 +107,47 @@ class Daemon(Command):
                     # The file is in the local database and is not a directory.
                     # New files do not have a priority value until the first
                     # sync after they are added.
-                    accessed_paths.append(rel_path)
+                    accessed_paths.append((rel_path, timestamp))
 
-            self.profile.db_file.increment(
-                accessed_paths, self.INCREMENT_AMOUNT)
-            self.profile.db_file.conn.commit()
+            deduplicated_paths = []
+            for path, timestamp in accessed_paths:
+                past_timestamp = self._cooldown_files.get(path)
+
+                if ((past_timestamp
+                        and timestamp > past_timestamp + self.COOLDOWN_PERIOD)
+                        or not past_timestamp):
+                    # The time at which the current file was opened is not
+                    # within self.COOLDOWN_PERIOD seconds of the time it
+                    # was last opened.
+                    deduplicated_paths.append(path)
+
+                    # Update the timestamp for accessed file paths. Putting
+                    # this inside the conditional statement prevents the
+                    # cooldown period from lasting more than
+                    # self.COOLDOWN_PERIOD seconds.
+                    self._cooldown_files.update({path: timestamp})
+
+            # Remove any file paths that were modified more than
+            # self.COOLDOWN_PERIOD seconds in the past.
+            current_time = time.time()
+            self._cooldown_files = {
+                path: timestamp
+                for path, timestamp in self._cooldown_files.items()
+                if timestamp > current_time - self.COOLDOWN_PERIOD}
 
             self._adjust()
+            self.profile.db_file.increment(
+                deduplicated_paths, self.INCREMENT_AMOUNT)
+            self.profile.db_file.conn.commit()
+
             time.sleep(3)
 
+    def _queue_event(self, event: pyinotify.Event) -> None:
+        """Add a filesystem event object with its timestamp to a queue."""
+        self._files_queue.put((event, time.time()))
+
     def _adjust(self) -> None:
-        """Adjust the priority values in the database every twenty minutes."""
+        """Adjust the priority values in the database at regular intervals."""
         if (time.time() >= self.profile.info_file.vals["LastAdjust"]
                 + self.ADJUST_INTERVAL):
             # This is necessary because a sync may have occurred since
