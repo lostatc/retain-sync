@@ -27,11 +27,13 @@ import sys
 import textwrap
 import uuid
 import weakref
+import getpass
+import readline
 from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
 
 import pkg_resources
 
-from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
+from zielen import PROGRAM_DIR, PROFILES_DIR
 from zielen.container import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
 from zielen.utils import DictProperty
@@ -194,7 +196,7 @@ class ProfileInfoFile(JSONFile):
     def vals(self, key, value) -> None:
         """Set individual values."""
         if value is not None:
-            if key == "LastSync" or key == "LastAdjust":
+            if key in ["LastSync", "LastAdjust"]:
                 # Use strftime() instead of isoformat() because the latter
                 # doesn't print the decimal point if the microsecond is 0,
                 # which would prevent it from being parsed by strptime().
@@ -545,15 +547,17 @@ class ProfileConfigFile(ConfigFile):
             file.
         _opt_keys: A list of config keys that may be commented out or omitted.
         _all_keys: A list of all keys that are recognized in the config file.
-        _bool_keys: A list of config keys that must have boolean values.
+        _prompt_keys: A subset of config keys that the user needs to be
+            prompted for values for.
+        _bool_keys: A subset of config keys that must have boolean values.
         _connect_keys: A list of config keys that only matter when connecting
             over ssh.
         _defaults: A dictionary of default string values for optional config
             keys.
-        _subs: A dictionary of default string values for required config
-            keys.
-        _prompt_msgs: The messages to use when prompting the user for required
-            config values.
+        _subs: A dictionary of string values to substitute in if the user
+            leaves a prompt blank.
+        _prompt_msgs: The messages to use when prompting the user for config
+            values.
         path: The path of the configuration file.
         profile: The Profile object that the config file belongs to.
         add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
@@ -566,33 +570,24 @@ class ProfileConfigFile(ConfigFile):
     _host_synonyms = ["localhost", "127.0.0.1"]
     _req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
+        "StorageLimit", "SyncInterval", "SshfsOptions", "TrashDirs",
+        "PriorityHalfLife", "DeleteAlways", "SyncExtraFiles",
+        "InflatePriority", "AccountForSize"
+        ]
+    _opt_keys = []
+    _all_keys = _req_keys + _opt_keys
+    _prompt_keys = [
+        "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit"
         ]
-    _opt_keys = [
-        "SyncInterval", "SshfsOptions", "TrashDirs", "PriorityHalfLife",
-        "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize "
-        ]
-    _all_keys = _req_keys + _opt_keys
     _bool_keys = [
         "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
     _connect_keys = ["RemoteUser", "Port"]
-    # The reason for the distinction between self._defaults and self._subs is
-    # that some optional config values have a valid reason for being blank.
-    _defaults = {
-        "SyncInterval":     "20",
-        "SshfsOptions":     ("reconnect,ServerAliveInterval=5,"
-                             "ServerAliveCountMax=3"),
-        "TrashDirs":        os.path.join(XDG_DATA_HOME, "Trash/files"),
-        "PriorityHalfLife": "120",
-        "DeleteAlways":     "no",
-        "SyncExtraFiles":   "yes",
-        "InflatePriority":  "yes",
-        "AccountForSize":   "yes"
-        }
+    _defaults = {}
     _subs = {
         "RemoteHost":   _host_synonyms[0],
-        "RemoteUser":   os.getenv("LOGNAME"),
+        "RemoteUser":   getpass.getuser(),
         "Port":         "22"
         }
     _prompt_msgs = {
@@ -873,7 +868,7 @@ class ProfileConfigFile(ConfigFile):
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
         msg_printed = False
-        for key in self._req_keys:
+        for key in self._prompt_keys:
             # If the remote directory is on the local machine, then the user
             # should not be prompted for certain settings.
             if (self.raw_vals.get("RemoteHost") in self._host_synonyms

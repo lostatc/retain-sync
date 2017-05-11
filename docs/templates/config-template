@@ -3,7 +3,6 @@
 #
 
 
-
 # The path of the local sync directory.
 LocalDir=
 
@@ -26,34 +25,33 @@ RemoteDir=
 StorageLimit=
 
 
-
 # The amount of time (in minutes) that the daemon will wait between syncs.
-#SyncInterval=20
+SyncInterval=20
 
 # Mount options to pass to sshfs.
-#SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
+SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
 
 # A colon-separated list of directory paths in which to search for deleted
 # files.
-#TrashDirs=~/.local/share/Trash/files
+TrashDirs=~/.local/share/Trash/files
 
 # The priority of every file decreases exponentially over time while the
 # machine is running. This value is the half-life of file priorities in hours.
 # Increasing it increases the amount of time that files "remember" being
 # accessed. Decreasing it weights the file priority toward more recent access.
-#PriorityHalfLife=120
+PriorityHalfLife=120
 
 # Always delete files from the remote directory when their local counterparts
 # are deleted, even if copies aren't found in the local user's trash.
-#DeleteAlways=no
+DeleteAlways=no
 
 # Start syncing individual files once no more whole directories can fit within
 # the storage limit.
-#SyncExtraFiles=yes
+SyncExtraFiles=yes
 
 # Inflate the priority of new local files so that they stick around longer.
-#InflatePriority=yes
+InflatePriority=yes
 
 # Take file size into account when prioritizing files (smaller files take
 # priority over larger ones).
-#AccountForSize=yes
+AccountForSize=yes
