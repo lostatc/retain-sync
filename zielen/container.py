@@ -71,15 +71,14 @@ class ConfigFile:
                             and self.SEPARATOR in line):
                         key, value = line.partition(self.SEPARATOR)[::2]
                         key = key.strip()
-                        if key not in self.raw_vals:
-                            continue
-                        # Substitute value in the input file with the value in
-                        # self.raw_vals.
-                        new_line = (
-                            key
-                            + self.SEPARATOR
-                            + self.raw_vals.get(key, "")
-                            + "\n")
+                        if key in self.raw_vals:
+                            # Substitute value in the input file with the
+                            # value in self.raw_vals.
+                            new_line = (
+                                key
+                                + self.SEPARATOR
+                                + self.raw_vals.get(key, "")
+                                + "\n")
                     outfile.write(new_line)
 
         except OSError:
