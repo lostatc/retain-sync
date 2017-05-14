@@ -184,18 +184,19 @@ def rec_scan(path: str):
             yield from rec_scan(entry.path)
 
 
-def sha1sum(path: str) -> str:
-    """Get the SHA-1 checksum of a file, reading one block at a time.
+def checksum(path: str, hash_func="sha256") -> str:
+    """Get the checksum of a file, reading one block at a time.
 
     Args:
         path: The path of the file to find the checksum of. If this value is
             the path of a directory, a checksum will be computed based on all
             the files in the directory.
+        hash_func: The name of the hash function to use.
 
     Returns:
         The hexadecimal checksum of the file.
     """
-    sha1_hash = hashlib.sha1()
+    file_hash = hashlib.new(hash_func)
     checksum_paths = []
     try:
         for entry in rec_scan(path):
@@ -210,9 +211,9 @@ def sha1sum(path: str) -> str:
     for checksum_path in checksum_paths:
         block_size = os.stat(checksum_path).st_blksize
         with open(checksum_path, "rb") as file:
-            for chunk in iter(lambda: file.read(block_size), b""):
-                sha1_hash.update(chunk)
-    return sha1_hash.hexdigest()
+            for block in iter(lambda: file.read(block_size), b""):
+                file_hash.update(block)
+    return file_hash.hexdigest()
 
 
 def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:

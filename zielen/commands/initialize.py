@@ -26,7 +26,6 @@ import sys
 import time
 from textwrap import dedent
 
-
 from zielen.exceptions import InputError, ServerError, AvailableSpaceError
 from zielen.connect import SSHConnection
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink

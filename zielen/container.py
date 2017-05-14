@@ -203,7 +203,7 @@ class SyncDBFile:
         if salt:
             hash_string += salt[0]
 
-        sha1_hash = hashlib.sha1()
-        sha1_hash.update(hash_string.encode())
+        path_hash = hashlib.sha256()
+        path_hash.update(hash_string.encode())
         return int.from_bytes(
-            sha1_hash.digest()[:8], byteorder="big", signed=True)
+            path_hash.digest()[:8], byteorder="big", signed=True)

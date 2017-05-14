@@ -21,10 +21,11 @@ import os
 import shutil
 import sqlite3
 import time
+import functools
 from typing import Tuple, Iterable, List, Dict, NamedTuple
 
 from zielen.container import SyncDBFile
-from zielen.io import rec_scan, sha1sum
+from zielen.io import rec_scan, checksum
 from zielen.utils import FactoryDict, secure_string
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
@@ -35,21 +36,23 @@ class TrashDir:
 
     Attributes:
         paths: The paths of the trash directories.
-        sizes: A list of tuples containing the paths and sizes of every file
+        _sizes: A list of tuples containing the paths and sizes of every file
             in the trash.
     """
     def __init__(self, paths: Iterable[str]) -> None:
         self.paths = paths
-        self._sizes = []
+        self._stored_sizes = []
 
     @property
-    def sizes(self) -> List[Tuple[str, int]]:
-        """Get the sizes of every file in the trash directory.
+    def _sizes(self) -> List[Tuple[str, int]]:
+        """Get the sizes of every top-level file in the trash directory.
+
+        Top-level directories are collectively treated as a single file.
 
         Returns:
             A list of file paths and sizes in bytes.
         """
-        if not self._sizes:
+        if not self._stored_sizes:
             output = []
             for path in self.paths:
                 if os.path.isdir(path):
@@ -63,19 +66,33 @@ class TrashDir:
                                 total_size += sub_entry.stat().st_size
                             output.append((entry.path, total_size))
 
-            self._sizes = output
-        return self._sizes
+            self._stored_sizes = output
+        return self._stored_sizes
 
     def check_file(self, path: str) -> bool:
-        """Check if a file is in the trash by comparing sizes and checksums."""
+        """Check if a file is in the trash by comparing sizes and checksums.
+
+        Args:
+            path: The path of the file to check the trash directory for.
+
+        Returns:
+            True if the file is in the trash directory and False otherwise.
+        """
+        # The BLAKE2 hash function is only available as of Python 3.6.
+        def new_checksum(checksum_path: str) -> str:
+            try:
+                return checksum(checksum_path, hash_func="blake2b")
+            except ValueError:
+                return checksum(checksum_path, hash_func="sha256")
+
         file_size = os.stat(path).st_size
         overlap_files = {
-            filepath for filepath, size in self.sizes if file_size == size}
+            filepath for filepath, size in self._sizes if file_size == size}
         if overlap_files:
             overlap_sums = {
-                sha1sum(filepath) for filepath in overlap_files
+                new_checksum(filepath) for filepath in overlap_files
                 if os.path.lexists(filepath)}
-            if sha1sum(path) in overlap_sums:
+            if new_checksum(path) in overlap_sums:
                 return True
         return False
 

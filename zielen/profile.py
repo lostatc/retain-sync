@@ -162,6 +162,20 @@ class ProfileExcludeFile:
 class ProfileInfoFile(JSONFile):
     """Parse a JSON-formatted file for profile metadata.
 
+    Values:
+        Status: A short string describing the status of the profile.
+            "initialized": Fully initialized.
+            "partial": Partially initialized.
+        LastSync: The date and time (UTC) of the last sync on the profile.
+        LastAdjust: The date and time (UTC) of the last priority adjustment
+            on the profile.
+        Version: The version of the program that the profile was
+            initialized by.
+        ID: A UUID to identify the profile among all profiles that share a
+            remote directory.
+        InitOpts: A dictionary of options given at the command line at
+            initialization.
+
     Attributes:
         raw_vals: A dictionary of raw string values from the file.
         vals: A dict property of parsed values from the file.
@@ -206,20 +220,6 @@ class ProfileInfoFile(JSONFile):
 
     def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
-
-        JSON Values:
-            Status: A short string describing the status of the profile.
-                "initialized": Fully initialized.
-                "partial": Partially initialized.
-            LastSync: The date and time (UTC) of the last sync on the profile.
-            LastAdjust: The date and time (UTC) of the last priority adjustment
-                on the profile.
-            Version: The version of the program that the profile was
-                initialized by.
-            ID: A UUID to identify the profile among all profiles that share a
-                remote directory.
-            InitOpts: A dictionary of options given at the command line at
-                initialization.
 
         Args:
             name: The name of the profile to use for the unique ID.
