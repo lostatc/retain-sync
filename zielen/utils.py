@@ -23,6 +23,8 @@ import collections
 import shutil
 import subprocess
 import datetime
+import random
+import string
 from typing import Collection
 
 
@@ -63,6 +65,17 @@ def timestamp_path(path: str, keyword="") -> str:
         + keyword
         + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         + extension)
+
+
+def secure_string(length: int) -> str:
+    """Generate a securely random alphanumeric string.
+
+    Args:
+        length: The length of the string in characters/bytes.
+    """
+    random_string = "".join(random.SystemRandom().choice(
+        string.ascii_letters + string.digits) for i in range(length))
+    return random_string
 
 
 class FactoryDict(collections.defaultdict):
@@ -179,9 +192,9 @@ def print_table(headers: list, data: Collection[tuple]) -> None:
     their longest value.
 
     Args:
+        headers: The values to use as column headings.
         data: The values used to fill the body of the table. Each item in this
             collection represents a row in the table.
-        headers: The values to use as column headings.
     """
     column_lengths = []
     for content, header in zip(zip(*data), headers):

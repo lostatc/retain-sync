@@ -26,6 +26,7 @@ import hashlib
 from typing import List, Generator, Iterable
 
 from zielen.exceptions import FileParseError, ServerError
+from zielen.utils import secure_string
 
 
 class ConfigFile:
@@ -33,7 +34,8 @@ class ConfigFile:
 
     Attributes:
         COMMENT_REGEX: This is a regex object that represents a comment line.
-        SEPARATOR: This is the string that separates keys from values.
+        SEPARATOR: This is the string that separates keys from values in the
+            config file.
         path: The path of the configuration file.
         raw_vals: A dictionary of unmodified config value strings.
     """
@@ -107,7 +109,23 @@ class JSONFile:
 
 
 class SyncDBFile:
-    """Manage a database for keeping track of files in a sync directory.
+    """A base class for databases keeping track of files in a sync directory.
+
+    This database uses a transitive closure table to represent the file
+    hierarchy.
+
+    Tables:
+        nodes: This table has one row for every file in the tree and stores
+            information about those files. To improve performance, an 8-byte
+            integer ID based on a hash of the file path is used as the primary
+            key over the file path itself.
+        closure: This table has one row for every possible pair of files in the
+            tree in which one is an ancestor of the other. It keeps track of
+            the relationships between nodes in the tree using the file IDs.
+        collisions: In the event of a hash collision, a random salt is
+            generated and used to create a new unique ID for the path. This
+            table stores file paths that have experienced hash collisions and
+            their corresponding salt.
 
     Attributes:
         path: The path of the database file.
@@ -121,6 +139,8 @@ class SyncDBFile:
                 self.path,
                 detect_types=sqlite3.PARSE_DECLTYPES,
                 isolation_level="IMMEDIATE")
+            self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+
             self.cur = self.conn.cursor()
             self.cur.arraysize = 20
             self.cur.executescript("""\
@@ -129,6 +149,7 @@ class SyncDBFile:
         else:
             self.conn = None
             self.cur = None
+
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
         sqlite3.register_converter("BOOL", lambda x: bool(int(x)))
@@ -147,9 +168,12 @@ class SyncDBFile:
 
     def _mark_directory(self, paths: Iterable[str]) -> None:
         """Mark paths as directories."""
-        nodes_values = ({
+        # A generator expression can't be used here because recursive use of
+        # cursors is not allowed.
+        nodes_values = [{
             "path_id": self._get_path_id(path)}
-            for path in paths)
+            for path in paths]
+
         self.cur.executemany("""\
             UPDATE nodes
             SET directory = 1
@@ -157,17 +181,30 @@ class SyncDBFile:
             AND id = :path_id;
             """, nodes_values)
 
-    @staticmethod
-    def _get_path_id(path: str) -> int:
-        """Hash a file path with SHA-1 and return it as a 64-bit int.
+    def _get_path_id(self, path: str) -> int:
+        """Return a 64-bit integer derived from the given file path.
+
+        If the file path is in the 'collisions' table, then the salt from that
+        table is used to generate a unique ID.
 
         Args:
-            path: The file path to return the hash of.
+            path: The file path from which to derive the ID.
 
         Returns:
-            The hash of the file path as a 64-bit int.
+            A signed 64-bit integer.
         """
+        self.cur.execute("""\
+            SELECT salt
+            FROM collisions
+            WHERE path = :path;
+            """, {"path": path})
+
+        salt = self.cur.fetchone()
+        hash_string = path
+        if salt:
+            hash_string += salt[0]
+
         sha1_hash = hashlib.sha1()
-        sha1_hash.update(path.encode())
+        sha1_hash.update(hash_string.encode())
         return int.from_bytes(
             sha1_hash.digest()[:8], byteorder="big", signed=True)

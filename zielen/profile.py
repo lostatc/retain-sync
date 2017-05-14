@@ -28,15 +28,15 @@ import textwrap
 import uuid
 import weakref
 import getpass
-import readline
-from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional
+import readline  # This is not unused. Importing it adds features to input().
+from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional, Union
 
 import pkg_resources
 
 from zielen import PROGRAM_DIR, PROFILES_DIR
 from zielen.container import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
-from zielen.utils import DictProperty
+from zielen.utils import DictProperty, secure_string
 from zielen.exceptions import FileParseError
 
 PathData = NamedTuple(
@@ -243,11 +243,6 @@ class ProfileInfoFile(JSONFile):
 class ProfileDBFile(SyncDBFile):
     """Manipulate a profile database for keeping track of files.
 
-    This database uses a transitive closure table to represent the file
-    hierarchy. Because it uses a 64-bit hash of the file path as a primary
-    key, it can't handle more than a few tens of millions of files without
-    running into collision issues.
-
     Attributes:
         path: The path of the profile database file.
         conn: The sqlite connection object for the database.
@@ -255,13 +250,6 @@ class ProfileDBFile(SyncDBFile):
     """
     def create(self) -> None:
         """Create a new empty database.
-
-        Database Columns:
-            id: A 64-bit hash of the path as an integer. This is used as the
-                primary key over the path for performance reasons.
-            path: The relative path of the file.
-            directory: A boolean representing whether the path is a directory.
-            priority: The priority value of the file.
 
         Raises:
             FileExistsError: The database file already exists.
@@ -273,6 +261,8 @@ class ProfileDBFile(SyncDBFile):
             self.path,
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
+        self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+
         self.cur = self.conn.cursor()
         self.cur.arraysize = 20
 
@@ -299,6 +289,12 @@ class ProfileDBFile(SyncDBFile):
                     FOREIGN KEY (descendant)
                         REFERENCES nodes(id) ON DELETE CASCADE
                 ) WITHOUT ROWID;
+
+                CREATE TABLE collisions (
+                    path        TEXT    NOT NULL,
+                    salt        TEXT    NOT NULL,
+                    PRIMARY KEY (path) ON CONFLICT IGNORE
+                );
                 """)
 
     def _update_priority(self, paths: Iterable[str]) -> None:
@@ -364,35 +360,52 @@ class ProfileDBFile(SyncDBFile):
         paths = list(files | dirs)
         paths.sort(key=lambda x: x.count(os.sep))
 
-        parents = set()
-        insert_nodes_vals = []
-        insert_closure_vals = []
-        rm_vals = []
-        for path in paths:
-            path_id = self._get_path_id(path)
-            parent = os.path.dirname(path)
-            if parent:
-                parents.add(parent)
-                parent_id = self._get_path_id(parent)
-            else:
-                parent_id = path_id
+        while True:
+            parents = set()
+            insert_nodes_vals = []
+            insert_closure_vals = []
+            rm_vals = []
+            for path in paths:
+                path_id = self._get_path_id(path)
+                parent = os.path.dirname(path)
+                if parent:
+                    parents.add(parent)
+                    parent_id = self._get_path_id(parent)
+                else:
+                    parent_id = path_id
 
-            rm_vals.append({
-                "path_id": path_id})
-            insert_nodes_vals.append({
-                "path": path,
-                "path_id": path_id,
-                "directory": bool(path in dirs),
-                "priority": priority})
-            insert_closure_vals.append({
-                "path_id": path_id,
-                "parent_id": parent_id})
+                rm_vals.append({
+                    "path_id": path_id})
+                insert_nodes_vals.append({
+                    "path": path,
+                    "path_id": path_id,
+                    "directory": bool(path in dirs),
+                    "priority": priority})
+                insert_closure_vals.append({
+                    "path_id": path_id,
+                    "parent_id": parent_id})
+
+            # If there are any hash collisions with paths already in the
+            # database, generate salt and continue the loop to regenerate
+            # the path IDs.
+            self.cur.executemany("""\
+                INSERT INTO collisions (path, salt)
+                SELECT :path, gen_salt()
+                FROM nodes
+                WHERE id = :path_id
+                AND path != :path;
+                """, insert_nodes_vals)
+            if self.cur.rowcount <= 0:
+                break
 
         if replace:
+            # Remove paths from the database if they already exist.
             self.cur.executemany("""\
                 DELETE FROM nodes
                 WHERE id = :path_id
                 """, rm_vals)
+
+        # Insert new values into both tables.
         self.cur.executemany("""\
             INSERT INTO nodes (id, path, directory, priority)
             VALUES (:path_id, :path, :directory, :priority);
@@ -407,19 +420,21 @@ class ProfileDBFile(SyncDBFile):
         self._mark_directory(parents)
         self._update_priority(parents)
 
-    def add_inflated(self, files: Iterable[str], dirs: Iterable[str]) -> None:
+    def add_inflated(self, files: Iterable[str], dirs: Iterable[str],
+                     replace=False) -> None:
         """Add new file paths to the database with an inflated priority.
 
         Args:
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
+            replace: Replace existing rows instead of ignoring them.
         """
         self.cur.execute("""\
             SELECT MAX(priority) FROM nodes
             WHERE directory = 0;
             """)
         max_priority = self.cur.fetchone()[0]
-        self.add_paths(files, dirs, priority=max_priority)
+        self.add_paths(files, dirs, priority=max_priority, replace=replace)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -430,9 +445,11 @@ class ProfileDBFile(SyncDBFile):
         Args:
             paths: The file paths to remove.
         """
-        rm_vals = ({
+        # A generator expression can't be used here because recursive use of
+        # cursors is not allowed.
+        rm_vals = [{
             "path_id": self._get_path_id(path)}
-            for path in paths)
+            for path in paths]
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
@@ -445,6 +462,12 @@ class ProfileDBFile(SyncDBFile):
                 ON (n.id = c.descendant)
                 WHERE c.ancestor = :path_id);
             """, rm_vals)
+        self.cur.execute("""
+            DELETE FROM collisions
+            WHERE path NOT IN (
+                SELECT path
+                FROM nodes);
+            """)
         self._update_priority(parents)
 
     def get_path(self, path: str) -> PathData:
@@ -502,17 +525,20 @@ class ProfileDBFile(SyncDBFile):
             for array in iter(lambda: self.cur.fetchmany(), [])
             for path, directory, priority in array}
 
-    def increment(self, paths: Iterable[str], increment) -> None:
+    def increment(self, paths: Iterable[str],
+                  increment: Union[int, float]) -> None:
         """Increment the priority of some paths by some value.
 
         Args:
             paths: The paths to increment the priority of.
             increment: The value to increment the paths by.
         """
-        increment_vals = ({
+        # A generator expression can't be used here because recursive use of
+        # cursors is not allowed.
+        increment_vals = [{
             "path_id": self._get_path_id(path),
             "increment": increment}
-            for path in paths)
+            for path in paths]
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
@@ -523,7 +549,7 @@ class ProfileDBFile(SyncDBFile):
             """, increment_vals)
         self._update_priority(parents)
 
-    def adjust_all(self, adjustment) -> None:
+    def adjust_all(self, adjustment: Union[int, float]) -> None:
         """Multiply the priorities of all file paths by a constant.
 
         Args:

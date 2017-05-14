@@ -25,7 +25,7 @@ from typing import Tuple, Iterable, List, Dict, NamedTuple
 
 from zielen.container import SyncDBFile
 from zielen.io import rec_scan, sha1sum
-from zielen.utils import FactoryDict
+from zielen.utils import FactoryDict, secure_string
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
 
@@ -227,9 +227,7 @@ class DestDBFile(SyncDBFile):
     """Manipulate the remote file database.
 
     This database uses a transitive closure table to represent the file
-    hierarchy. Because it uses a 64-bit hash of the file path as a primary
-    key, it can't handle more than a few tens of millions of files without
-    running into collision issues.
+    hierarchy.
 
     Attributes:
         path: The path of the database file.
@@ -238,14 +236,6 @@ class DestDBFile(SyncDBFile):
     """
     def create(self) -> None:
         """Create a new empty database.
-
-        Database Columns:
-            id: A 64-bit hash of the path as an integer. This is used as the
-                primary key over the path for performance reasons.
-            path: The relative path of the file.
-            directory: A boolean representing whether the path is a directory.
-            lastsync: The date and time (UTC) that the file was last updated by
-                a sync in seconds since the epoch.
 
         Raises:
             FileExistsError: The database file already exists.
@@ -257,6 +247,8 @@ class DestDBFile(SyncDBFile):
             self.path,
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="IMMEDIATE")
+        self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+
         self.cur = self.conn.cursor()
         self.cur.arraysize = 20
 
@@ -282,6 +274,12 @@ class DestDBFile(SyncDBFile):
                     FOREIGN KEY (descendant)
                         REFERENCES nodes(id) ON DELETE CASCADE
                 ) WITHOUT ROWID;
+
+                CREATE TABLE collisions (
+                    path        TEXT    NOT NULL,
+                    salt        TEXT    NOT NULL,
+                    PRIMARY KEY (path) ON CONFLICT IGNORE
+                );
                 """)
 
     def add_paths(self, files: Iterable[str], dirs: Iterable[str],
@@ -306,36 +304,53 @@ class DestDBFile(SyncDBFile):
         paths = list(files | dirs)
         paths.sort(key=lambda x: x.count(os.sep))
 
-        parents = set()
-        insert_nodes_vals = []
-        insert_closure_vals = []
-        rm_vals = []
-        timestamp = time.time()
-        for path in paths:
-            path_id = self._get_path_id(path)
-            parent = os.path.dirname(path)
-            if parent:
-                parents.add(parent)
-                parent_id = self._get_path_id(parent)
-            else:
-                parent_id = path_id
+        while True:
+            parents = set()
+            insert_nodes_vals = []
+            insert_closure_vals = []
+            rm_vals = []
+            timestamp = time.time()
+            for path in paths:
+                path_id = self._get_path_id(path)
+                parent = os.path.dirname(path)
+                if parent:
+                    parents.add(parent)
+                    parent_id = self._get_path_id(parent)
+                else:
+                    parent_id = path_id
 
-            rm_vals.append({
-                "path_id": path_id})
-            insert_nodes_vals.append({
-                "path": path,
-                "path_id": path_id,
-                "directory": bool(path in dirs),
-                "lastsync": timestamp})
-            insert_closure_vals.append({
-                "path_id": path_id,
-                "parent_id": parent_id})
+                rm_vals.append({
+                    "path_id": path_id})
+                insert_nodes_vals.append({
+                    "path": path,
+                    "path_id": path_id,
+                    "directory": bool(path in dirs),
+                    "lastsync": timestamp})
+                insert_closure_vals.append({
+                    "path_id": path_id,
+                    "parent_id": parent_id})
+
+            # If there are any hash collisions with paths already in the
+            # database, generate salt and continue the loop to regenerate
+            # the path IDs.
+            self.cur.executemany("""\
+                INSERT INTO collisions (path, salt)
+                SELECT :path, gen_salt()
+                FROM nodes
+                WHERE id = :path_id
+                AND path != :path;
+                """, insert_nodes_vals)
+            if self.cur.rowcount <= 0:
+                break
 
         if replace:
+            # Remove paths from the database if they already exist.
             self.cur.executemany("""\
                 DELETE FROM nodes
                 WHERE id = :path_id
                 """, rm_vals)
+
+        # Insert new values into both tables.
         self.cur.executemany("""\
             INSERT INTO nodes (id, path, directory, lastsync)
             VALUES (:path_id, :path, :directory, :lastsync);
@@ -358,9 +373,11 @@ class DestDBFile(SyncDBFile):
         Args:
             paths: The file paths to remove.
         """
-        rm_vals = ({
+        # A generator expression can't be used here because recursive use of
+        # cursors is not allowed.
+        rm_vals = [{
             "path_id": self._get_path_id(path)}
-            for path in paths)
+            for path in paths]
 
         self.cur.executemany("""\
             DELETE FROM nodes
@@ -371,6 +388,12 @@ class DestDBFile(SyncDBFile):
                 ON (n.id = c.descendant)
                 WHERE c.ancestor = :path_id);
             """, rm_vals)
+        self.cur.execute("""
+            DELETE FROM collisions
+            WHERE path NOT IN (
+                SELECT path
+                FROM nodes);
+            """)
 
     def get_path(self, path: str) -> PathData:
         """Get data associated with a file path.
