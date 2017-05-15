@@ -25,7 +25,7 @@ import subprocess
 import datetime
 import random
 import string
-from typing import Collection
+from typing import List
 
 
 def shell_cmd(input_cmd: list) -> subprocess.Popen:
@@ -185,7 +185,7 @@ class ProgressBar:
                   flush=True, end="\r")
 
 
-def print_table(headers: list, data: Collection[tuple]) -> None:
+def print_table(headers: list, data: List[list]) -> None:
     """Print input values in a formatted ascii table.
 
     All values in the table are left-aligned, and columns are as wide as
@@ -194,7 +194,7 @@ def print_table(headers: list, data: Collection[tuple]) -> None:
     Args:
         headers: The values to use as column headings.
         data: The values used to fill the body of the table. Each item in this
-            collection represents a row in the table.
+            tuple represents a row in the table.
     """
     column_lengths = []
     for content, header in zip(zip(*data), headers):
