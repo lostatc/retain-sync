@@ -563,7 +563,7 @@ class SyncCommand(Command):
 
         # Compute files to be moved to the trash.
         trash_paths = set()
-        if not self.profile.cfg_file.vals["DeleteAlways"]:
+        if not self.profile.cfg_file.vals["DisableTrash"]:
             local_trash_dir = TrashDir(self.profile.cfg_file.vals["TrashDirs"])
             for path in remote_del_paths:
                 dest_path = os.path.join(self.dest_dir.safe_path, path)

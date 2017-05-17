@@ -597,7 +597,7 @@ class ProfileConfigFile(ConfigFile):
     _req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit", "SyncInterval", "SshfsOptions", "TrashDirs",
-        "PriorityHalfLife", "DeleteAlways", "SyncExtraFiles",
+        "PriorityHalfLife", "DisableTrash", "SyncExtraFiles",
         "InflatePriority", "AccountForSize"
         ]
     _opt_keys = []
@@ -607,7 +607,7 @@ class ProfileConfigFile(ConfigFile):
         "StorageLimit"
         ]
     _bool_keys = [
-        "DeleteAlways", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        "DisableTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
     _connect_keys = ["RemoteUser", "Port"]
     _defaults = {}
@@ -818,13 +818,15 @@ class ProfileConfigFile(ConfigFile):
             Port: Input value unmodified as a str.
             RemoteDir: Input value converted to a user-expanded, normalized
                 path as a str.
-            StorageLimit: Input value converted to bytes as an int.
-            SyncInterval: Input value converted to seconds as an int.
+            StorageLimit: Input value converted to a number of bytes as an int.
+            SyncInterval: Input value converted to a number of seconds seconds
+                as an int.
             SshfsOptions: Input value unmodified as a str.
             TrashDirs: Input value converted to user-expanded, normalized paths
                 as a list of strings.
-            PriorityHalfLife: Input value converted to seconds as an int.
-            DeleteAlways: Input value converted to a bool.
+            PriorityHalfLife: Input value converted to a number of seconds as
+                an int.
+            DisableTrash: Input value converted to a bool.
             SyncExtraFiles: Input value converted to a bool.
             InflatePriority: Input value converted to a bool.
             AccountForSize: Input value converted to a bool.

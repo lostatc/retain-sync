@@ -204,7 +204,7 @@ then checksums. If it finds a copy of the file in the user's local trash, it
 permanently deletes the file in the remote directory. Otherwise, it moves the
 file to a remote trash directory. This directory is '.zielen/Trash' under the
 root of the remote directory. This behavior can be overridden by setting
-**DeleteAlways** to 'yes' in the profile config file. The command
+**DisableTrash** to 'yes' in the profile config file. The command
 **empty-trash** can be used to permanently delete all files in the remote trash
 directory. The list of local directories that are searched for deleted files
 can be altered in the profile config file.
