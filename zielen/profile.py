@@ -485,14 +485,14 @@ class ProfileDBFile(SyncDBFile):
 
         path_id = self._get_path_id(path)
         self.cur.execute("""\
-            SELECT path, directory, priority
+            SELECT directory, priority
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
 
         result = self.cur.fetchone()
         if result:
-            return PathData(*result[1:])
+            return PathData(*result)
 
     def get_tree(self, start=None, directory=None) -> Dict[str, PathData]:
         """Get the paths of files in the database.
@@ -522,7 +522,7 @@ class ProfileDBFile(SyncDBFile):
         # be more efficient than fetchall().
         return {
             path: PathData(directory, priority)
-            for array in iter(lambda: self.cur.fetchmany(), [])
+            for array in iter(self.cur.fetchmany, [])
             for path, directory, priority in array}
 
     def increment(self, paths: Iterable[str],

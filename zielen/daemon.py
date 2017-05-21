@@ -80,7 +80,8 @@ class Daemon(Command):
             dest_dir = self.profile.cfg_file.vals["RemoteDir"]
 
         wm = pyinotify.WatchManager()
-        notifier = pyinotify.ThreadedNotifier(wm, self._queue_event)
+        notifier = pyinotify.ThreadedNotifier(
+            wm, lambda x: self._files_queue.put((x, time.time())))
         notifier.daemon = True
         notifier.start()
 
@@ -141,10 +142,6 @@ class Daemon(Command):
             self.profile.db_file.conn.commit()
 
             time.sleep(3)
-
-    def _queue_event(self, event: pyinotify.Event) -> None:
-        """Add a filesystem event object with its timestamp to a queue."""
-        self._files_queue.put((event, time.time()))
 
     def _adjust(self) -> None:
         """Adjust the priority values in the database at regular intervals."""

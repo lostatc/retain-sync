@@ -160,7 +160,7 @@ class SyncDBFile:
         Raises:
             ServerError: The database file wasn't found.
         """
-        if not os.path.isfile(self.path):
+        if not self.path == ":memory:" and not os.path.isfile(self.path):
             raise ServerError("could not connect to the database file")
         with self.conn:
             yield

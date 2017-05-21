@@ -21,7 +21,7 @@ import os
 import shutil
 import sqlite3
 import time
-import functools
+import hashlib
 from typing import Tuple, Iterable, List, Dict, NamedTuple
 
 from zielen.container import SyncDBFile
@@ -72,27 +72,31 @@ class TrashDir:
     def check_file(self, path: str) -> bool:
         """Check if a file is in the trash by comparing sizes and checksums.
 
+        The checksum is only computed for files which are the same size as
+        the file being checked against.
+
         Args:
             path: The path of the file to check the trash directory for.
 
         Returns:
             True if the file is in the trash directory and False otherwise.
         """
-        # The BLAKE2 hash function is only available as of Python 3.6.
-        def new_checksum(checksum_path: str) -> str:
-            try:
-                return checksum(checksum_path, hash_func="blake2b")
-            except ValueError:
-                return checksum(checksum_path, hash_func="sha256")
+        # The blake2b hash function is faster than sha256, but only available
+        # as of Python 3.6.
+        if "blake2b" in hashlib.algorithms_available:
+            hash_func = "blake2b"
+        else:
+            hash_func = "sha256"
 
         file_size = os.stat(path).st_size
         overlap_files = {
             filepath for filepath, size in self._sizes if file_size == size}
+
         if overlap_files:
             overlap_sums = {
-                new_checksum(filepath) for filepath in overlap_files
-                if os.path.lexists(filepath)}
-            if new_checksum(path) in overlap_sums:
+                checksum(filepath, hash_func=hash_func)
+                for filepath in overlap_files if os.path.lexists(filepath)}
+            if checksum(path, hash_func=hash_func) in overlap_sums:
                 return True
         return False
 
@@ -320,13 +324,13 @@ class DestDBFile(SyncDBFile):
         dirs = set(dirs)
         paths = list(files | dirs)
         paths.sort(key=lambda x: x.count(os.sep))
+        timestamp = time.time()
 
         while True:
             parents = set()
             insert_nodes_vals = []
             insert_closure_vals = []
             rm_vals = []
-            timestamp = time.time()
             for path in paths:
                 path_id = self._get_path_id(path)
                 parent = os.path.dirname(path)
@@ -425,14 +429,14 @@ class DestDBFile(SyncDBFile):
         """
         path_id = self._get_path_id(path)
         self.cur.execute("""\
-            SELECT path, directory, lastsync
+            SELECT directory, lastsync
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
 
         result = self.cur.fetchone()
         if result:
-            return PathData(*result[1:])
+            return PathData(*result)
 
     def get_tree(self, start=None, directory=None,
                  min_lastsync=None) -> Dict[str, PathData]:
@@ -468,5 +472,5 @@ class DestDBFile(SyncDBFile):
         # be more efficient than fetchall().
         return {
             path: PathData(directory, lastsync)
-            for array in iter(lambda: self.cur.fetchmany(), [])
+            for array in iter(self.cur.fetchmany, [])
             for path, directory, lastsync in array}
