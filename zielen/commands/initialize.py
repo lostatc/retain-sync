@@ -223,7 +223,7 @@ class InitializeCommand(Command):
         if self.add_remote:
             unsafe_symlinks = {
                 link_path for link_path in self.dest_dir.get_paths(
-                    rel=True, files=False, dirs=False).keys()
+                    files=False, dirs=False).keys()
                 if is_unsafe_symlink(
                     os.path.join(self.dest_dir.path, link_path),
                     self.dest_dir.path)}
@@ -243,7 +243,7 @@ class InitializeCommand(Command):
         else:
             unsafe_symlinks = {
                 link_path for link_path in self.local_dir.get_paths(
-                    rel=True, files=False, dirs=False).keys()
+                    files=False, dirs=False).keys()
                 if is_unsafe_symlink(
                     os.path.join(self.local_dir.path, link_path),
                     self.local_dir.path)}
@@ -268,9 +268,9 @@ class InitializeCommand(Command):
                     "the connection to the remote directory was lost")
 
         remote_files = self.dest_dir.get_paths(
-            rel=True, dirs=False).keys() - unsafe_symlinks
+            dirs=False).keys() - unsafe_symlinks
         remote_dirs = self.dest_dir.get_paths(
-            rel=True, files=False, symlinks=False).keys()
+            files=False, symlinks=False).keys()
 
         # Generate the local database.
         if not os.path.isfile(self.profile.db_file.path):

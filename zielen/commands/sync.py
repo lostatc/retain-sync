@@ -125,7 +125,7 @@ class SyncCommand(Command):
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
             self.profile.ex_file.matches
-            & self.dest_dir.get_paths(rel=True).keys())
+            & self.dest_dir.get_paths().keys())
 
         # Decide which files and directories to keep in the local directory.
         remaining_space, selected_dirs = self._prioritize_dirs(
@@ -173,8 +173,7 @@ class SyncCommand(Command):
 
         local_files = self.profile.db_file.get_tree(directory=False)
         file_stats = self.dest_dir.get_paths(
-            rel=True, dirs=False,
-            exclude=self.profile.ex_file.matches)
+            dirs=False, exclude=self.profile.ex_file.matches)
         adjusted_priorities = []
 
         # Adjust directory priorities for size.
@@ -230,7 +229,7 @@ class SyncCommand(Command):
         local_files = self.profile.db_file.get_tree(directory=False)
         local_dirs = self.profile.db_file.get_tree(directory=True)
         dir_stats = self.dest_dir.get_paths(
-            rel=True, exclude=self.profile.ex_file.matches)
+            exclude=self.profile.ex_file.matches)
         adjusted_priorities = []
 
         # Calculate the sizes of each directory and adjust directory priorities
@@ -332,8 +331,8 @@ class SyncCommand(Command):
         # Don't include excluded files or files not in the local database
         # (e.g. unsafe symlinks).
         all_paths = (self.local_dir.get_paths(
-            rel=True, exclude=self.profile.ex_file.matches).keys()
-                     & self.profile.db_file.get_tree().keys())
+            exclude=self.profile.ex_file.matches).keys()
+            & self.profile.db_file.get_tree().keys())
 
         stale_paths = list(all_paths - all_update_paths)
 
@@ -380,10 +379,9 @@ class SyncCommand(Command):
         update_paths = set(update_paths)
         update_files = set(
             update_paths - self.local_dir.get_paths(
-                rel=True, files=False, symlinks=False).keys())
+                files=False, symlinks=False).keys())
         update_dirs = set(
-            update_paths - self.local_dir.get_paths(
-                rel=True, dirs=False).keys())
+            update_paths - self.local_dir.get_paths(dirs=False).keys())
 
         # Copy modified local files to the remote directory.
         try:
@@ -423,10 +421,10 @@ class SyncCommand(Command):
         conflict_paths = local_paths & remote_paths
         local_mtimes = {
             path: data.st_mtime for path, data
-            in self.local_dir.get_paths(rel=True).items()}
+            in self.local_dir.get_paths().items()}
         remote_mtimes = {
             path: data.st_mtime for path, data
-            in self.dest_dir.get_paths(rel=True).items()}
+            in self.dest_dir.get_paths().items()}
 
         new_local_files = set()
         old_local_files = set()
@@ -480,13 +478,13 @@ class SyncCommand(Command):
             remote ones.
         """
         new_local_paths = {
-            path for path in self.local_dir.get_paths(rel=True).keys()
+            path for path in self.local_dir.get_paths().keys()
             if not self.profile.db_file.get_path(path)
             and not is_unsafe_symlink(
                 os.path.join(self.local_dir.path, path), self.local_dir.path)}
         new_local_paths -= self.profile.ex_file.all_matches
         new_remote_paths = {
-            path for path in self.dest_dir.get_paths(rel=True).keys()
+            path for path in self.dest_dir.get_paths().keys()
             if not self.profile.db_file.get_path(path)}
 
         return UpdatedPaths(new_local_paths, new_remote_paths)
@@ -510,10 +508,10 @@ class SyncCommand(Command):
 
         local_mtimes = (
             (path, data.st_mtime) for path, data in self.local_dir.get_paths(
-                rel=True, dirs=False).items())
+                dirs=False).items())
         remote_mtimes = (
             (path, data.st_mtime) for path, data in self.dest_dir.get_paths(
-                rel=True, dirs=False).items())
+                dirs=False).items())
 
         # Only include file paths that are in the database to exclude files
         # that are new since the last sync.
@@ -544,8 +542,8 @@ class SyncCommand(Command):
             files to be deleted, remote files to be deleted and remote files to
             be moved to the trash.
         """
-        local_paths = self.local_dir.get_paths(rel=True).keys()
-        remote_paths = self.dest_dir.get_paths(rel=True).keys()
+        local_paths = self.local_dir.get_paths().keys()
+        remote_paths = self.dest_dir.get_paths().keys()
         known_paths = self.profile.db_file.get_tree().keys()
 
         # Compute files that need to be deleted, not including the files

@@ -84,7 +84,7 @@ class ResetCommand(Command):
 
         # Remove non-user-created symlinks from the local directory.
         program_links = (self.local_dir.get_paths(
-            rel=True, files=False, dirs=False).keys()
+            files=False, dirs=False).keys()
             & self.profile.db_file.get_tree())
         for rel_path in program_links:
             os.remove(os.path.join(self.local_dir.path, rel_path))

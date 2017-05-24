@@ -112,9 +112,9 @@ class SyncDir:
         self.path = path.rstrip(os.sep)
         self._sub_entries = []
 
-    def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
-                  exclude=None, memoize=True, lookup=True
-                  ) -> Dict[str, os.stat_result]:
+    def get_paths(
+            self, rel=True, files=True, symlinks=True, dirs=True, exclude=None,
+            memoize=True, lookup=True) -> Dict[str, os.stat_result]:
         """Get the paths and stats of files in the directory.
 
         Symlinks are not followed. Directory paths and their os.stat_result
@@ -127,7 +127,8 @@ class SyncDir:
             symlinks: Include symbolic links.
             dirs: Include directories.
             exclude: An iterable of relative paths of files to not include in
-                the output.
+                the output. For paths of directories, all files under the
+                directory are excluded.
             memoize: If true, use cached data. Otherwise, re-scan the
                 filesystem.
             lookup: Return a defaultdict that looks up the stats of files not
