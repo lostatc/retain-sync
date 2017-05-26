@@ -33,7 +33,7 @@ from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional, Union
 
 import pkg_resources
 
-from zielen import PROGRAM_DIR, PROFILES_DIR
+from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
 from zielen.container import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
 from zielen.utils import DictProperty, secure_string
@@ -576,8 +576,8 @@ class ProfileConfigFile(ConfigFile):
         _prompt_keys: A subset of config keys that the user needs to be
             prompted for values for.
         _bool_keys: A subset of config keys that must have boolean values.
-        _connect_keys: A list of config keys that only matter when connecting
-            over ssh.
+        _connect_keys: A subset of config keys that only need values when
+            the remote directory is on another machine.
         _defaults: A dictionary of default string values for optional config
             keys.
         _subs: A dictionary of string values to substitute in if the user
@@ -596,11 +596,12 @@ class ProfileConfigFile(ConfigFile):
     _host_synonyms = ["localhost", "127.0.0.1"]
     _req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
-        "StorageLimit", "SyncInterval", "SshfsOptions", "TrashDirs",
-        "PriorityHalfLife", "DisableTrash", "SyncExtraFiles",
-        "InflatePriority", "AccountForSize"
+        "StorageLimit"
         ]
-    _opt_keys = []
+    _opt_keys = [
+        "SyncInterval", "SshfsOptions", "TrashDirs", "PriorityHalfLife",
+        "DisableTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        ]
     _all_keys = _req_keys + _opt_keys
     _prompt_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
@@ -610,7 +611,17 @@ class ProfileConfigFile(ConfigFile):
         "DisableTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
     _connect_keys = ["RemoteUser", "Port"]
-    _defaults = {}
+    _defaults = {
+        "SyncInterval": "20",
+        "SshfsOptions": (
+            "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"),
+        "TrashDirs": os.path.join(XDG_DATA_HOME, "Trash/files"),
+        "PriorityHalfLife": "120",
+        "DisableTrash": "no",
+        "SyncExtraFiles": "yes",
+        "InflatePriority": "yes",
+        "AccountForSize": "yes"
+        }
     _subs = {
         "RemoteHost":   _host_synonyms[0],
         "RemoteUser":   getpass.getuser(),
@@ -748,7 +759,7 @@ class ProfileConfigFile(ConfigFile):
                             return "must be in a directory with write access"
 
         elif key == "StorageLimit":
-            if not re.search("^[0-9]+\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value):
+            if not re.search(r"^[0-9]+\s*[KMG](B|iB)?$", value):
                 return "must be an integer followed by a unit (e.g. 10GB)"
         elif key == "SyncInterval":
             if not re.search("^[0-9]+$", value):
@@ -849,7 +860,7 @@ class ProfileConfigFile(ConfigFile):
             elif key == "StorageLimit":
                 try:
                     num, unit = re.findall(
-                        "^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
+                        r"^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
                     if unit in ["K", "KiB"]:
                         value = int(num) * 1024
                     elif unit in ["M", "MiB"]:
@@ -871,7 +882,7 @@ class ProfileConfigFile(ConfigFile):
                     pass
             elif key == "TrashDirs":
                 value = value.split(":")
-                for index, element in enumerate(value):
+                for index, element in enumerate(value.copy()):
                     value[index] = os.path.expanduser(
                         os.path.normpath(element))
             elif key == "PriorityHalfLife":

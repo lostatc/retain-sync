@@ -3,6 +3,10 @@
 #
 
 
+
+# The following options must always be present.
+# =============================================================================
+
 # The path of the local sync directory.
 LocalDir=
 
@@ -25,6 +29,11 @@ RemoteDir=
 StorageLimit=
 
 
+
+# The following options can be commented out or omitted and their default
+# values will be used.
+# =============================================================================
+
 # The amount of time (in minutes) that the daemon will wait between syncs.
 SyncInterval=20
 
@@ -46,8 +55,9 @@ PriorityHalfLife=120
 # putting them in the remote trash directory.
 DisableTrash=no
 
-# Start syncing individual files once no more whole directories can fit within
-# the storage limit.
+# When selecting which directories should be retained locally, start selecting
+# individual files to fill the remaining space once no more directories can fit
+# within the storage limit.
 SyncExtraFiles=yes
 
 # Inflate the priority of new local files so that they stick around longer.
