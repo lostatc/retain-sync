@@ -334,7 +334,13 @@ class SyncCommand(Command):
             exclude=self.profile.ex_file.matches).keys()
             & self.profile.db_file.get_tree().keys())
 
-        stale_paths = list(all_paths - all_update_paths)
+        # Get the paths of files that need to be removed to make room for new
+        # ones.
+        stale_paths = []
+        for path in all_paths - all_update_paths:
+            if not (self.profile.db_file.get_tree(path).keys()
+                    & all_update_paths):
+                stale_paths.append(path)
 
         # Sort the file paths so that a directory's contents always come
         # before the directory.
@@ -343,6 +349,9 @@ class SyncCommand(Command):
         # Remove old, unneeded files to make room for new ones.
         for stale_path in stale_paths:
             full_stale_path = os.path.join(self.local_dir.path, stale_path)
+            if os.path.islink(full_stale_path):
+                # The path will just be replaced with a symlink anyways.
+                continue
             try:
                 os.remove(full_stale_path)
             except IsADirectoryError:
