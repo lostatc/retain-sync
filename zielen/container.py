@@ -137,7 +137,7 @@ class SyncDBFile:
             self.conn = sqlite3.connect(
                 self.path,
                 detect_types=sqlite3.PARSE_DECLTYPES,
-                isolation_level="IMMEDIATE")
+                isolation_level="DEFERRED")
             self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
 
             self.cur = self.conn.cursor()

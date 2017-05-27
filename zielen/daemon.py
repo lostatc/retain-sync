@@ -21,6 +21,7 @@ import os
 import sys
 import time
 import queue
+import sqlite3
 import threading
 import subprocess
 
@@ -94,6 +95,7 @@ class Daemon(Command):
         # increment their priority values in the database. This is done to
         # spread out the individual sqlite transactions over time so that
         # the database isn't a bottleneck.
+        deduplicated_paths = []
         while True:
             accessed_paths = []
             while not self._files_queue.empty():
@@ -110,7 +112,6 @@ class Daemon(Command):
                     # sync after they are added.
                     accessed_paths.append((rel_path, timestamp))
 
-            deduplicated_paths = []
             for path, timestamp in accessed_paths:
                 past_timestamp = self._cooldown_files.get(path)
 
@@ -136,12 +137,18 @@ class Daemon(Command):
                 for path, timestamp in self._cooldown_files.items()
                 if timestamp > current_time - self.COOLDOWN_PERIOD}
 
-            self._adjust()
-            self.profile.db_file.increment(
-                deduplicated_paths, self.INCREMENT_AMOUNT)
-            self.profile.db_file.conn.commit()
-
-            time.sleep(3)
+            # If the database is locked due to a long-running sync, try again.
+            try:
+                self._adjust()
+                self.profile.db_file.increment(
+                    deduplicated_paths, self.INCREMENT_AMOUNT)
+                self.profile.db_file.conn.commit()
+            except sqlite3.OperationalError:
+                continue
+            else:
+                deduplicated_paths = []
+            finally:
+                time.sleep(3)
 
     def _adjust(self) -> None:
         """Adjust the priority values in the database at regular intervals."""
@@ -156,7 +163,7 @@ class Daemon(Command):
             # Use the formula for half-life to calculate the constant to
             # multiply each priority value by.
             half_life = self.profile.cfg_file.vals["PriorityHalfLife"]
-            adjust_constant = (0.5 ** (self.ADJUST_INTERVAL / half_life))
+            adjust_constant = 0.5 ** (self.ADJUST_INTERVAL / half_life)
 
             self.profile.db_file.adjust_all(adjust_constant)
             self.profile.info_file.vals["LastAdjust"] = time.time()
@@ -186,4 +193,4 @@ class Daemon(Command):
 
                 # If a sync fails, wait the full interval before trying again.
                 last_attempt = time.time()
-            time.sleep(1)
+            time.sleep(3)
