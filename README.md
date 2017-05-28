@@ -32,7 +32,7 @@ centrally and sync them across multiple clients as storage space permits.
 * [python](https://www.python.org/) >= 3.5
 * [sshfs](https://github.com/libfuse/sshfs)
 * [rsync](https://rsync.samba.org/)
-* [inotify](https://github.com/dsoprea/PyInotify)
+* [pyinotify](https://github.com/seb-m/pyinotify)
 * [Sphinx](http://www.sphinx-doc.org/en/stable/)
 
 #### Installing from source
