@@ -25,7 +25,7 @@ import hashlib
 from typing import Tuple, Iterable, List, Dict, NamedTuple
 
 from zielen.container import SyncDBFile
-from zielen.io import rec_scan, checksum
+from zielen.io import rec_scan, checksum, total_size
 from zielen.utils import FactoryDict, secure_string
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
@@ -57,14 +57,12 @@ class TrashDir:
             for path in self.paths:
                 if os.path.isdir(path):
                     for entry in os.scandir(path):
-                        file_size = entry.stat(follow_symlinks=False).st_size
                         if not entry.is_dir():
-                            output.append((entry.path, file_size))
+                            output.append((
+                                entry.path,
+                                entry.stat(follow_symlinks=False).st_size))
                         else:
-                            total_size = file_size
-                            for sub_entry in rec_scan(entry.path):
-                                total_size += sub_entry.stat().st_size
-                            output.append((entry.path, total_size))
+                            output.append((entry.path, total_size(entry.path)))
 
             self._stored_sizes = output
         return self._stored_sizes
@@ -88,7 +86,7 @@ class TrashDir:
         else:
             hash_func = "sha256"
 
-        file_size = os.stat(path).st_size
+        file_size = total_size(path)
         overlap_files = {
             filepath for filepath, size in self._sizes if file_size == size}
 

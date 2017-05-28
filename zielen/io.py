@@ -184,6 +184,24 @@ def rec_scan(path: str):
             yield from rec_scan(entry.path)
 
 
+def total_size(path: str) -> int:
+    """Find the size of a file or a directory and all its contents.
+
+    Args:
+        path: The path of the file to find the size of.
+
+    Returns:
+        The size of the file in bytes.
+    """
+    if os.path.isfile(path):
+        return os.stat(path).st_size
+    else:
+        dir_size = os.stat(path).st_size
+        for entry in rec_scan(path):
+            dir_size += entry.stat().st_size
+        return dir_size
+
+
 def checksum(path: str, hash_func="sha256") -> str:
     """Get the checksum of a file, reading one block at a time.
 
