@@ -197,7 +197,11 @@ class SyncCommand(Command):
                     adjusted_priorities.append((
                         file_path, file_priority, file_size))
 
-        # Sort directories by priority.
+        # Sort files by priority. Files of the same priority are sorted by
+        # file path so that the results of a sync are always predictable.
+        # That way, multiple consecutive syncs won't prioritize files
+        # differently.
+        adjusted_priorities.sort(key=lambda x: x[0])
         adjusted_priorities.sort(key=lambda x: x[1], reverse=True)
         prioritized_files = [
             (path, size) for path, priority, size in adjusted_priorities]
@@ -251,7 +255,11 @@ class SyncCommand(Command):
             else:
                 adjusted_priorities.append((dir_path, dir_priority, dir_size))
 
-        # Sort directories by priority.
+        # Sort directories by priority. Directories of the same priority are
+        # sorted by file path so that the results of a sync are always
+        # predictable. That way, multiple consecutive syncs won't prioritize
+        # files differently.
+        adjusted_priorities.sort(key=lambda x: x[0])
         adjusted_priorities.sort(key=lambda x: x[1], reverse=True)
         prioritized_dirs = [
             path for path, priority, size in adjusted_priorities]
@@ -264,8 +272,9 @@ class SyncCommand(Command):
         selected_files = set()
         # Set the initial remaining space assuming that no files will stay
         # in the local directory an that they'll all be symlinks,
-        # which should have a disk usage of one block. For evey file that is
-        # selected, one block will be added back to the remaining space.
+        # which should each have a disk usage of one block. For evey file
+        # that is selected, one block will be added back to the remaining
+        # space.
         symlink_size = os.stat(self.local_dir.path).st_blksize
         remaining_space = space_limit - len(local_files) * symlink_size
         for dir_path in prioritized_dirs:
