@@ -729,8 +729,7 @@ class ProfileConfigFile(ConfigFile):
             if not value:
                 return "must not be blank"
             if (not re.search("^[0-9]+$", value)
-                    or int(value) < 1
-                    or int(value) > 65535):
+                    or not 65535 > int(value) > 1):
                 return "must be an integer in the range 1-65535"
         elif key == "RemoteDir":
             # In order to keep the interactive interface responsive, we don't
@@ -787,18 +786,17 @@ class ProfileConfigFile(ConfigFile):
             FileParseError: There were missing, unrecognized or invalid options
                 in the config file.
         """
-        errors = []
+        parse_errors = []
 
         # Check that all key names are valid.
         missing_keys = set(self._req_keys) - self.raw_vals.keys()
         unrecognized_keys = self.raw_vals.keys() - set(self._all_keys)
-        if unrecognized_keys or missing_keys:
-            for key in missing_keys:
-                errors.append(
-                    "{0}: missing required option '{1}'".format(context, key))
-            for key in unrecognized_keys:
-                errors.append(
-                    "{0}: unrecognized option '{1}'".format(context, key))
+        for key in missing_keys:
+            parse_errors.append(
+                "{0}: missing required option '{1}'".format(context, key))
+        for key in unrecognized_keys:
+            parse_errors.append(
+                "{0}: unrecognized option '{1}'".format(context, key))
 
         # Check values for valid syntax.
         for key, value in self.raw_vals.items():
@@ -811,10 +809,11 @@ class ProfileConfigFile(ConfigFile):
             if check_empty or not check_empty and value:
                 err_msg = self._check_value(key, value)
                 if err_msg:
-                    errors.append("{0}: '{1}' ".format(context, key) + err_msg)
+                    parse_errors.append(
+                        "{0}: '{1}' {2}".format(context, key, err_msg))
 
-        if errors:
-            raise FileParseError(*errors)
+        if parse_errors:
+            raise FileParseError(*parse_errors)
 
     @DictProperty
     def vals(self, key: str) -> Any:
