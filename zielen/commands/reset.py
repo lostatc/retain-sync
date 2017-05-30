@@ -69,13 +69,13 @@ class ResetCommand(Command):
 
             if not self.keep_remote:
                 # Check that the remote directory contains only empty
-                # directories and the program directory.
+                # directories and the util directory.
                 if self.dest_dir.get_paths(dirs=False, memoize=False):
                     raise FileTransferError("some files were not retrieved")
 
                 # Close the database connection, and then remove the program
                 # directory. If the database connection is not closed,
-                # the program directory will not be able to be deleted.
+                # the util directory will not be able to be deleted.
                 self.dest_dir.db_file.conn.close()
                 try:
                     shutil.rmtree(self.dest_dir.path)
@@ -89,7 +89,7 @@ class ResetCommand(Command):
         for rel_path in program_links:
             os.remove(os.path.join(self.local_dir.path, rel_path))
 
-        # Remove exclude pattern file from the program directory if it
+        # Remove exclude pattern file from the util directory if it
         # hasn't already been deleted.
         try:
             os.remove(os.path.join(

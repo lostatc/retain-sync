@@ -219,25 +219,26 @@ class DestSyncDir(SyncDir):
     is the mount point.
 
     Attributes:
-        prgm_dir: Contains special program files.
-        safe_path: Defined relative to prgm_dir in order to prevent access when
-            prgm_dir is missing.
+        util_dir: Contains special program files.
+        safe_path: Defined relative to util_dir in order to prevent access when
+            util_dir is missing. The keeps files from being moved into an empty
+            mountpoint.
         ex_dir: Contains copies of each client's exclude pattern file.
         db_file: Contains information on files in the remote.
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)
-        self.prgm_dir = os.path.join(self.path, ".zielen")
-        self.safe_path = os.path.join(self.prgm_dir, "..")
-        self.ex_dir = os.path.join(self.prgm_dir, "exclude")
-        self.trash_dir = os.path.join(self.prgm_dir, "Trash")
-        self.db_file = DestDBFile(os.path.join(self.prgm_dir, "remote.db"))
+        self.util_dir = os.path.join(self.path, ".zielen")
+        self.safe_path = os.path.join(self.util_dir, "..")
+        self.ex_dir = os.path.join(self.util_dir, "exclude")
+        self.trash_dir = os.path.join(self.util_dir, "Trash")
+        self.db_file = DestDBFile(os.path.join(self.util_dir, "remote.db"))
 
     def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
                   exclude=None, memoize=True, lookup=True):
-        """Extend parent method to automatically exclude program directory."""
+        """Extend parent method to automatically exclude the util directory."""
         exclude = set() if exclude is None else set(exclude)
-        exclude.add(os.path.relpath(self.prgm_dir, self.path))
+        exclude.add(os.path.relpath(self.util_dir, self.path))
         return super().get_paths(
             rel=rel, files=files, symlinks=symlinks, dirs=dirs,
             exclude=exclude, memoize=memoize)
