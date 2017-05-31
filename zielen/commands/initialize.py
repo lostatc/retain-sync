@@ -220,6 +220,7 @@ class InitializeCommand(Command):
             self.connection.mount(self.dest_dir.path)
 
         os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
+        os.makedirs(self.dest_dir.trash_dir, exist_ok=True)
         if self.add_remote:
             unsafe_symlinks = {
                 link_path for link_path in self.dest_dir.get_paths(

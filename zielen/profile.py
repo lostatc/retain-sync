@@ -470,7 +470,7 @@ class ProfileDBFile(SyncDBFile):
             """)
         self._update_priority(parents)
 
-    def get_path(self, path: str) -> PathData:
+    def path_info(self, path: str) -> PathData:
         """Get data associated with a file path.
 
         Args:

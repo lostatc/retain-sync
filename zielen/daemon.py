@@ -106,7 +106,7 @@ class Daemon(Command):
                         rel_path = os.path.relpath(event.pathname, watch_path)
                         break
 
-                if not event.dir and self.profile.db_file.get_path(rel_path):
+                if not event.dir and self.profile.db_file.path_info(rel_path):
                     # The file is in the local database and is not a directory.
                     # New files do not have a priority value until the first
                     # sync after they are added.
