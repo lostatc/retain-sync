@@ -233,8 +233,11 @@ class InitializeCommand(Command):
                 # Expand exclude globbing patterns.
                 self.profile.ex_file.glob(self.dest_dir.safe_path)
             except FileNotFoundError:
-                raise ServerError(
-                    "the connection to the remote directory was lost")
+                if not os.path.isdir(self.dest_dir.util_dir):
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
+                else:
+                    raise
 
             # Check that there is enough local space to accommodate remote
             # files.
@@ -265,8 +268,11 @@ class InitializeCommand(Command):
                     exclude=self.profile.ex_file.matches | unsafe_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
-                raise ServerError(
-                    "the connection to the remote directory was lost")
+                if not os.path.isdir(self.dest_dir.util_dir):
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
+                else:
+                    raise
 
         remote_files = self.dest_dir.get_paths(
             dirs=False).keys() - unsafe_symlinks
@@ -303,5 +309,8 @@ class InitializeCommand(Command):
             shutil.copy(self.profile.ex_file.path, os.path.join(
                 self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
         except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
+            if not os.path.isdir(self.dest_dir.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else:
+                raise

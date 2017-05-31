@@ -64,8 +64,11 @@ class ResetCommand(Command):
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
-                raise ServerError(
-                    "the connection to the remote directory was lost")
+                if not os.path.isdir(self.dest_dir.util_dir):
+                    raise ServerError(
+                        "the connection to the remote directory was lost")
+                else:
+                    raise
 
             if not self.keep_remote:
                 # Check that the remote directory contains only empty

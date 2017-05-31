@@ -77,8 +77,11 @@ class SyncCommand(Command):
             shutil.copy(self.profile.ex_file.path, os.path.join(
                 self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
         except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
+            if not os.path.isdir(self.dest_dir.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else:
+                raise
 
         # Expand globbing patterns.
         self.profile.ex_file.glob(self.local_dir.path)
@@ -362,8 +365,11 @@ class SyncCommand(Command):
                 files=update_paths,
                 msg="Updating local files...")
         except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
+            if not os.path.isdir(self.dest_dir.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else:
+                raise
 
     def _update_remote(self, update_paths: Iterable[str]) -> None:
         """Update the remote directory with local files.
@@ -387,8 +393,11 @@ class SyncCommand(Command):
                 self.local_dir.path, self.dest_dir.safe_path,
                 files=update_paths, msg="Updating remote files...")
         except FileNotFoundError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
+            if not os.path.isdir(self.dest_dir.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else:
+                raise
 
         # Update the time of the last sync for files that have been modified.
         self.dest_dir.db_file.add_paths(
@@ -760,12 +769,23 @@ class SyncCommand(Command):
         Args:
             paths: The relative paths of files to mark for deletion.
         """
-        os.makedirs(self.dest_dir.trash_dir, exist_ok=True)
+        try:
+            os.mkdir(self.dest_dir.trash_dir)
+        except FileExistsError:
+            pass
+        except FileNotFoundError:
+            if not os.path.isdir(self.dest_dir.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else: raise
+
         trash_filenames = {
             entry.name for entry in os.scandir(self.dest_dir.trash_dir)}
         old_paths = list(paths)
         old_filenames = [os.path.basename(path) for path in old_paths]
 
+        # Come up with a new filename if the current one collides with the
+        # name of an existing file in the trash.
         new_filenames = []
         for old_filename in old_filenames:
             new_filename = old_filename

@@ -27,7 +27,6 @@ class ListCommand(Command):
         super().__init__()
 
     def main(self) -> None:
-        # TODO: figure out if this can be optimized
         if not self.profiles:
             print("\n-- No profiles --\n")
         else:
