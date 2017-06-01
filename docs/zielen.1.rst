@@ -147,16 +147,15 @@ When calculating which files to store locally, **zielen** first considers whole
 directories, and when a directory is selected, it includes all of its
 subdirectories. Once no more whole directories can fit within the storage
 limit, it fills the remaining space with the highest-priority individual files
-that remain. This behavior can be overridden by setting **SyncExtraFiles** to
-'no' in the profile config file.
+that remain. This feature can be disabled in the profile config file.
 
 During a sync, files that are new since the last sync have their priority
 artifically inflated in order to keep them in the local directory longer. This
 is to prevent files from being removed from the local directory as soon as
-they're created, when they're likely still being used. This applies to both
-files that were created locally and new files synced from the remote directory.
-This behavior can be overridden by setting **InflatePriority** to 'no' in the
-profile config file.
+they're created, when they're likely still being used. This only applies to new
+files that were created locally. New files synced from the remote directory do
+not have their priority inflated. This feature can be disabled in the profile
+config file.
 
 **zielen** uses **rsync** for copying files between the local and remote
 directories, and should preserve permissions, modification times, ownership,
@@ -203,11 +202,10 @@ the file in the user's local trash directory by comparing file sizes first and
 then checksums. If it finds a copy of the file in the user's local trash, it
 permanently deletes the file in the remote directory. Otherwise, it moves the
 file to a remote trash directory. This directory is '.zielen/Trash' under the
-root of the remote directory. This behavior can be overridden by setting
-**DisableTrash** to 'yes' in the profile config file. The command
-**empty-trash** can be used to permanently delete all files in the remote trash
-directory. The list of local directories that are searched for deleted files
-can be altered in the profile config file.
+root of the remote directory. This feature can be disabled in the profile
+config file. The command **empty-trash** can be used to permanently delete all
+files in the remote trash directory. The list of local directories that are
+searched for deleted files can be altered in the profile config file.
 
 FILES
 =====

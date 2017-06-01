@@ -100,14 +100,17 @@ class SyncCommand(Command):
         del_paths = self._compute_deleted()
         mod_paths = self._compute_modified()
 
-        # Add new files to both databases.
+        # Add new files to both databases, and inflate the priority of new
+        # local files.
+        new_local_files = (new_paths.local - dir_paths)
+        new_local_dirs = (new_paths.local - file_paths)
         new_file_paths = (new_paths.all - dir_paths)
         new_dir_paths = (new_paths.all - file_paths)
         self.dest_dir.db_file.add_paths(new_file_paths, new_dir_paths)
+        self.profile.db_file.add_paths(new_file_paths, new_dir_paths)
         if self.profile.cfg_file.vals["InflatePriority"]:
-            self.profile.db_file.add_inflated(new_file_paths, new_dir_paths)
-        else:
-            self.profile.db_file.add_paths(new_file_paths, new_dir_paths)
+            self.profile.db_file.add_inflated(
+                new_local_files, new_local_dirs, replace=True)
 
         # Sync deletions between the local and remote directories.
         self._rm_local_files(del_paths.local)
@@ -118,6 +121,14 @@ class SyncCommand(Command):
         updated_paths = self._handle_conflicts(
             mod_paths.local | new_paths.local,
             mod_paths.remote | new_paths.remote)
+
+        # Add any new files that have been created in the process of
+        # handling conflicts to both databases.
+        self.dest_dir.db_file.add_paths(updated_paths.all, [])
+        self.profile.db_file.add_paths(updated_paths.all, [])
+        if self.profile.cfg_file.vals["InflatePriority"]:
+            self.profile.db_file.add_inflated(
+                updated_paths.local, [], replace=True)
 
         # Update the remote directory with modified local files.
         self._update_remote(updated_paths.local)
@@ -638,6 +649,8 @@ class SyncCommand(Command):
 
         old_paths = (old_path for old_path, new_path in path_pairs)
 
+        # Separate paths of directories from paths of regular files based on
+        # whether the old paths are entered as directories in the database.
         new_file_paths = set()
         new_dir_paths = set()
         for old_path, new_path in path_pairs:
@@ -674,10 +687,12 @@ class SyncCommand(Command):
 
         old_paths = (old_path for old_path, new_path in path_pairs)
 
+        # Separate paths of directories from paths of regular files based on
+        # whether the old paths are entered as directories in the database.
         new_file_paths = set()
         new_dir_paths = set()
         for old_path, new_path in path_pairs:
-            path_info = self.profile.db_file.path_info(old_path)
+            path_info = self.dest_dir.db_file.path_info(old_path)
             if path_info and path_info.directory:
                 new_dir_paths.add(new_path)
             else:
