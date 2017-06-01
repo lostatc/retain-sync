@@ -444,19 +444,19 @@ class SyncCommand(Command):
             if path_data and path_data.directory:
                 continue
             elif local_mtimes[path] < remote_mtimes[path]:
-                local_path_pairs.add((path, new_path, False))
+                local_path_pairs.add((path, new_path))
             elif remote_mtimes[path] < local_mtimes[path]:
-                remote_path_pairs.add((path, new_path, False))
+                remote_path_pairs.add((path, new_path))
 
         if local_path_pairs:
             self._rename_local_files(local_path_pairs)
-            old_local_paths, new_local_paths, _ = zip(*local_path_pairs)
+            old_local_paths, new_local_paths = zip(*local_path_pairs)
         else:
             old_local_paths = new_local_paths = set()
 
         if remote_path_pairs:
             self._rename_remote_files(remote_path_pairs)
-            old_remote_paths, new_remote_paths, _ = zip(*remote_path_pairs)
+            old_remote_paths, new_remote_paths = zip(*remote_path_pairs)
         else:
             old_remote_paths = new_remote_paths = set()
 
@@ -623,40 +623,44 @@ class SyncCommand(Command):
 
         return DeletedPaths(local_del_paths, remote_del_paths, trash_paths)
 
-    def _rename_local_files(self, paths: Iterable[Tuple[str, str, bool]]) -> None:
+    def _rename_local_files(
+            self, path_pairs: Iterable[Tuple[str, str]]) -> None:
         """Move local files to a new path and update the databases.
 
         Args:
-            paths: The relative paths of existing local files to be renamed
-                (first), their new paths (second) and whether the path is the
-                path of a directory (third).
+            path_pairs: The relative paths of existing local files to be renamed
+                (first) and their new paths (second).
         """
-        for old_path, new_path, _ in paths:
+        for old_path, new_path in path_pairs:
             os.rename(
                 os.path.join(self.local_dir.path, old_path),
                 os.path.join(self.local_dir.path, new_path))
 
-        old_paths = (
-            old_path for old_path, new_path, is_dir in paths)
-        new_file_paths = (
-            new_path for old_path, new_path, is_dir in paths if not is_dir)
-        new_dir_paths = (
-            new_path for old_path, new_path, is_dir in paths if is_dir)
+        old_paths = (old_path for old_path, new_path in path_pairs)
+
+        new_file_paths = set()
+        new_dir_paths = set()
+        for old_path, new_path in path_pairs:
+            path_info = self.profile.db_file.path_info(old_path)
+            if path_info and path_info.directory:
+                new_dir_paths.add(new_path)
+            else:
+                new_file_paths.add(new_path)
 
         self.profile.db_file.rm_paths(old_paths)
         self.dest_dir.db_file.rm_paths(old_paths)
         self.profile.db_file.add_paths(new_file_paths, new_dir_paths)
         self.dest_dir.db_file.add_paths(new_file_paths, new_dir_paths)
 
-    def _rename_remote_files(self, paths: Iterable[Tuple[str, str, bool]]) -> None:
+    def _rename_remote_files(
+            self, path_pairs: Iterable[Tuple[str, str]]) -> None:
         """Move remote files to a new path and update the databases.
 
         Args:
-            paths: The relative paths of existing remote files to be renamed
-                (first), their new paths (second) and whether the path is the
-                path of a directory (third).
+            path_pairs: The relative paths of existing remote files to be renamed
+                (first) and their new paths (second).
         """
-        for old_path, new_path, _ in paths:
+        for old_path, new_path in path_pairs:
             try:
                 os.rename(
                     os.path.join(self.dest_dir.path, old_path),
@@ -668,12 +672,16 @@ class SyncCommand(Command):
                 else:
                     raise
 
-        old_paths = (
-            old_path for old_path, new_path, is_dir in paths)
-        new_file_paths = (
-            new_path for old_path, new_path, is_dir in paths if not is_dir)
-        new_dir_paths = (
-            new_path for old_path, new_path, is_dir in paths if is_dir)
+        old_paths = (old_path for old_path, new_path in path_pairs)
+
+        new_file_paths = set()
+        new_dir_paths = set()
+        for old_path, new_path in path_pairs:
+            path_info = self.profile.db_file.path_info(old_path)
+            if path_info and path_info.directory:
+                new_dir_paths.add(new_path)
+            else:
+                new_file_paths.add(new_path)
 
         self.profile.db_file.rm_paths(old_paths)
         self.dest_dir.db_file.rm_paths(old_paths)
