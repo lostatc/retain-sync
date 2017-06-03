@@ -185,7 +185,7 @@ class ProgressBar:
                   flush=True, end="\r")
 
 
-def print_table(headers: list, data: List[list]) -> None:
+def print_table(headers: list, data: List[tuple]) -> None:
     """Print input values in a formatted ascii table.
 
     All values in the table are left-aligned, and columns are as wide as
