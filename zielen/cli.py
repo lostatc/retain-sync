@@ -45,10 +45,12 @@ def usage(command: str) -> None:
         # Don't use colors if stdout isn't a tty.
         normal = emphasis = strong = ""
 
-    # Repeat the command descriptions in the code so that one can be made
-    # more detailed in the future. textwrap.wrap() can't be used here in leu
-    # of manual formatting because it doesn't account for the terminal
-    # control codes.
+    # textwrap.wrap() can't be used here in leu of manual formatting because
+    # it doesn't account for the terminal control codes. The text wrap
+    # feature of your editor probably won't work either for the same reason.
+    # When editing these messages, make sure to manually wrap the text to
+    # 79 columns, not counting the in-code indentation or the replacement
+    # fields (e.g. {1}).
     if not command:
         help_msg = dedent("""\
             Usage: {1}zielen{0} [{2}global_options{0}] {2}command{0} [{2}command_options{0}] [{2}command_args{0}]
