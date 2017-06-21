@@ -102,43 +102,43 @@ class InitializeCommand(Command):
 
         self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
-        if os.path.isfile(self.profile.info_file.path):
-            self.profile.info_file.read()
+        if os.path.isfile(self.profile.info.path):
+            self.profile.info.read()
 
         # Check if the profile has already been initialized.
-        if self.profile.info_file.vals["Status"] == "initialized":
+        if self.profile.info.vals["Status"] == "initialized":
             raise InputError("this profile already exists")
 
         # Lock profile if not already locked.
         self.lock()
 
         # Check whether an interrupted initialization is being resumed.
-        if self.profile.info_file.vals["Status"] == "partial":
+        if self.profile.info.vals["Status"] == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
             atexit.register(self.print_interrupt_msg)
 
-            self.profile.cfg_file.read()
-            self.profile.cfg_file.check_all()
+            self.profile.cfg.read()
+            self.profile.cfg.check_all()
 
             # The user doesn't have to specify the same command-line arguments
             # when they're resuming and initialization.
             self.add_remote = (
-                self.profile.info_file.vals["InitOpts"]["add_remote"])
+                self.profile.info.vals["InitOpts"]["add_remote"])
 
             self.local_dir = LocalSyncDir(
-                self.profile.cfg_file.vals["LocalDir"])
-            if self.profile.cfg_file.vals["RemoteHost"]:
+                self.profile.cfg.vals["LocalDir"])
+            if self.profile.cfg.vals["RemoteHost"]:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
                 self.connection = SSHConnection(
-                    self.profile.cfg_file.vals["RemoteHost"],
-                    self.profile.cfg_file.vals["RemoteUser"],
-                    self.profile.cfg_file.vals["Port"],
-                    self.profile.cfg_file.vals["RemoteDir"],
-                    self.profile.cfg_file.vals["SshfsOptions"])
+                    self.profile.cfg.vals["RemoteHost"],
+                    self.profile.cfg.vals["RemoteUser"],
+                    self.profile.cfg.vals["Port"],
+                    self.profile.cfg.vals["RemoteDir"],
+                    self.profile.cfg.vals["SshfsOptions"])
             else:
                 self.dest_dir = DestSyncDir(
-                    self.profile.cfg_file.vals["RemoteDir"])
+                    self.profile.cfg.vals["RemoteDir"])
         else:
             # Start a new initialization.
             atexit.register(delete_profile)
@@ -150,48 +150,48 @@ class InitializeCommand(Command):
                 template_file.read()
                 template_file.check_all(
                     check_empty=False, context="template file")
-                self.profile.cfg_file.raw_vals = template_file.raw_vals
+                self.profile.cfg.raw_vals = template_file.raw_vals
 
             # Prompt user interactively for unset config values.
-            self.profile.cfg_file.add_remote = self.add_remote
-            self.profile.cfg_file.prompt()
+            self.profile.cfg.add_remote = self.add_remote
+            self.profile.cfg.prompt()
             # This final check is necessary for cases where a template was used
             # that contained values dependent on other unspecified values for
             # validity checking (e.g. 'RemoteDir' and 'RemoteHost').
             if self.template:
-                self.profile.cfg_file.check_all(context="template file")
+                self.profile.cfg.check_all(context="template file")
 
             # Write config values to file.
             if self.template:
-                self.profile.cfg_file.write(self.template)
+                self.profile.cfg.write(self.template)
             else:
                 # TODO: Get the path of the master config template from
                 # setup.py instead of hardcoding it.
-                self.profile.cfg_file.write(os.path.join(
+                self.profile.cfg.write(os.path.join(
                     sys.prefix, "share/zielen/config-template"))
 
             self.local_dir = LocalSyncDir(
-                self.profile.cfg_file.vals["LocalDir"])
-            if self.profile.cfg_file.vals["RemoteHost"]:
+                self.profile.cfg.vals["LocalDir"])
+            if self.profile.cfg.vals["RemoteHost"]:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
                 self.connection = SSHConnection(
-                    self.profile.cfg_file.vals["RemoteHost"],
-                    self.profile.cfg_file.vals["RemoteUser"],
-                    self.profile.cfg_file.vals["Port"],
-                    self.profile.cfg_file.vals["RemoteDir"],
-                    self.profile.cfg_file.vals["SshfsOptions"])
+                    self.profile.cfg.vals["RemoteHost"],
+                    self.profile.cfg.vals["RemoteUser"],
+                    self.profile.cfg.vals["Port"],
+                    self.profile.cfg.vals["RemoteDir"],
+                    self.profile.cfg.vals["SshfsOptions"])
                 self.connection.check_remote(self.add_remote)
             else:
                 self.dest_dir = DestSyncDir(
-                    self.profile.cfg_file.vals["RemoteDir"])
+                    self.profile.cfg.vals["RemoteDir"])
 
             # Generate the exclude pattern file.
-            self.profile.ex_file.generate(self.exclude)
+            self.profile.exclude.generate(self.exclude)
 
             # The profile is now partially initialized. If the
             # initialization is interrupted from this point, it can be
             # resumed.
-            self.profile.info_file.generate(
+            self.profile.info.generate(
                 self.profile.name, add_remote=self.add_remote)
             atexit.register(self.print_interrupt_msg)
             atexit.unregister(delete_profile)
@@ -199,12 +199,12 @@ class InitializeCommand(Command):
         self._setup_remote()
 
         # The profile is now fully initialized. Update the info file.
-        if self.profile.cfg_file.vals["RemoteHost"]:
+        if self.profile.cfg.vals["RemoteHost"]:
             atexit.unregister(self.connection.unmount)
-        self.profile.info_file.vals["Status"] = "initialized"
-        self.profile.info_file.vals["LastSync"] = time.time()
-        self.profile.info_file.vals["LastAdjust"] = time.time()
-        self.profile.info_file.write()
+        self.profile.info.vals["Status"] = "initialized"
+        self.profile.info.vals["LastSync"] = time.time()
+        self.profile.info.vals["LastAdjust"] = time.time()
+        self.profile.info.write()
         atexit.unregister(self.print_interrupt_msg)
 
         # Advise user to start/enable the daemon.
@@ -215,7 +215,7 @@ class InitializeCommand(Command):
 
     def _setup_remote(self):
         """Set up the remote directory and transfer files."""
-        if self.profile.cfg_file.vals["RemoteHost"]:
+        if self.profile.cfg.vals["RemoteHost"]:
             atexit.register(self.connection.unmount, self.dest_dir.path)
             self.connection.mount(self.dest_dir.path)
 
@@ -231,7 +231,7 @@ class InitializeCommand(Command):
 
             try:
                 # Expand exclude globbing patterns.
-                self.profile.ex_file.glob(self.dest_dir.safe_path)
+                self.profile.exclude.glob(self.dest_dir.safe_path)
             except FileNotFoundError:
                 if not os.path.isdir(self.dest_dir.util_dir):
                     raise ServerError(
@@ -253,7 +253,7 @@ class InitializeCommand(Command):
                     self.local_dir.path)}
 
             # Expand exclude globbing patterns.
-            self.profile.ex_file.glob(self.local_dir.path)
+            self.profile.exclude.glob(self.local_dir.path)
 
             # Check that there is enough remote space to accommodate local
             # files.
@@ -265,7 +265,7 @@ class InitializeCommand(Command):
             try:
                 rec_clone(
                     self.local_dir.path, self.dest_dir.safe_path,
-                    exclude=self.profile.ex_file.matches | unsafe_symlinks,
+                    exclude=self.profile.exclude.matches | unsafe_symlinks,
                     msg="Moving files to remote...")
             except FileNotFoundError:
                 if not os.path.isdir(self.dest_dir.util_dir):
@@ -280,17 +280,17 @@ class InitializeCommand(Command):
             files=False, symlinks=False).keys()
 
         # Generate the local database.
-        if not os.path.isfile(self.profile.db_file.path):
-            self.profile.db_file.create()
-        self.profile.db_file.add_paths(remote_files, remote_dirs)
-        self.profile.db_file.conn.commit()
+        if not os.path.isfile(self.profile.db.path):
+            self.profile.db.create()
+        self.profile.db.add_paths(remote_files, remote_dirs)
+        self.profile.db.conn.commit()
 
         # Generate the remote database.
         try:
-            if not os.path.isfile(self.dest_dir.db_file.path):
-                self.dest_dir.db_file.create()
-            self.dest_dir.db_file.add_paths(remote_files, remote_dirs)
-            self.dest_dir.db_file.conn.commit()
+            if not os.path.isfile(self.dest_dir.db.path):
+                self.dest_dir.db.create()
+            self.dest_dir.db.add_paths(remote_files, remote_dirs)
+            self.dest_dir.db.conn.commit()
         except sqlite3.OperationalError:
             raise ServerError(
                 "the connection to the remote directory was lost")
@@ -299,15 +299,15 @@ class InitializeCommand(Command):
         # remote dir.
         symlink_tree(
             self.dest_dir.safe_path, self.local_dir.path,
-            self.profile.db_file.get_tree(directory=False),
-            self.profile.db_file.get_tree(directory=True),
+            self.profile.db.get_tree(directory=False),
+            self.profile.db.get_tree(directory=True),
             overwrite=True)
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
         try:
-            shutil.copy(self.profile.ex_file.path, os.path.join(
-                self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
+            shutil.copy(self.profile.exclude.path, os.path.join(
+                self.dest_dir.ex_dir, self.profile.info.vals["ID"]))
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
                 raise ServerError(

@@ -128,8 +128,8 @@ class SyncDBFile:
 
     Attributes:
         path: The path of the database file.
-        conn: The sqlite connection object for the database.
-        cur: The sqlite cursor object for the connection.
+        _conn: The sqlite connection object for the database.
+        _cur: The sqlite cursor object for the connection.
     """
     def __init__(self, path: str) -> None:
         self.path = path
@@ -207,3 +207,9 @@ class SyncDBFile:
         path_hash.update(hash_string.encode())
         return int.from_bytes(
             path_hash.digest()[:8], byteorder="big", signed=True)
+
+    def commit(self) -> None:
+        self.conn.commit()
+
+    def close(self) -> None:
+        self.conn.close()

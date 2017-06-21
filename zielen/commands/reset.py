@@ -60,7 +60,7 @@ class ResetCommand(Command):
             try:
                 rec_clone(
                     self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.db_file.get_tree(),
+                    files=self.dest_dir.db.get_tree(),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
@@ -79,7 +79,7 @@ class ResetCommand(Command):
                 # Close the database connection, and then remove the program
                 # directory. If the database connection is not closed,
                 # the util directory will not be able to be deleted.
-                self.dest_dir.db_file.conn.close()
+                self.dest_dir.db.close()
                 try:
                     shutil.rmtree(self.dest_dir.path)
                 except FileNotFoundError:
@@ -88,7 +88,7 @@ class ResetCommand(Command):
         # Remove non-user-created symlinks from the local directory.
         program_links = (self.local_dir.get_paths(
             files=False, dirs=False).keys()
-            & self.profile.db_file.get_tree())
+            & self.profile.db.get_tree())
         for rel_path in program_links:
             os.remove(os.path.join(self.local_dir.path, rel_path))
 
@@ -96,14 +96,14 @@ class ResetCommand(Command):
         # hasn't already been deleted.
         try:
             os.remove(os.path.join(
-                self.dest_dir.ex_dir, self.profile.info_file.vals["ID"]))
+                self.dest_dir.ex_dir, self.profile.info.vals["ID"]))
         except FileNotFoundError:
             pass
 
         # Unmount the remote directory and delete the profile directory.
-        if self.profile.cfg_file.vals["RemoteHost"]:
+        if self.profile.cfg.vals["RemoteHost"]:
             # The directory will not unmount if the database connection is
             # still open.
-            self.dest_dir.db_file.conn.close()
+            self.dest_dir.db.close()
             self.connection.unmount(self.profile.mnt_dir)
         shutil.rmtree(self.profile.path)

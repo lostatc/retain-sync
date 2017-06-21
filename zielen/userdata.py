@@ -224,7 +224,7 @@ class DestSyncDir(SyncDir):
             util_dir is missing. The keeps files from being moved into an empty
             mountpoint.
         ex_dir: Contains copies of each client's exclude pattern file.
-        db_file: Contains information on files in the remote.
+        db: Contains information on files in the remote.
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)
@@ -232,7 +232,7 @@ class DestSyncDir(SyncDir):
         self.safe_path = os.path.join(self.util_dir, "..")
         self.ex_dir = os.path.join(self.util_dir, "exclude")
         self.trash_dir = os.path.join(self.util_dir, "Trash")
-        self.db_file = DestDBFile(os.path.join(self.util_dir, "remote.db"))
+        self.db = DestDBFile(os.path.join(self.util_dir, "remote.db"))
 
     def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
                   exclude=None, memoize=True, lookup=True):

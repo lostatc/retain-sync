@@ -74,10 +74,10 @@ class Command(abc.ABC):
         input_path = os.path.abspath(input_str)
         if os.path.exists(input_path):
             for name, profile in self.profiles.items():
-                if not profile.cfg_file.raw_vals:
-                    profile.cfg_file.read()
+                if not profile.cfg.raw_vals:
+                    profile.cfg.read()
                 if os.path.samefile(
-                        input_path, profile.cfg_file.vals["LocalDir"]):
+                        input_path, profile.cfg.vals["LocalDir"]):
                     return profile
         raise InputError(
             "argument is not a profile name or local directory path")
@@ -88,25 +88,25 @@ class Command(abc.ABC):
         Raises:
             InputError: The selected profile is only partially initialized.
         """
-        self.profile.info_file.read()
+        self.profile.info.read()
         self.lock()
 
         # Warn if profile is only partially initialized.
-        if self.profile.info_file.vals["Status"] == "partial":
+        if self.profile.info.vals["Status"] == "partial":
             atexit.register(self.print_interrupt_msg)
             raise InputError("invalid profile")
 
-        self.profile.cfg_file.read()
-        self.profile.cfg_file.check_all()
+        self.profile.cfg.read()
+        self.profile.cfg.check_all()
 
-        self.local_dir = LocalSyncDir(self.profile.cfg_file.vals["LocalDir"])
-        if self.profile.cfg_file.vals["RemoteHost"]:
+        self.local_dir = LocalSyncDir(self.profile.cfg.vals["LocalDir"])
+        if self.profile.cfg.vals["RemoteHost"]:
             self.connection = SSHConnection(
-                self.profile.cfg_file.vals["RemoteHost"],
-                self.profile.cfg_file.vals["RemoteUser"],
-                self.profile.cfg_file.vals["Port"],
-                self.profile.cfg_file.vals["RemoteDir"],
-                self.profile.cfg_file.vals["SshfsOptions"])
+                self.profile.cfg.vals["RemoteHost"],
+                self.profile.cfg.vals["RemoteUser"],
+                self.profile.cfg.vals["Port"],
+                self.profile.cfg.vals["RemoteDir"],
+                self.profile.cfg.vals["SshfsOptions"])
             if not os.path.isdir(self.profile.mnt_dir):
                 # Unmount if mountpoint is broken.
                 self.connection.unmount(self.profile.mnt_dir)
@@ -115,7 +115,7 @@ class Command(abc.ABC):
             self.dest_dir = DestSyncDir(self.profile.mnt_dir)
         else:
             self.dest_dir = DestSyncDir(
-                self.profile.cfg_file.vals["RemoteDir"])
+                self.profile.cfg.vals["RemoteDir"])
 
     def lock(self) -> None:
         """Lock the profile if not already locked.

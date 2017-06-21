@@ -50,22 +50,22 @@ class Profile:
         name: The name of the profile.
         path: The path of the profile directory.
         mnt_dir: The path of the remote mountpoint.
-        ex_file: An object for the exclude pattern file.
-        info_file: An object for the JSON file for profile metadata.
-        db_file: An object for the file priority database.
-        cfg_file: An object for the profile's configuration file.
+        exclude: An object for the exclude pattern file.
+        info: An object for the JSON file for profile metadata.
+        db: An object for the file priority database.
+        cfg: An object for the profile's configuration file.
     """
     def __init__(self, name: str) -> None:
         self.name = name
         self.path = os.path.join(PROFILES_DIR, self.name)
         os.makedirs(self.path, exist_ok=True)
         self.mnt_dir = os.path.join(self.path, "mnt")
-        self.ex_file = ProfileExcludeFile(
+        self.exclude = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
-        self.info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
-        self.db_file = ProfileDBFile(
+        self.info = ProfileInfoFile(os.path.join(self.path, "info.json"))
+        self.db = ProfileDBFile(
             os.path.join(self.path, "local.db"))
-        self.cfg_file = ProfileConfigFile(
+        self.cfg = ProfileConfigFile(
             os.path.join(self.path, "config"), profile_obj=self)
 
 
