@@ -666,17 +666,17 @@ class FilesManager:
         local_del_paths = known_paths - remote_paths
         remote_del_paths = known_paths - local_paths
         for path in local_del_paths.copy():
-            sub_paths = self.profile.get_paths(root=path).keys()
+            sub_paths = set(self.profile.get_paths(root=path).keys())
             sub_paths.remove(path)
             local_del_paths -= sub_paths
         for path in remote_del_paths.copy():
-            sub_paths = self.dest_dir.get_paths(root=path).keys()
+            sub_paths = set(self.dest_dir.get_paths(root=path).keys())
             sub_paths.remove(path)
             remote_del_paths -= sub_paths
 
         # Compute files to be moved to the trash.
         trash_paths = set()
-        if not self.profile.disable_trash:
+        if self.profile.use_trash:
             local_trash_dir = TrashDir(self.profile.trash_dirs)
             for path in remote_del_paths:
                 dest_path = os.path.join(self.dest_dir.safe_path, path)

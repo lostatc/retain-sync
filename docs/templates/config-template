@@ -51,9 +51,9 @@ TrashDirs=~/.local/share/Trash/files
 PriorityHalfLife=120
 
 # When local files are deleted and aren't found in the user's local trash
-# directory, permanently delete them from the remote directory instead of
-# putting them in the remote trash directory.
-DisableTrash=no
+# directory, put the remote copy in the remote trash directory instead of
+# permanently deleting them.
+UseTrash=yes
 
 # When selecting which directories should be retained locally, start selecting
 # individual files to fill the remaining space once no more directories can fit

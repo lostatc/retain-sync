@@ -299,9 +299,9 @@ class Profile:
             return False
 
     @property
-    def disable_trash(self) -> bool:
+    def use_trash(self) -> bool:
         """Permanently delete remote files that were deleted locally."""
-        return self._convert_bool(self._cfg_file.vals["DisableTrash"])
+        return self._convert_bool(self._cfg_file.vals["UseTrash"])
 
     @property
     def sync_extra_files(self) -> bool:
@@ -844,7 +844,7 @@ class ProfileConfigFile(ConfigFile):
         ]
     _opt_keys = [
         "SyncInterval", "SshfsOptions", "TrashDirs", "PriorityHalfLife",
-        "DisableTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        "UseTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
     _all_keys = _req_keys + _opt_keys
     _prompt_keys = [
@@ -852,7 +852,7 @@ class ProfileConfigFile(ConfigFile):
         "StorageLimit"
         ]
     _bool_keys = [
-        "DisableTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        "UseTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
     _connect_keys = ["RemoteUser", "Port"]
     _defaults = {
@@ -861,7 +861,7 @@ class ProfileConfigFile(ConfigFile):
             "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"),
         "TrashDirs": os.path.join(XDG_DATA_HOME, "Trash/files"),
         "PriorityHalfLife": "120",
-        "DisableTrash": "no",
+        "UseTrash": "no",
         "SyncExtraFiles": "yes",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
