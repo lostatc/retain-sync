@@ -60,7 +60,7 @@ class ResetCommand(Command):
             try:
                 rec_clone(
                     self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.get_tree(),
+                    files=self.dest_dir.get_paths(),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:

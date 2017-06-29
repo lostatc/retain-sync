@@ -79,7 +79,7 @@ class Profile:
         self.add_inflated = self._db_file.add_inflated
         self.rm_paths = self._db_file.rm_paths
         self.get_path_info = self._db_file.get_path_info
-        self.get_tree = self._db_file.get_tree
+        self.get_paths = self._db_file.get_paths
         self.increment = self._db_file.increment
         self.adjust_all = self._db_file.adjust_all
 
@@ -731,11 +731,11 @@ class ProfileDBFile(SyncDBFile):
         if result:
             return PathData(*result)
 
-    def get_tree(self, start=None, directory=None) -> Dict[str, PathData]:
+    def get_paths(self, root=None, directory=None) -> Dict[str, PathData]:
         """Get the paths of files in the database.
 
         Args:
-            start: A relative directory path. Results are restricted to just
+            root: A relative directory path. Results are restricted to just
                 paths under this directory path.
             directory: Restrict results to just directory paths (True) or just
                 file paths (False).
@@ -745,7 +745,7 @@ class ProfileDBFile(SyncDBFile):
             These named tuples contain a bool representing whether the file
             is a directory and the file priority.
         """
-        start_id = self._get_path_id(start) if start else None
+        start_id = self._get_path_id(root) if root else None
         self.cur.execute("""\
             SELECT n.path, n.directory, n.priority
             FROM nodes AS n

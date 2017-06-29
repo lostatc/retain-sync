@@ -241,7 +241,7 @@ class DestSyncDir(SyncDir):
         self.add_paths = self._db_file.add_paths
         self.rm_paths = self._db_file.rm_paths
         self.get_path_info = self._db_file.get_path_info
-        self.get_tree = self._db_file.get_tree
+        self.get_paths = self._db_file.get_paths
 
     def generate(self) -> None:
         """Generate files for storing persistent data."""
@@ -501,12 +501,13 @@ class DestDBFile(SyncDBFile):
         if result:
             return PathData(*result)
 
-    def get_tree(self, start=None, directory=None,
-                 min_lastsync=None) -> Dict[str, PathData]:
+    def get_paths(
+            self, root=None, directory=None, min_lastsync=None
+            ) -> Dict[str, PathData]:
         """Get a dict of values for paths that match certain constraints.
 
         Args:
-            start: A relative directory path. Results are restricted to just
+            root: A relative directory path. Results are restricted to just
                 paths under this directory path.
             directory: Restrict results to just directory paths (True) or just
                 file paths (False).
@@ -519,7 +520,7 @@ class DestDBFile(SyncDBFile):
             is a directory and the time that the file was last updated by a
             sync as a unix timestamp.
         """
-        start_id = self._get_path_id(start) if start else None
+        start_id = self._get_path_id(root) if root else None
         self.cur.execute("""\
             SELECT n.path, n.directory, n.lastsync
             FROM nodes AS n
