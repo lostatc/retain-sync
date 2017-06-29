@@ -88,23 +88,26 @@ class ConfigFile:
 class JSONFile:
     """Parse a JSON-formatted file.
 
+    Args:
+        path: The path of the JSON file.
+
     Attributes:
         path: The path of the JSON file.
-        raw_vals: A dictionary or list of values from the file.
+        vals: A dictionary or list of values from the file.
     """
-    def __init__(self, path) -> None:
+    def __init__(self, path: str) -> None:
         self.path = path
-        self.raw_vals = None
+        self.vals = None
 
     def read(self) -> None:
         """Read file into an object."""
         with open(self.path) as file:
-            self.raw_vals = json.load(file)
+            self.vals = json.load(file)
 
     def write(self) -> None:
         """Write object to a file."""
         with open(self.path, "w") as file:
-            json.dump(self.raw_vals, file, indent=4)
+            json.dump(self.vals, file, indent=4)
 
 
 class SyncDBFile:
@@ -126,10 +129,13 @@ class SyncDBFile:
             table stores file paths that have experienced hash collisions and
             their corresponding salt.
 
+    Args:
+        path: The path of the database file.
+
     Attributes:
         path: The path of the database file.
-        _conn: The sqlite connection object for the database.
-        _cur: The sqlite cursor object for the connection.
+        conn: The sqlite connection object for the database.
+        cur: The sqlite cursor object for the connection.
     """
     def __init__(self, path: str) -> None:
         self.path = path
@@ -207,9 +213,3 @@ class SyncDBFile:
         path_hash.update(hash_string.encode())
         return int.from_bytes(
             path_hash.digest()[:8], byteorder="big", signed=True)
-
-    def commit(self) -> None:
-        self.conn.commit()
-
-    def close(self) -> None:
-        self.conn.close()

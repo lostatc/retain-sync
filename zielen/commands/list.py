@@ -31,10 +31,10 @@ class ListCommand(Command):
             print("\n-- No profiles --\n")
         else:
             for name, profile in self.profiles.items():
-                profile.cfg.read()
+                profile.read()
 
             table_headers = ["Profile", "Local Directory"]
             table_data = [
-                (name, profile.cfg.vals["LocalDir"])
+                (name, profile.local_path)
                 for name, profile in self.profiles.items()]
             print_table(table_headers, table_data)

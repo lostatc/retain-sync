@@ -17,19 +17,20 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import collections
-import datetime
-import glob
 import os
 import re
-import sqlite3
 import sys
-import textwrap
+import glob
 import uuid
 import weakref
 import getpass
+import sqlite3
+import datetime
+import textwrap
 import readline  # This is not unused. Importing it adds features to input().
-from typing import Any, Iterable, Generator, Dict, NamedTuple, Optional, Union
+import collections
+from typing import (
+    Any, Iterable, Generator, Dict, NamedTuple, Optional, Union, Set, List)
 
 import pkg_resources
 
@@ -50,23 +51,272 @@ class Profile:
         name: The name of the profile.
         path: The path of the profile directory.
         mnt_dir: The path of the remote mountpoint.
-        exclude: An object for the exclude pattern file.
-        info: An object for the JSON file for profile metadata.
-        db: An object for the file priority database.
-        cfg: An object for the profile's configuration file.
+        cfg_path: The path of the configuration file.
+        ex_path: The path of the exclude file.
+        _ex_file: An object for the exclude pattern file.
+        _info_file: An object for the JSON file for profile metadata.
+        _db_file: An object for the file priority database.
+        _cfg_file: An object for the profile's configuration file.
     """
     def __init__(self, name: str) -> None:
         self.name = name
         self.path = os.path.join(PROFILES_DIR, self.name)
-        os.makedirs(self.path, exist_ok=True)
         self.mnt_dir = os.path.join(self.path, "mnt")
-        self.exclude = ProfileExcludeFile(
+        self._ex_file = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
-        self.info = ProfileInfoFile(os.path.join(self.path, "info.json"))
-        self.db = ProfileDBFile(
+        self._info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
+        self._db_file = ProfileDBFile(
             os.path.join(self.path, "local.db"))
-        self.cfg = ProfileConfigFile(
+        self._cfg_file = ProfileConfigFile(
             os.path.join(self.path, "config"), profile_obj=self)
+
+        # Import methods from content classes.
+        self.cfg_path = self._cfg_file.path
+        self.ex_path = self._ex_file.path
+        self.ex_matches = self._ex_file.matches
+        self.ex_all_matches = self._ex_file.all_matches
+        self.add_paths = self._db_file.add_paths
+        self.add_inflated = self._db_file.add_inflated
+        self.rm_paths = self._db_file.rm_paths
+        self.get_path_info = self._db_file.get_path_info
+        self.get_tree = self._db_file.get_tree
+        self.increment = self._db_file.increment
+        self.adjust_all = self._db_file.adjust_all
+
+    def read(self) -> None:
+        """Load data from persistent storage."""
+        # The order here is important. If a file is not found,
+        # all subsequent files will not be read. The info file should be
+        # read first.
+        self._info_file.read()
+        self._cfg_file.read()
+        self._cfg_file.check_all()
+
+    def generate(
+            self, add_remote: bool, exclude_path=None,
+            template_path=None) -> None:
+        """Generate files for storing persistent data."""
+        os.makedirs(self.path, exist_ok=True)
+
+        self._ex_file.generate(exclude_path)
+        self._info_file.generate(self.name, add_remote)
+
+        try:
+            self._db_file.create()
+        except FileExistsError:
+            pass
+
+        if template_path:
+            template_file = ProfileConfigFile(
+                template_path, add_remote=add_remote)
+            template_file.read()
+            template_file.check_all(check_empty=False, context="template file")
+            self._cfg_file.raw_vals = template_file.raw_vals
+
+        self._cfg_file.add_remote = add_remote
+        self._cfg_file.prompt()
+        if template_path:
+            # This final check is necessary for cases where a template was
+            # used that contained values dependent on other unspecified
+            # values for validity checking (e.g. 'RemoteDir' and 'RemoteHost').
+            self._cfg_file.check_all(context="template file")
+            self._cfg_file.write(template_path)
+        else:
+            # TODO: Get the path of the master config template from
+            # setup.py instead of hardcoding it.
+            self._cfg_file.write(os.path.join(
+                sys.prefix, "share/zielen/config-template"))
+
+    def write(self) -> None:
+        """Write data to persistent storage."""
+        self._info_file.write()
+        self._db_file.conn.commit()
+
+
+    @property
+    def status(self) -> str:
+        """A short string describing the status of the profile.
+
+        "initialized": Fully initialized.
+        "partial": Partially initialized.
+        """
+        return self._info_file.vals["Status"]
+
+    @status.setter
+    def status(self, value: str) -> None:
+        self._info_file.vals["Status"] = value
+
+    @staticmethod
+    def _convert_epoch(timestamp: str) -> float:
+        return datetime.datetime.strptime(
+            timestamp, "%Y-%m-%dT%H:%M:%S.%f").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+
+    @staticmethod
+    def _convert_timestamp(epoch: float) -> str:
+        # Use strftime() instead of isoformat() because the latter
+        # doesn't print the decimal point if the microsecond is 0,
+        # which would prevent it from being parsed by strptime().
+        return datetime.datetime.utcfromtimestamp(
+            epoch).strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+    @property
+    def last_sync(self) -> float:
+        """The time of the last sync in epoch time."""
+        return self._convert_epoch(self._info_file.vals["LastSync"])
+
+    @last_sync.setter
+    def last_sync(self, value: float) -> None:
+        # Use strftime() instead of isoformat() because the latter
+        # doesn't print the decimal point if the microsecond is 0,
+        # which would prevent it from being parsed by strptime().
+        self._info_file.vals["LastSync"] = self._convert_timestamp(value)
+
+    @property
+    def last_adjust(self) -> float:
+        """The time of the last priority adjustment in epoch time."""
+        return self._convert_epoch(self._info_file.vals["LastSync"])
+
+    @last_adjust.setter
+    def last_adjust(self, value: float) -> None:
+        # Use strftime() instead of isoformat() because the latter
+        # doesn't print the decimal point if the microsecond is 0,
+        # which would prevent it from being parsed by strptime().
+        self._info_file.vals["LastSync"] = self._convert_timestamp(value)
+
+    @property
+    def version(self) -> str:
+        """The version of the program that the profile was initialized by."""
+        return self._info_file.vals["Version"]
+
+    @version.setter
+    def version(self, value: str) -> str:
+        self._info_file.vals["Version"] = value
+
+    @property
+    def id(self) -> str:
+        """A UUID to identify the profile.
+
+        This is specifically to identify it among all profiles that share a
+        remote directory.
+        """
+        return self._info_file.vals["ID"]
+
+    @id.setter
+    def id(self, value: str) -> str:
+        self._info_file.vals["ID"] = value
+
+    @property
+    def add_remote(self) -> bool:
+        """Whether the '--add-remote' flag was given at initialization."""
+        return self._info_file.vals["InitOpts"]["add_remote"]
+
+    @add_remote.setter
+    def add_remote(self, value: bool) -> None:
+        self._info_file.vals["InitOpts"]["add_remote"] = value
+
+    @property
+    def local_path(self) -> str:
+        """The absolute path of the local directory."""
+        return os.path.expanduser(
+            os.path.normpath(self._cfg_file.vals["LocalDir"]))
+
+    @property
+    def remote_host(self) -> Optional[str]:
+        """The hostname, ip address or domain name of the remote machine.
+
+        'None' refers to the local machine.
+        """
+        value = self._cfg_file.vals["RemoteHost"]
+        if value in self._cfg_file.HOST_SYNONYMS:
+            return None
+        else:
+            return value
+
+    @property
+    def remote_user(self) -> str:
+        """The name of the user on the remote machine."""
+        return self._cfg_file.vals["RemoteUser"]
+
+    @property
+    def port(self) -> str:
+        """The port number for the connection."""
+        return self._cfg_file.vals["Port"]
+
+    @property
+    def remote_path(self) -> str:
+        """The absolute path of the remote directory."""
+        return os.path.expanduser(
+            os.path.normpath(self._cfg_file.vals["RemoteDir"]))
+
+    @property
+    def storage_limit(self) -> int:
+        """The number of bytes of data to keep in the local directory."""
+        num, unit = re.findall(
+            r"^([0-9]+)\s*([KMG](?:B|iB)?)$",
+            self._cfg_file.vals["StorageLimit"])[0]
+        if unit in ["K", "KiB"]:
+            return int(num) * 1024
+        elif unit in ["M", "MiB"]:
+            return int(num) * 1024**2
+        elif unit in ["G", "GiB"]:
+            return int(num) * 1024**3
+        elif unit == "KB":
+            return int(num) * 1000
+        elif unit == "MB":
+            return int(num) * 1000**2
+        elif unit == "GB":
+            return int(num) * 1000**3
+
+    @property
+    def sync_interval(self) -> int:
+        """The number of seconds the daemon will wait between syncs."""
+        return int(self._cfg_file.vals["SyncInterval"]) * 60
+
+    @property
+    def sshfs_options(self) -> str:
+        """The mount options to pass to sshfs."""
+        return self._cfg_file.vals["SshfsOptions"]
+
+    @property
+    def trash_dirs(self) -> List[str]:
+        dirs = self._cfg_file.vals["TrashDirs"].split(":")
+        for index, element in enumerate(dirs.copy()):
+            dirs[index] = os.path.expanduser(
+                os.path.normpath(element))
+        return dirs
+
+    @property
+    def priority_half_life(self) -> int:
+        """The half-life of file priorities in seconds."""
+        return int(self._cfg_file.vals["PriorityHalfLife"]) * 60**2
+
+    def _convert_bool(self, value: str) -> bool:
+        """Convert a string to a bool."""
+        if value in self._cfg_file.TRUE_VALS:
+            return True
+        elif value in self._cfg_file.FALSE_VALS:
+            return False
+
+    @property
+    def disable_trash(self) -> bool:
+        """Permanently delete remote files that were deleted locally."""
+        return self._convert_bool(self._cfg_file.vals["DisableTrash"])
+
+    @property
+    def sync_extra_files(self) -> bool:
+        """Fill the remaining space with individual files."""
+        return self._convert_bool(self._cfg_file.vals["SyncExtraFiles"])
+
+    @property
+    def inflate_priority(self) -> bool:
+        """Inflate the priority of new local files."""
+        return self._convert_bool(self._cfg_file.vals["InflatePriority"])
+
+    @property
+    def account_for_size(self) -> bool:
+        """Take file size into account when prioritizing files."""
+        return self._convert_bool(self._cfg_file.vals["AccountForSize"])
 
 
 class ProfileExcludeFile:
@@ -79,17 +329,17 @@ class ProfileExcludeFile:
     Attributes:
         comment_regex: Regex that denotes a comment line.
         path: The path of the exclude pattern file.
-        matches: A set of relative paths of files that match the globbing
-            patterns.
-        all_matches: A set of relative paths of files that match the globbing
-            patterns and all files under them.
+        _matches: A dict of relative paths of files that match the globbing
+            patterns for each input path.
+        _all_matches: A dict of relative paths of files that match the globbing
+            patterns and all files under them for each input path.
     """
     comment_regex = re.compile(r"^\s*#")
 
     def __init__(self, path: str) -> None:
         self.path = path
-        self.matches = set()
-        self.all_matches = set()
+        self._matches = {}
+        self._all_matches = {}
 
     def generate(self, infile=None) -> None:
         """Generate a new file with comments.
@@ -127,13 +377,16 @@ class ProfileExcludeFile:
                 if not self.comment_regex.search(line):
                     yield line
 
-    def glob(self, start_path: str) -> None:
+    def _glob(self, start_path: str) -> None:
         """Create a set of all file paths that match the globbing patterns.
 
         Args:
             start_path: The directory to search in for files that match the
                 patterns.
         """
+        self._matches.update({start_path: set()})
+        self._all_matches.update({start_path: set()})
+
         for line in self._readlines():
             # This assumes that cases where the user may accidentally leave
             # leading/trailing whitespace are more common than cases where they
@@ -149,74 +402,58 @@ class ProfileExcludeFile:
 
             for match_path in glob.glob(glob_str, recursive=True):
                 rel_match_path = os.path.relpath(match_path, start_path)
-                self.matches.add(rel_match_path)
-                self.all_matches.add(rel_match_path)
+                self._matches[start_path].add(rel_match_path)
+                self._all_matches[start_path].add(rel_match_path)
                 try:
                     for entry in rec_scan(match_path):
-                        self.all_matches.add(
+                        self._all_matches[start_path].add(
                             os.path.relpath(entry.path, start_path))
                 except NotADirectoryError:
                     pass
+
+    def matches(self, start_path: str) -> Set[str]:
+        """Get the paths of files that match globbing patterns.
+
+        Args:
+            start_path: The path to search for matches in.
+
+        Returns:
+            The relative paths of files in the specified directory that match
+            the globbing patterns.
+        """
+        if start_path not in self._matches:
+            self._glob(start_path)
+
+        return self._matches[start_path]
+
+    def all_matches(self, start_path: str) -> Set[str]:
+        """Get the paths of files that match globbing patterns with children.
+
+        Args:
+            start_path: The path to search for matches in.
+
+        Returns:
+            The relative paths of files in the specified directory that match
+            the globbing patterns and all of their children.
+        """
+        if start_path not in self._all_matches:
+            self._glob(start_path)
+
+        return self._all_matches[start_path]
 
 
 class ProfileInfoFile(JSONFile):
     """Parse a JSON-formatted file for profile metadata.
 
-    Values:
-        Status: A short string describing the status of the profile.
-            "initialized": Fully initialized.
-            "partial": Partially initialized.
-        LastSync: The date and time (UTC) of the last sync on the profile.
-        LastAdjust: The date and time (UTC) of the last priority adjustment
-            on the profile.
-        Version: The version of the program that the profile was
-            initialized by.
-        ID: A UUID to identify the profile among all profiles that share a
-            remote directory.
-        InitOpts: A dictionary of options given at the command line at
-            initialization.
+    Args:
+        path: The path of the JSON file.
 
     Attributes:
-        raw_vals: A dictionary of raw string values from the file.
-        vals: A dict property of parsed values from the file.
+        vals: A dict of values from the file.
     """
     def __init__(self, path) -> None:
         super().__init__(path)
-        self.raw_vals = {}
-
-    @DictProperty
-    def vals(self, key) -> Any:
-        """Parse individual values from the info file.
-
-        Returns:
-            LastSync: Input value converted to the number of seconds since the
-                epoch.
-            LastAdjustment: Input value converted to the number of seconds
-                since the epoch.
-        """
-        if key in self.raw_vals:
-            value = self.raw_vals[key]
-        else:
-            value = None
-
-        if value is not None:
-            if key == "LastSync" or key == "LastAdjust":
-                value = datetime.datetime.strptime(
-                    value, "%Y-%m-%dT%H:%M:%S.%f").replace(
-                        tzinfo=datetime.timezone.utc).timestamp()
-        return value
-
-    @vals.setter
-    def vals(self, key, value) -> None:
-        """Set individual values."""
-        if value is not None:
-            if key in ["LastSync", "LastAdjust"]:
-                # Use strftime() instead of isoformat() because the latter
-                # doesn't print the decimal point if the microsecond is 0,
-                # which would prevent it from being parsed by strptime().
-                value = datetime.datetime.utcfromtimestamp(
-                    value).strftime("%Y-%m-%dT%H:%M:%S.%f")
-        self.raw_vals[key] = value
+        self.vals = collections.defaultdict(lambda: None)
 
     def generate(self, name: str, add_remote=False) -> None:
         """Generate info for a new profile.
@@ -227,7 +464,7 @@ class ProfileInfoFile(JSONFile):
         """
         unique_id = uuid.uuid4().hex
         version = float(pkg_resources.get_distribution("zielen").version)
-        self.raw_vals.update({
+        self.vals.update({
             "Status": "partial",
             "LastSync": None,
             "LastAdjust": None,
@@ -470,7 +707,7 @@ class ProfileDBFile(SyncDBFile):
             """)
         self._update_priority(parents)
 
-    def path_info(self, path: str) -> PathData:
+    def get_path_info(self, path: str) -> PathData:
         """Get data associated with a file path.
 
         Args:
@@ -562,13 +799,20 @@ class ProfileDBFile(SyncDBFile):
 
 
 class ProfileConfigFile(ConfigFile):
-    """Manipulate a profile configuration file.
+    """The profile's configuration file.
+
+    The default values for some options are stored in the code. This allows
+    the user to comment those values out to return them to their default
+    values, and it also allows for new values to be added in the future
+    without requiring users to update their config files. These values are
+    not commented out by default, however, so that the defaults can be
+    changed in the future without affecting existing users.
 
     Attributes:
         _instances: A weakly-referenced set of instances of this class.
-        _true_vals: A list of strings that are recognized as boolean true.
-        _false_vals: A list of strings that are recognized as boolean false.
-        _host_synonyms: A list of strings that are synonyms for 'localhost'.
+        TRUE_VALS: A list of strings that are recognized as boolean true.
+        FALSE_VALS: A list of strings that are recognized as boolean false.
+        HOST_SYNONYMS: A list of strings that are synonyms for 'localhost'.
         _req_keys: A list of config keys that must be included in the config
             file.
         _opt_keys: A list of config keys that may be commented out or omitted.
@@ -591,9 +835,9 @@ class ProfileConfigFile(ConfigFile):
         vals: A dict property of parsed config values.
     """
     _instances = weakref.WeakSet()
-    _true_vals = ["yes", "true"]
-    _false_vals = ["no", "false"]
-    _host_synonyms = ["localhost", "127.0.0.1"]
+    TRUE_VALS = ["yes", "true"]
+    FALSE_VALS = ["no", "false"]
+    HOST_SYNONYMS = ["localhost", "127.0.0.1"]
     _req_keys = [
         "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
         "StorageLimit"
@@ -623,7 +867,7 @@ class ProfileConfigFile(ConfigFile):
         "AccountForSize": "yes"
         }
     _subs = {
-        "RemoteHost":   _host_synonyms[0],
+        "RemoteHost":   HOST_SYNONYMS[0],
         "RemoteUser":   getpass.getuser(),
         "Port":         "22"
         }
@@ -658,7 +902,7 @@ class ProfileConfigFile(ConfigFile):
 
         # Check boolean values.
         if key in self._bool_keys and value:
-            if value.lower() not in (self._true_vals + self._false_vals):
+            if value.lower() not in (self.TRUE_VALS + self.FALSE_VALS):
                 return "must have a boolean value"
 
         if key == "LocalDir":
@@ -685,8 +929,10 @@ class ProfileConfigFile(ConfigFile):
                 name = instance.profile.name
                 if not instance.raw_vals:
                     instance.read()
-                common = os.path.commonpath([instance.vals["LocalDir"], value])
-                if common in [instance.vals["LocalDir"], value]:
+                other_value = os.path.expanduser(
+                    os.path.normpath(instance.vals["LocalDir"]))
+                common = os.path.commonpath([other_value, value])
+                if common in [other_value, value]:
                     overlap_profiles.append(name)
 
             if overlap_profiles:
@@ -738,7 +984,7 @@ class ProfileConfigFile(ConfigFile):
             if not re.search("^~?/", value):
                 return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if self.raw_vals["RemoteHost"] in self._host_synonyms:
+            if self.raw_vals["RemoteHost"] in self.HOST_SYNONYMS:
                 if os.path.exists(value):
                     if os.path.isdir(value):
                         if not os.access(value, os.W_OK):
@@ -802,7 +1048,7 @@ class ProfileConfigFile(ConfigFile):
         for key, value in self.raw_vals.items():
             # If the remote directory is on the local machine, then certain
             # options should not be checked.
-            if (self.raw_vals["RemoteHost"] in self._host_synonyms
+            if (self.raw_vals["RemoteHost"] in self.HOST_SYNONYMS
                     and key in self._connect_keys):
                 continue
 
@@ -817,86 +1063,11 @@ class ProfileConfigFile(ConfigFile):
 
     @DictProperty
     def vals(self, key: str) -> Any:
-        """Parse individual config values.
-
-        Returns:
-            LocalDir: Input value converted to a user-expanded, normalized
-                path as a str.
-            RemoteHost: 'None' if value is in self._host_synonyms, and the
-                input value as a str otherwise.
-            RemoteUser: Input value unmodified as a str.
-            Port: Input value unmodified as a str.
-            RemoteDir: Input value converted to a user-expanded, normalized
-                path as a str.
-            StorageLimit: Input value converted to a number of bytes as an int.
-            SyncInterval: Input value converted to a number of seconds seconds
-                as an int.
-            SshfsOptions: Input value unmodified as a str.
-            TrashDirs: Input value converted to user-expanded, normalized paths
-                as a list of strings.
-            PriorityHalfLife: Input value converted to a number of seconds as
-                an int.
-            DisableTrash: Input value converted to a bool.
-            SyncExtraFiles: Input value converted to a bool.
-            InflatePriority: Input value converted to a bool.
-            AccountForSize: Input value converted to a bool.
-        """
+        """Get defaults if corresponding raw values are unset."""
         if key in self.raw_vals:
-            value = self.raw_vals[key]
+            return self.raw_vals[key]
         elif key in self._defaults:
-            value = self._defaults[key]
-        else:
-            value = None
-
-        if value is not None:
-            if key == "LocalDir":
-                value = os.path.expanduser(os.path.normpath(value))
-            elif key == "RemoteHost":
-                if value in self._host_synonyms:
-                    value = None
-            elif key == "RemoteDir":
-                value = os.path.expanduser(os.path.normpath(value))
-            elif key == "StorageLimit":
-                try:
-                    num, unit = re.findall(
-                        r"^([0-9]+)\s*(K|KB|KiB|M|MB|MiB|G|GB|GiB)$", value)[0]
-                    if unit in ["K", "KiB"]:
-                        value = int(num) * 1024
-                    elif unit in ["M", "MiB"]:
-                        value = int(num) * 1024**2
-                    elif unit in ["G", "GiB"]:
-                        value = int(num) * 1024**3
-                    elif unit == "KB":
-                        value = int(num) * 1000
-                    elif unit == "MB":
-                        value = int(num) * 1000**2
-                    elif unit == "GB":
-                        value = int(num) * 1000**3
-                except IndexError:
-                    pass
-            elif key == "SyncInterval":
-                try:
-                    value = int(value) * 60
-                except ValueError:
-                    pass
-            elif key == "TrashDirs":
-                value = value.split(":")
-                for index, element in enumerate(value.copy()):
-                    value[index] = os.path.expanduser(
-                        os.path.normpath(element))
-            elif key == "PriorityHalfLife":
-                try:
-                    value = int(value) * 60**2
-                except ValueError:
-                    pass
-            elif key in self._bool_keys:
-                if isinstance(value, str):
-                    if value.lower() in self._true_vals:
-                        value = True
-                    elif value.lower() in self._false_vals:
-                        value = False
-
-        return value
+            return self._defaults[key]
 
     @vals.setter
     def vals(self, key: str, value: str) -> None:
@@ -909,7 +1080,7 @@ class ProfileConfigFile(ConfigFile):
         for key in self._prompt_keys:
             # If the remote directory is on the local machine, then the user
             # should not be prompted for certain settings.
-            if (self.raw_vals.get("RemoteHost") in self._host_synonyms
+            if (self.raw_vals.get("RemoteHost") in self.HOST_SYNONYMS
                     and key in self._connect_keys):
                 self.vals[key] = ""
                 continue

@@ -22,8 +22,9 @@ import shutil
 import sqlite3
 import time
 import hashlib
-from typing import Tuple, Iterable, List, Dict, NamedTuple
+from typing import Tuple, Iterable, List, Dict, NamedTuple, Generator
 
+from zielen.exceptions import ServerError
 from zielen.container import SyncDBFile
 from zielen.io import rec_scan, checksum, total_size
 from zielen.utils import FactoryDict, secure_string
@@ -110,7 +111,7 @@ class SyncDir:
         self.path = path.rstrip(os.sep)
         self._sub_entries = []
 
-    def get_paths(
+    def scan_paths(
             self, rel=True, files=True, symlinks=True, dirs=True, exclude=None,
             memoize=True, lookup=True) -> Dict[str, os.stat_result]:
         """Get the paths and stats of files in the directory.
@@ -187,7 +188,7 @@ class SyncDir:
         Returns:
             The total disk usage of the directory in bytes.
         """
-        paths = self.get_paths(memoize=memoize)
+        paths = self.scan_paths(memoize=memoize)
 
         total_size = 0
         for path, stat in paths.items():
@@ -223,23 +224,85 @@ class DestSyncDir(SyncDir):
         safe_path: Defined relative to util_dir in order to prevent access when
             util_dir is missing. The keeps files from being moved into an empty
             mountpoint.
-        ex_dir: Contains copies of each client's exclude pattern file.
-        db: Contains information on files in the remote.
+        trash_dir: The path of the remote trash directory.
+        _ex_dir: The path of the directory containing copies of each client's
+            exclude pattern file.
+        _db_file: The remote database object.
     """
     def __init__(self, path: str) -> None:
         super().__init__(path)
         self.util_dir = os.path.join(self.path, ".zielen")
         self.safe_path = os.path.join(self.util_dir, "..")
-        self.ex_dir = os.path.join(self.util_dir, "exclude")
         self.trash_dir = os.path.join(self.util_dir, "Trash")
-        self.db = DestDBFile(os.path.join(self.util_dir, "remote.db"))
+        self._ex_dir = os.path.join(self.util_dir, "exclude")
+        self._db_file = DestDBFile(os.path.join(self.util_dir, "remote.db"))
 
-    def get_paths(self, rel=True, files=True, symlinks=True, dirs=True,
-                  exclude=None, memoize=True, lookup=True):
+        # Import methods from content classes.
+        self.add_paths = self._db_file.add_paths
+        self.rm_paths = self._db_file.rm_paths
+        self.get_path_info = self._db_file.get_path_info
+        self.get_tree = self._db_file.get_tree
+
+    def generate(self) -> None:
+        """Generate files for storing persistent data."""
+        os.makedirs(self._ex_dir, exist_ok=True)
+        os.makedirs(self.trash_dir, exist_ok=True)
+
+        try:
+            self._db_file.create()
+        except FileExistsError:
+            pass
+
+    def write(self) -> None:
+        """Write data to persistent storage."""
+        self._db_file.conn.commit()
+
+    def close(self) -> None:
+        """Close all database connections."""
+        self._db_file.conn.close()
+
+    def add_exclude_file(self, filepath: str, profile_id: str) -> None:
+        """Add a profile exclude file to the remote.
+
+        Args:
+            filepath: The path of the profile exclude file.
+            profile_id: A unique ID for the profile.
+        """
+        try:
+            shutil.copy(filepath, os.path.join(self._ex_dir, profile_id))
+        except FileNotFoundError:
+            if not os.path.isdir(self.util_dir):
+                raise ServerError(
+                    "the connection to the remote directory was lost")
+            else:
+                raise
+
+    def get_exclude_files(self) -> Generator[str, None, None]:
+        """Get all exclude pattern files in the remote.
+
+        Yields:
+            The absolute paths of exclude pattern files.
+        """
+        for entry in os.scandir(self._ex_dir):
+            yield entry.path
+
+    def rm_exclude_file(self, profile_id: str) -> None:
+        """Remove a profile exclude file from the remote.
+
+        Args:
+            profile_id: The unique ID used when adding the exclude file.
+        """
+        try:
+            os.remove(os.path.join(self._ex_dir, profile_id))
+        except FileNotFoundError:
+            pass
+
+    def scan_paths(self, rel=True, files=True, symlinks=True, dirs=True,
+                   exclude=None, memoize=True, lookup=True):
         """Extend parent method to automatically exclude the util directory."""
         exclude = set() if exclude is None else set(exclude)
         exclude.add(os.path.relpath(self.util_dir, self.path))
-        return super().get_paths(
+        return super().scan_paths(
             rel=rel, files=files, symlinks=symlinks, dirs=dirs,
             exclude=exclude, memoize=memoize)
 
@@ -416,7 +479,7 @@ class DestDBFile(SyncDBFile):
                 FROM nodes);
             """)
 
-    def path_info(self, path: str) -> PathData:
+    def get_path_info(self, path: str) -> PathData:
         """Get data associated with a file path.
 
         Args:

@@ -17,18 +17,19 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import atexit
 import os
 import re
-import shutil
-import sqlite3
 import sys
 import time
-from textwrap import dedent
+import shutil
+import atexit
+import sqlite3
+import textwrap
 
 from zielen.exceptions import InputError, ServerError, AvailableSpaceError
 from zielen.connect import SSHConnection
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
+from zielen.fs import FilesManager
 from zielen.userdata import LocalSyncDir, DestSyncDir
 from zielen.profile import Profile, ProfileConfigFile
 from zielen.basecommand import Command
@@ -102,215 +103,91 @@ class InitializeCommand(Command):
 
         self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
-        if os.path.isfile(self.profile.info.path):
-            self.profile.info.read()
+        try:
+            self.profile.read()
+        except FileNotFoundError:
+            pass
 
         # Check if the profile has already been initialized.
-        if self.profile.info.vals["Status"] == "initialized":
+        if self.profile.status == "initialized":
             raise InputError("this profile already exists")
 
         # Lock profile if not already locked.
         self.lock()
 
         # Check whether an interrupted initialization is being resumed.
-        if self.profile.info.vals["Status"] == "partial":
+        if self.profile.status == "partial":
             # Resume an interrupted initialization.
             print("Resuming initialization...\n")
             atexit.register(self.print_interrupt_msg)
 
-            self.profile.cfg.read()
-            self.profile.cfg.check_all()
-
             # The user doesn't have to specify the same command-line arguments
             # when they're resuming and initialization.
-            self.add_remote = (
-                self.profile.info.vals["InitOpts"]["add_remote"])
+            self.add_remote = self.profile.add_remote
 
-            self.local_dir = LocalSyncDir(
-                self.profile.cfg.vals["LocalDir"])
-            if self.profile.cfg.vals["RemoteHost"]:
+            self.local_dir = LocalSyncDir(self.profile.local_path)
+            if self.profile.remote_host:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
                 self.connection = SSHConnection(
-                    self.profile.cfg.vals["RemoteHost"],
-                    self.profile.cfg.vals["RemoteUser"],
-                    self.profile.cfg.vals["Port"],
-                    self.profile.cfg.vals["RemoteDir"],
-                    self.profile.cfg.vals["SshfsOptions"])
+                    self.profile.remote_host, self.profile.remote_user,
+                    self.profile.port, self.profile.remote_path,
+                    self.profile.sshfs_options)
             else:
-                self.dest_dir = DestSyncDir(
-                    self.profile.cfg.vals["RemoteDir"])
+                self.dest_dir = DestSyncDir(self.profile.remote_path)
+            fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
         else:
             # Start a new initialization.
             atexit.register(delete_profile)
 
-            # Parse template file if one was given.
-            if self.template:
-                template_file = ProfileConfigFile(
-                    self.template, add_remote=self.add_remote)
-                template_file.read()
-                template_file.check_all(
-                    check_empty=False, context="template file")
-                self.profile.cfg.raw_vals = template_file.raw_vals
+            # Generate all files in the profile directory.
+            self.profile.generate(self.add_remote, self.exclude, self.template)
 
-            # Prompt user interactively for unset config values.
-            self.profile.cfg.add_remote = self.add_remote
-            self.profile.cfg.prompt()
-            # This final check is necessary for cases where a template was used
-            # that contained values dependent on other unspecified values for
-            # validity checking (e.g. 'RemoteDir' and 'RemoteHost').
-            if self.template:
-                self.profile.cfg.check_all(context="template file")
-
-            # Write config values to file.
-            if self.template:
-                self.profile.cfg.write(self.template)
-            else:
-                # TODO: Get the path of the master config template from
-                # setup.py instead of hardcoding it.
-                self.profile.cfg.write(os.path.join(
-                    sys.prefix, "share/zielen/config-template"))
-
-            self.local_dir = LocalSyncDir(
-                self.profile.cfg.vals["LocalDir"])
-            if self.profile.cfg.vals["RemoteHost"]:
+            self.local_dir = LocalSyncDir(self.profile.local_path)
+            if self.profile.remote_host:
                 self.dest_dir = DestSyncDir(self.profile.mnt_dir)
                 self.connection = SSHConnection(
-                    self.profile.cfg.vals["RemoteHost"],
-                    self.profile.cfg.vals["RemoteUser"],
-                    self.profile.cfg.vals["Port"],
-                    self.profile.cfg.vals["RemoteDir"],
-                    self.profile.cfg.vals["SshfsOptions"])
+                    self.profile.remote_host, self.profile.remote_user,
+                    self.profile.port, self.profile.remote_path,
+                    self.profile.sshfs_options)
                 self.connection.check_remote(self.add_remote)
             else:
-                self.dest_dir = DestSyncDir(
-                    self.profile.cfg.vals["RemoteDir"])
-
-            # Generate the exclude pattern file.
-            self.profile.exclude.generate(self.exclude)
+                self.dest_dir = DestSyncDir(self.profile.remote_path)
+            fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
 
             # The profile is now partially initialized. If the
             # initialization is interrupted from this point, it can be
             # resumed.
-            self.profile.info.generate(
-                self.profile.name, add_remote=self.add_remote)
             atexit.register(self.print_interrupt_msg)
             atexit.unregister(delete_profile)
 
-        self._setup_remote()
-
-        # The profile is now fully initialized. Update the info file.
-        if self.profile.cfg.vals["RemoteHost"]:
-            atexit.unregister(self.connection.unmount)
-        self.profile.info.vals["Status"] = "initialized"
-        self.profile.info.vals["LastSync"] = time.time()
-        self.profile.info.vals["LastAdjust"] = time.time()
-        self.profile.info.write()
-        atexit.unregister(self.print_interrupt_msg)
-
-        # Advise user to start/enable the daemon.
-        print(dedent("""
-            Run 'systemctl --user start zielen@{0}.service' to start the daemon.
-            Run 'systemctl --user enable zielen@{0}.service' to start the daemon
-            automatically on login.""".format(self.profile.name)))
-
-    def _setup_remote(self):
-        """Set up the remote directory and transfer files."""
-        if self.profile.cfg.vals["RemoteHost"]:
+        if self.profile.remote_host:
             atexit.register(self.connection.unmount, self.dest_dir.path)
             self.connection.mount(self.dest_dir.path)
 
-        os.makedirs(self.dest_dir.ex_dir, exist_ok=True)
-        os.makedirs(self.dest_dir.trash_dir, exist_ok=True)
+        self.dest_dir.generate()
+
+        # Copy files and/or create symlinks.
         if self.add_remote:
-            unsafe_symlinks = {
-                link_path for link_path in self.dest_dir.get_paths(
-                    files=False, dirs=False).keys()
-                if is_unsafe_symlink(
-                    os.path.join(self.dest_dir.path, link_path),
-                    self.dest_dir.path)}
-
-            try:
-                # Expand exclude globbing patterns.
-                self.profile.exclude.glob(self.dest_dir.safe_path)
-            except FileNotFoundError:
-                if not os.path.isdir(self.dest_dir.util_dir):
-                    raise ServerError(
-                        "the connection to the remote directory was lost")
-                else:
-                    raise
-
-            # Check that there is enough local space to accommodate remote
-            # files.
-            if self.dest_dir.disk_usage() > self.local_dir.space_avail():
-                raise AvailableSpaceError(
-                    "not enough local space to accommodate remote files")
+            fm.setup_from_remote()
         else:
-            unsafe_symlinks = {
-                link_path for link_path in self.local_dir.get_paths(
-                    files=False, dirs=False).keys()
-                if is_unsafe_symlink(
-                    os.path.join(self.local_dir.path, link_path),
-                    self.local_dir.path)}
-
-            # Expand exclude globbing patterns.
-            self.profile.exclude.glob(self.local_dir.path)
-
-            # Check that there is enough remote space to accommodate local
-            # files.
-            if self.local_dir.disk_usage() > self.dest_dir.space_avail():
-                raise AvailableSpaceError(
-                    "not enough space in remote to accommodate local files")
-
-            # Copy local files to the server.
-            try:
-                rec_clone(
-                    self.local_dir.path, self.dest_dir.safe_path,
-                    exclude=self.profile.exclude.matches | unsafe_symlinks,
-                    msg="Moving files to remote...")
-            except FileNotFoundError:
-                if not os.path.isdir(self.dest_dir.util_dir):
-                    raise ServerError(
-                        "the connection to the remote directory was lost")
-                else:
-                    raise
-
-        remote_files = self.dest_dir.get_paths(
-            dirs=False).keys() - unsafe_symlinks
-        remote_dirs = self.dest_dir.get_paths(
-            files=False, symlinks=False).keys()
-
-        # Generate the local database.
-        if not os.path.isfile(self.profile.db.path):
-            self.profile.db.create()
-        self.profile.db.add_paths(remote_files, remote_dirs)
-        self.profile.db.conn.commit()
-
-        # Generate the remote database.
-        try:
-            if not os.path.isfile(self.dest_dir.db.path):
-                self.dest_dir.db.create()
-            self.dest_dir.db.add_paths(remote_files, remote_dirs)
-            self.dest_dir.db.conn.commit()
-        except sqlite3.OperationalError:
-            raise ServerError(
-                "the connection to the remote directory was lost")
-
-        # Overwrite local files with symlinks to the corresponding files in the
-        # remote dir.
-        symlink_tree(
-            self.dest_dir.safe_path, self.local_dir.path,
-            self.profile.db.get_tree(directory=False),
-            self.profile.db.get_tree(directory=True),
-            overwrite=True)
+            fm.setup_from_local()
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
-        try:
-            shutil.copy(self.profile.exclude.path, os.path.join(
-                self.dest_dir.ex_dir, self.profile.info.vals["ID"]))
-        except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
-                    "the connection to the remote directory was lost")
-            else:
-                raise
+        self.dest_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
+
+        # The profile is now fully initialized. Update the profile.
+        if self.profile.remote_host:
+            atexit.unregister(self.connection.unmount)
+        self.dest_dir.write()
+        self.profile.status = "initialized"
+        self.profile.last_sync = time.time()
+        self.profile.last_adjust = time.time()
+        self.profile.write()
+        atexit.unregister(self.print_interrupt_msg)
+
+        print(textwrap.dedent("""
+            Run the following commands to start the daemon:
+            'systemctl --user start zielen@{0}.service'
+            'systemctl --user enable zielen@{0}.service'""".format(
+                self.profile.name)))

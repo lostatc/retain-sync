@@ -73,28 +73,15 @@ class SyncCommand(Command):
         """
         self.setup_profile()
         fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
-
-        # Copy exclude pattern file to the remote.
-        try:
-            shutil.copy(self.profile.exclude.path, os.path.join(
-                self.dest_dir.ex_dir, self.profile.info.vals["ID"]))
-        except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
-                    "the connection to the remote directory was lost")
-            else:
-                raise
-
-        # Expand globbing patterns.
-        self.profile.exclude.glob(self.local_dir.path)
+        self.dest_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
 
         # Scan the local and remote directories.
         file_paths = (
-            self.local_dir.get_paths(dirs=False).keys()
-            | self.dest_dir.get_paths(dirs=False).keys())
+            self.local_dir.scan_paths(dirs=False).keys()
+            | self.dest_dir.scan_paths(dirs=False).keys())
         dir_paths = (
-            self.local_dir.get_paths(files=False, symlinks=False).keys()
-            | self.dest_dir.get_paths(files=False, symlinks=False).keys())
+            self.local_dir.scan_paths(files=False, symlinks=False).keys()
+            | self.dest_dir.scan_paths(files=False, symlinks=False).keys())
 
         # Get the paths of files that have been added, deleted or modified
         # since the last sync.
@@ -108,10 +95,10 @@ class SyncCommand(Command):
         new_local_dirs = (new_paths.local - file_paths)
         new_file_paths = (new_paths.all - dir_paths)
         new_dir_paths = (new_paths.all - file_paths)
-        self.dest_dir.db.add_paths(new_file_paths, new_dir_paths)
-        self.profile.db.add_paths(new_file_paths, new_dir_paths)
-        if self.profile.cfg.vals["InflatePriority"]:
-            self.profile.db.add_inflated(
+        self.dest_dir.add_paths(new_file_paths, new_dir_paths)
+        self.profile.add_paths(new_file_paths, new_dir_paths)
+        if self.profile.inflate_priority:
+            self.profile.add_inflated(
                 new_local_files, new_local_dirs, replace=True)
 
         # Sync deletions between the local and remote directories.
@@ -126,10 +113,10 @@ class SyncCommand(Command):
 
         # Add any new files that have been created in the process of
         # handling conflicts to both databases.
-        self.dest_dir.db.add_paths(updated_paths.all, [])
-        self.profile.db.add_paths(updated_paths.all, [])
-        if self.profile.cfg.vals["InflatePriority"]:
-            self.profile.db.add_inflated(
+        self.dest_dir.add_paths(updated_paths.all, [])
+        self.profile.add_paths(updated_paths.all, [])
+        if self.profile.inflate_priority:
+            self.profile.add_inflated(
                 updated_paths.local, [], replace=True)
 
         # Update the remote directory with modified local files.
@@ -140,13 +127,13 @@ class SyncCommand(Command):
 
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
-            self.profile.exclude.all_matches
-            & self.dest_dir.get_paths().keys())
+            self.profile.ex_all_matches(self.local_dir.path)
+            & self.dest_dir.scan_paths().keys())
 
         # Decide which files and directories to keep in the local directory.
         remaining_space, selected_dirs = fm.prioritize_dirs(
-            self.profile.cfg.vals["StorageLimit"])
-        if self.profile.cfg.vals["SyncExtraFiles"]:
+            self.profile.storage_limit)
+        if self.profile.sync_extra_files:
             remaining_space, selected_files = fm.prioritize_files(
                 remaining_space, exclude=selected_dirs)
         else:
@@ -162,7 +149,6 @@ class SyncCommand(Command):
 
         # The sync is now complete. Update the time of the last sync in the
         # info file.
-        self.profile.db.commit()
-        self.dest_dir.db.commit()
-        self.profile.info.vals["LastSync"] = time.time()
-        self.profile.info.write()
+        self.dest_dir.write()
+        self.profile.last_sync = time.time()
+        self.profile.write()

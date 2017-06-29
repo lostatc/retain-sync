@@ -22,7 +22,7 @@ import atexit
 import os
 import socket
 import sys
-from textwrap import dedent
+import textwrap
 
 
 from zielen import PROFILES_DIR
@@ -88,25 +88,20 @@ class Command(abc.ABC):
         Raises:
             InputError: The selected profile is only partially initialized.
         """
-        self.profile.info.read()
+        self.profile.read()
         self.lock()
 
         # Warn if profile is only partially initialized.
-        if self.profile.info.vals["Status"] == "partial":
+        if self.profile.status == "partial":
             atexit.register(self.print_interrupt_msg)
             raise InputError("invalid profile")
 
-        self.profile.cfg.read()
-        self.profile.cfg.check_all()
-
-        self.local_dir = LocalSyncDir(self.profile.cfg.vals["LocalDir"])
-        if self.profile.cfg.vals["RemoteHost"]:
+        self.local_dir = LocalSyncDir(self.profile.local_path)
+        if self.profile.remote_host:
             self.connection = SSHConnection(
-                self.profile.cfg.vals["RemoteHost"],
-                self.profile.cfg.vals["RemoteUser"],
-                self.profile.cfg.vals["Port"],
-                self.profile.cfg.vals["RemoteDir"],
-                self.profile.cfg.vals["SshfsOptions"])
+                self.profile.remote_host, self.profile.remote_user,
+                self.profile.port, self.profile.remote_path,
+                self.profile.sshfs_options)
             if not os.path.isdir(self.profile.mnt_dir):
                 # Unmount if mountpoint is broken.
                 self.connection.unmount(self.profile.mnt_dir)
@@ -114,8 +109,7 @@ class Command(abc.ABC):
                 self.connection.mount(self.profile.mnt_dir)
             self.dest_dir = DestSyncDir(self.profile.mnt_dir)
         else:
-            self.dest_dir = DestSyncDir(
-                self.profile.cfg.vals["RemoteDir"])
+            self.dest_dir = DestSyncDir(self.profile.remote_path)
 
     def lock(self) -> None:
         """Lock the profile if not already locked.
@@ -142,7 +136,7 @@ class Command(abc.ABC):
     def print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
         print(
-            dedent("""
+            textwrap.dedent("""
                 Initialization was interrupted.
                 Please run 'zielen initialize' to complete it or 'zielen reset' to cancel it."""),
             file=sys.stderr)
