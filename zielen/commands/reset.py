@@ -85,12 +85,19 @@ class ResetCommand(Command):
                 except FileNotFoundError:
                     pass
 
-        # Remove non-user-created symlinks from the local directory.
-        program_links = (self.local_dir.scan_paths(
+        # Remove non-user-created symlinks from the local directory. These
+        # are symlinks that point to the remote directory.
+        local_symlinks = self.local_dir.scan_paths(
             files=False, dirs=False).keys()
-            & self.profile.get_tree())
-        for rel_path in program_links:
-            os.remove(os.path.join(self.local_dir.path, rel_path))
+        for rel_path in local_symlinks:
+            full_path = os.path.join(self.local_dir.path, rel_path)
+            link_dest = os.readlink(full_path)
+            if not os.path.isabs(link_dest):
+                link_dest = os.path.join(os.path.dirname(full_path), link_dest)
+            if os.path.commonpath([
+                    link_dest,
+                    self.dest_dir.safe_path]) == self.dest_dir.safe_path:
+                os.remove(full_path)
 
         self.dest_dir.rm_exclude_file(self.profile.id)
 
