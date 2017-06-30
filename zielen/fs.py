@@ -803,26 +803,10 @@ class FilesManager:
         Args:
             excluded_paths: The paths of excluded files to remove.
         """
-        # Expand globbing patterns for each client's exclude pattern file.
-        pattern_files = []
-        for path in self.dest_dir.get_exclude_files():
-            pattern_file = ProfileExcludeFile(path)
-            pattern_files.append(pattern_file)
-
-        rm_files = set()
-        for excluded_path in excluded_paths:
-            for pattern_file in pattern_files:
-                if (excluded_path
-                        not in pattern_file.all_matches(self.local_dir.path)):
-                    break
-            else:
-                # The file was not found in one of the exclude pattern
-                # files. Remove it from the remote directory and both
-                # databases.
-                rm_files.add(excluded_path)
-
-        rm_files &= self.dest_dir.get_paths().keys()
-        self.rm_remote_files(rm_files)
+        rm_paths = self.dest_dir.check_excluded(
+            excluded_paths, self.local_dir.path)
+        rm_paths &= self.dest_dir.get_paths().keys()
+        self.rm_remote_files(rm_paths)
 
     def trash_files(self, paths: Iterable[str]) -> None:
         """Move files in the remote directory to the trash.
