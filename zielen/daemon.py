@@ -67,18 +67,16 @@ class Daemon(Command):
 
     def main(self) -> None:
         """Start the daemon."""
-        self.profile._info_file.read()
-        self.profile._cfg_file.read()
-        self.profile._cfg_file.check_all()
+        self.profile.read()
 
         sync_thread = threading.Thread(target=self._sync, daemon=True)
         sync_thread.start()
 
-        local_dir = self.profile._cfg_file.vals["LocalDir"]
-        if self.profile._cfg_file.vals["RemoteHost"]:
+        local_dir = self.profile.local_path
+        if self.profile.remote_host:
             dest_dir = self.profile.mnt_dir
         else:
-            dest_dir = self.profile._cfg_file.vals["RemoteDir"]
+            dest_dir = self.profile.remote_path
 
         wm = pyinotify.WatchManager()
         notifier = pyinotify.ThreadedNotifier(
@@ -106,7 +104,7 @@ class Daemon(Command):
                         rel_path = os.path.relpath(event.pathname, watch_path)
                         break
 
-                if not event.dir and self.profile._db_file.get_path_info(rel_path):
+                if not event.dir and self.profile.get_path_info(rel_path):
                     # The file is in the local database and is not a directory.
                     # New files do not have a priority value until the first
                     # sync after they are added.
@@ -140,9 +138,10 @@ class Daemon(Command):
             # If the database is locked due to a long-running sync, try again.
             try:
                 self._adjust()
-                self.profile._db_file.increment(
+                self.profile.increment(
                     deduplicated_paths, self.INCREMENT_AMOUNT)
-                self.profile._db_file.conn.commit()
+                self.profile.read()
+                self.profile.write()
             except sqlite3.OperationalError:
                 continue
             else:
@@ -152,29 +151,27 @@ class Daemon(Command):
 
     def _adjust(self) -> None:
         """Adjust the priority values in the database at regular intervals."""
-        if (time.time() >= self.profile._info_file.vals["LastAdjust"]
-                + self.ADJUST_INTERVAL):
+        if time.time() >= self.profile.last_adjust + self.ADJUST_INTERVAL:
             # This is necessary because a sync may have occurred since
             # the last adjustment, which updates a value in the info
             # file. If we don't read the info file before writing to it,
             # that value will get reset.
-            self.profile._info_file.read()
+            self.profile.read()
 
             # Use the formula for half-life to calculate the constant to
             # multiply each priority value by.
-            half_life = self.profile._cfg_file.vals["PriorityHalfLife"]
+            half_life = self.profile.priority_half_life
             adjust_constant = 0.5 ** (self.ADJUST_INTERVAL / half_life)
 
-            self.profile._db_file.adjust_all(adjust_constant)
-            self.profile._info_file.vals["LastAdjust"] = time.time()
-            self.profile._info_file.write()
+            self.profile.adjust_all(adjust_constant)
+            self.profile.last_adjust = time.time()
+            self.profile.write()
 
     def _sync(self) -> None:
         """Initiate a sync in a subprocess at a regular interval."""
-        last_attempt = self.profile._info_file.vals["LastSync"]
+        last_attempt = self.profile.last_sync
         while True:
-            if (time.time() >= last_attempt
-                    + self.profile._cfg_file.vals["SyncInterval"]):
+            if time.time() >= last_attempt + self.profile.sync_interval:
                 # Use a subprocess so that an in-progress sync continues
                 # after the daemon exits and so that functions registered
                 # with atexit execute correctly.
