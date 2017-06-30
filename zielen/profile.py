@@ -130,8 +130,7 @@ class Profile:
     def write(self) -> None:
         """Write data to persistent storage."""
         self._info_file.write()
-        self._db_file.conn.commit()
-
+        self._db_file.commit()
 
     @property
     def status(self) -> str:
@@ -167,22 +166,16 @@ class Profile:
 
     @last_sync.setter
     def last_sync(self, value: float) -> None:
-        # Use strftime() instead of isoformat() because the latter
-        # doesn't print the decimal point if the microsecond is 0,
-        # which would prevent it from being parsed by strptime().
         self._info_file.vals["LastSync"] = self._convert_timestamp(value)
 
     @property
     def last_adjust(self) -> float:
         """The time of the last priority adjustment in epoch time."""
-        return self._convert_epoch(self._info_file.vals["LastSync"])
+        return self._convert_epoch(self._info_file.vals["LastAdjust"])
 
     @last_adjust.setter
     def last_adjust(self, value: float) -> None:
-        # Use strftime() instead of isoformat() because the latter
-        # doesn't print the decimal point if the microsecond is 0,
-        # which would prevent it from being parsed by strptime().
-        self._info_file.vals["LastSync"] = self._convert_timestamp(value)
+        self._info_file.vals["LastAdjust"] = self._convert_timestamp(value)
 
     @property
     def version(self) -> str:
@@ -482,8 +475,8 @@ class ProfileDBFile(SyncDBFile):
 
     Attributes:
         path: The path of the profile database file.
-        conn: The sqlite connection object for the database.
-        cur: The sqlite cursor object for the connection.
+        _conn: The sqlite connection object for the database.
+        _cur: The sqlite cursor object for the connection.
     """
     def create(self) -> None:
         """Create a new empty database.
@@ -494,17 +487,17 @@ class ProfileDBFile(SyncDBFile):
         if os.path.isfile(self.path):
             raise FileExistsError("the database file already exists")
 
-        self.conn = sqlite3.connect(
+        self._conn = sqlite3.connect(
             self.path,
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="DEFERRED")
-        self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+        self._conn.create_function("gen_salt", 0, lambda: secure_string(8))
 
-        self.cur = self.conn.cursor()
-        self.cur.arraysize = 20
+        self._cur = self._conn.cursor()
+        self._cur.arraysize = 20
 
         with self._transact():
-            self.cur.executescript("""\
+            self._cur.executescript("""\
                 PRAGMA foreign_keys = ON;
                 PRAGMA journal_mode = WAL;
 
@@ -564,7 +557,7 @@ class ProfileDBFile(SyncDBFile):
             path_id = self._get_path_id(path)
             nodes_values.append({"path_id": path_id})
 
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             UPDATE nodes
             SET priority = (
                 SELECT COALESCE(SUM(n.priority), 0)
@@ -625,29 +618,29 @@ class ProfileDBFile(SyncDBFile):
             # If there are any hash collisions with paths already in the
             # database, generate salt and continue the loop to regenerate
             # the path IDs.
-            self.cur.executemany("""\
+            self._cur.executemany("""\
                 INSERT INTO collisions (path, salt)
                 SELECT :path, gen_salt()
                 FROM nodes
                 WHERE id = :path_id
                 AND path != :path;
                 """, insert_nodes_vals)
-            if self.cur.rowcount <= 0:
+            if self._cur.rowcount <= 0:
                 break
 
         if replace:
             # Remove paths from the database if they already exist.
-            self.cur.executemany("""\
+            self._cur.executemany("""\
                 DELETE FROM nodes
                 WHERE id = :path_id
                 """, rm_vals)
 
         # Insert new values into both tables.
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             INSERT INTO nodes (id, path, directory, priority)
             VALUES (:path_id, :path, :directory, :priority);
             """, insert_nodes_vals)
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             INSERT INTO closure (ancestor, descendant, depth)
             SELECT ancestor, :path_id, c.depth + 1
             FROM closure AS c
@@ -666,11 +659,11 @@ class ProfileDBFile(SyncDBFile):
             dirs: The paths of directories to add to the database.
             replace: Replace existing rows instead of ignoring them.
         """
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT MAX(priority) FROM nodes
             WHERE directory = 0;
             """)
-        max_priority = self.cur.fetchone()[0]
+        max_priority = self._cur.fetchone()[0]
         self.add_paths(files, dirs, priority=max_priority, replace=replace)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
@@ -690,7 +683,7 @@ class ProfileDBFile(SyncDBFile):
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             DELETE FROM nodes
             WHERE id IN (
                 SELECT n.id
@@ -699,7 +692,7 @@ class ProfileDBFile(SyncDBFile):
                 ON (n.id = c.descendant)
                 WHERE c.ancestor = :path_id);
             """, rm_vals)
-        self.cur.execute("""
+        self._cur.execute("""
             DELETE FROM collisions
             WHERE path NOT IN (
                 SELECT path
@@ -718,16 +711,16 @@ class ProfileDBFile(SyncDBFile):
             directory and the file priority.
         """
         # Clear the query result set.
-        self.cur.fetchall()
+        self._cur.fetchall()
 
         path_id = self._get_path_id(path)
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT directory, priority
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
 
-        result = self.cur.fetchone()
+        result = self._cur.fetchone()
         if result:
             return PathData(*result)
 
@@ -746,7 +739,7 @@ class ProfileDBFile(SyncDBFile):
             is a directory and the file priority.
         """
         start_id = self._get_path_id(root) if root else None
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT n.path, n.directory, n.priority
             FROM nodes AS n
             JOIN closure AS c
@@ -759,7 +752,7 @@ class ProfileDBFile(SyncDBFile):
         # be more efficient than fetchall().
         return {
             path: PathData(directory, priority)
-            for array in iter(self.cur.fetchmany, [])
+            for array in iter(self._cur.fetchmany, [])
             for path, directory, priority in array}
 
     def increment(self, paths: Iterable[str],
@@ -779,7 +772,7 @@ class ProfileDBFile(SyncDBFile):
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
 
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             UPDATE nodes
             SET priority = priority + :increment
             WHERE id = :path_id;
@@ -792,7 +785,7 @@ class ProfileDBFile(SyncDBFile):
         Args:
             adjustment: The constant to multiply file priorities by.
         """
-        self.cur.execute("""\
+        self._cur.execute("""\
             UPDATE nodes
             SET priority = priority * :adjustment;
             """, {"adjustment": adjustment})

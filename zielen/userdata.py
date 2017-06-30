@@ -255,11 +255,11 @@ class DestSyncDir(SyncDir):
 
     def write(self) -> None:
         """Write data to persistent storage."""
-        self._db_file.conn.commit()
+        self._db_file.commit()
 
     def close(self) -> None:
         """Close all database connections."""
-        self._db_file.conn.close()
+        self._db_file.close()
 
     def add_exclude_file(self, filepath: str, profile_id: str) -> None:
         """Add a profile exclude file to the remote.
@@ -315,8 +315,8 @@ class DestDBFile(SyncDBFile):
 
     Attributes:
         path: The path of the database file.
-        conn: The sqlite connection object for the database.
-        cur: The sqlite cursor object for the connection.
+        _conn: The sqlite connection object for the database.
+        _cur: The sqlite cursor object for the connection.
     """
     def create(self) -> None:
         """Create a new empty database.
@@ -327,17 +327,17 @@ class DestDBFile(SyncDBFile):
         if os.path.isfile(self.path):
             raise FileExistsError("the database file already exists")
 
-        self.conn = sqlite3.connect(
+        self._conn = sqlite3.connect(
             self.path,
             detect_types=sqlite3.PARSE_DECLTYPES,
             isolation_level="DEFERRED")
-        self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+        self._conn.create_function("gen_salt", 0, lambda: secure_string(8))
 
-        self.cur = self.conn.cursor()
-        self.cur.arraysize = 20
+        self._cur = self._conn.cursor()
+        self._cur.arraysize = 20
 
         with self._transact():
-            self.cur.executescript("""\
+            self._cur.executescript("""\
                 PRAGMA foreign_keys = ON;
 
                 CREATE TABLE nodes (
@@ -417,29 +417,29 @@ class DestDBFile(SyncDBFile):
             # If there are any hash collisions with paths already in the
             # database, generate salt and continue the loop to regenerate
             # the path IDs.
-            self.cur.executemany("""\
+            self._cur.executemany("""\
                 INSERT INTO collisions (path, salt)
                 SELECT :path, gen_salt()
                 FROM nodes
                 WHERE id = :path_id
                 AND path != :path;
                 """, insert_nodes_vals)
-            if self.cur.rowcount <= 0:
+            if self._cur.rowcount <= 0:
                 break
 
         if replace:
             # Remove paths from the database if they already exist.
-            self.cur.executemany("""\
+            self._cur.executemany("""\
                 DELETE FROM nodes
                 WHERE id = :path_id
                 """, rm_vals)
 
         # Insert new values into both tables.
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             INSERT INTO nodes (id, path, directory, lastsync)
             VALUES (:path_id, :path, :directory, :lastsync);
             """, insert_nodes_vals)
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             INSERT INTO closure (ancestor, descendant, depth)
             SELECT ancestor, :path_id, c.depth + 1
             FROM closure AS c
@@ -463,7 +463,7 @@ class DestDBFile(SyncDBFile):
             "path_id": self._get_path_id(path)}
             for path in paths]
 
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             DELETE FROM nodes
             WHERE id IN (
                 SELECT n.id
@@ -472,7 +472,7 @@ class DestDBFile(SyncDBFile):
                 ON (n.id = c.descendant)
                 WHERE c.ancestor = :path_id);
             """, rm_vals)
-        self.cur.execute("""
+        self._cur.execute("""
             DELETE FROM collisions
             WHERE path NOT IN (
                 SELECT path
@@ -491,13 +491,13 @@ class DestDBFile(SyncDBFile):
             sync as a unix timestamp.
         """
         path_id = self._get_path_id(path)
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT directory, lastsync
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
 
-        result = self.cur.fetchone()
+        result = self._cur.fetchone()
         if result:
             return PathData(*result)
 
@@ -521,7 +521,7 @@ class DestDBFile(SyncDBFile):
             sync as a unix timestamp.
         """
         start_id = self._get_path_id(root) if root else None
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT n.path, n.directory, n.lastsync
             FROM nodes AS n
             JOIN closure AS c
@@ -536,5 +536,5 @@ class DestDBFile(SyncDBFile):
         # be more efficient than fetchall().
         return {
             path: PathData(directory, lastsync)
-            for array in iter(self.cur.fetchmany, [])
+            for array in iter(self._cur.fetchmany, [])
             for path, directory, lastsync in array}

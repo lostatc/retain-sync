@@ -134,26 +134,26 @@ class SyncDBFile:
 
     Attributes:
         path: The path of the database file.
-        conn: The sqlite connection object for the database.
-        cur: The sqlite cursor object for the connection.
+        _conn: The sqlite connection object for the database.
+        _cur: The sqlite cursor object for the connection.
     """
     def __init__(self, path: str) -> None:
         self.path = path
         if os.path.isfile(self.path):
-            self.conn = sqlite3.connect(
+            self._conn = sqlite3.connect(
                 self.path,
                 detect_types=sqlite3.PARSE_DECLTYPES,
                 isolation_level="DEFERRED")
-            self.conn.create_function("gen_salt", 0, lambda: secure_string(8))
+            self._conn.create_function("gen_salt", 0, lambda: secure_string(8))
 
-            self.cur = self.conn.cursor()
-            self.cur.arraysize = 20
-            self.cur.executescript("""\
+            self._cur = self._conn.cursor()
+            self._cur.arraysize = 20
+            self._cur.executescript("""\
                 PRAGMA foreign_keys = ON;
                 """)
         else:
-            self.conn = None
-            self.cur = None
+            self._conn = None
+            self._cur = None
 
         # Create adapter from python boolean to sqlite integer.
         sqlite3.register_adapter(bool, int)
@@ -168,7 +168,7 @@ class SyncDBFile:
         """
         if not self.path == ":memory:" and not os.path.isfile(self.path):
             raise ServerError("could not connect to the database file")
-        with self.conn:
+        with self._conn:
             yield
 
     def _mark_directory(self, paths: Iterable[str]) -> None:
@@ -179,7 +179,7 @@ class SyncDBFile:
             "path_id": self._get_path_id(path)}
             for path in paths]
 
-        self.cur.executemany("""\
+        self._cur.executemany("""\
             UPDATE nodes
             SET directory = 1
             WHERE directory = 0
@@ -198,13 +198,13 @@ class SyncDBFile:
         Returns:
             A signed 64-bit integer.
         """
-        self.cur.execute("""\
+        self._cur.execute("""\
             SELECT salt
             FROM collisions
             WHERE path = :path;
             """, {"path": path})
 
-        salt = self.cur.fetchone()
+        salt = self._cur.fetchone()
         hash_string = path
         if salt:
             hash_string += salt[0]
@@ -213,3 +213,11 @@ class SyncDBFile:
         path_hash.update(hash_string.encode())
         return int.from_bytes(
             path_hash.digest()[:8], byteorder="big", signed=True)
+
+    def commit(self) -> None:
+        """Commit the database transaction."""
+        self._conn.commit()
+
+    def close(self) -> None:
+        """Close the database connection."""
+        self._conn.close()
