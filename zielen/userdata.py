@@ -22,11 +22,13 @@ import shutil
 import sqlite3
 import time
 import hashlib
-from typing import Tuple, Iterable, List, Dict, NamedTuple, Generator, Union
+from typing import (
+    Tuple, Iterable, List, Dict, NamedTuple, Generator, Union, Set)
 
 from zielen.exceptions import ServerError
 from zielen.container import SyncDBFile
 from zielen.io import rec_scan, checksum, total_size
+from zielen.profile import ProfileExcludeFile
 from zielen.utils import FactoryDict, secure_string
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
@@ -280,15 +282,6 @@ class DestSyncDir(SyncDir):
             else:
                 raise
 
-    def get_exclude_files(self) -> Generator[str, None, None]:
-        """Get all exclude pattern files in the remote.
-
-        Yields:
-            The absolute paths of exclude pattern files.
-        """
-        for entry in os.scandir(self._ex_dir):
-            yield entry.path
-
     def rm_exclude_file(self, profile_id: str) -> None:
         """Remove a profile exclude file from the remote.
 
@@ -299,6 +292,32 @@ class DestSyncDir(SyncDir):
             os.remove(os.path.join(self._ex_dir, profile_id))
         except FileNotFoundError:
             pass
+
+    def check_excluded(
+            self, paths: Iterable[str], start_path: str) -> Set[str]:
+        """Get the paths that have been excluded by each client.
+
+        Args:
+            paths: The paths to check.
+            start_path: The path of the directory to match globbing patterns
+                against.
+
+        Returns:
+            The subset of input paths that have been excluded by each client.
+        """
+        pattern_files = []
+        for entry in os.scandir(self._ex_dir):
+            pattern_files.append(ProfileExcludeFile(entry.path))
+
+        rm_files = set()
+        for path in paths:
+            for pattern_file in pattern_files:
+                if path not in pattern_file.all_matches(start_path):
+                    break
+            else:
+                rm_files.add(path)
+
+        return rm_files
 
     def scan_paths(self, rel=True, files=True, symlinks=True, dirs=True,
                    exclude=None, memoize=True, lookup=True):
