@@ -22,7 +22,7 @@ import shutil
 import sqlite3
 import time
 import hashlib
-from typing import Tuple, Iterable, List, Dict, NamedTuple, Generator
+from typing import Tuple, Iterable, List, Dict, NamedTuple, Generator, Union
 
 from zielen.exceptions import ServerError
 from zielen.container import SyncDBFile
@@ -36,12 +36,15 @@ class TrashDir:
     """Get information about the user's local trash directory.
 
     Attributes:
-        paths: The paths of the trash directories.
-        _sizes: A list of tuples containing the paths and sizes of every file
+        paths: The path or paths of the trash directories.
+        _stored_sizes: A list of tuples containing the paths and sizes of every file
             in the trash.
     """
-    def __init__(self, paths: Iterable[str]) -> None:
-        self.paths = paths
+    def __init__(self, paths: Union[Iterable[str], str]) -> None:
+        if isinstance(paths, str):
+            self.paths = [paths]
+        else:
+            self.paths = paths
         self._stored_sizes = []
 
     @property
@@ -532,7 +535,7 @@ class DestDBFile(SyncDBFile):
             """, {"start_id": start_id, "directory": directory,
                   "min_lastsync": min_lastsync})
 
-        # As long as self.cur.arraysize is greater than 1, fetchmany() should
+        # As long as self._cur.arraysize is greater than 1, fetchmany() should
         # be more efficient than fetchall().
         return {
             path: PathData(directory, lastsync)

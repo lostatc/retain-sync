@@ -748,7 +748,7 @@ class ProfileDBFile(SyncDBFile):
             AND (:directory IS NULL OR n.directory = :directory);
             """, {"start_id": start_id, "directory": directory})
 
-        # As long as self.cur.arraysize is greater than 1, fetchmany() should
+        # As long as self._cur.arraysize is greater than 1, fetchmany() should
         # be more efficient than fetchall().
         return {
             path: PathData(directory, priority)
