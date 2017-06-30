@@ -879,7 +879,7 @@ class ProfileConfigFile(ConfigFile):
         self.add_remote = add_remote
         self._instances.add(self)
 
-    def _check_value(self, key: str, value: str) -> Optional[str]:
+    def check_value(self, key: str, value: str) -> Optional[str]:
         """Check the syntax of a config option and return an error message.
 
         Args:
@@ -1046,7 +1046,7 @@ class ProfileConfigFile(ConfigFile):
                 continue
 
             if check_empty or not check_empty and value:
-                err_msg = self._check_value(key, value)
+                err_msg = self.check_value(key, value)
                 if err_msg:
                     parse_errors.append(
                         "{0}: '{1}' {2}".format(context, key, err_msg))
@@ -1097,7 +1097,7 @@ class ProfileConfigFile(ConfigFile):
                     usr_input = input(self._prompt_msgs[key]).strip()
                     if not usr_input and key in self._subs:
                         usr_input = self._subs[key]
-                    err_msg = self._check_value(key, usr_input)
+                    err_msg = self.check_value(key, usr_input)
                     if err_msg:
                         print("Error: this value " + err_msg, file=sys.stderr)
                     else:
