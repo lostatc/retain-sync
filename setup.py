@@ -10,6 +10,7 @@ setup(
     license="GPLv3",
     install_requires=["Sphinx", "pyinotify"],
     python_requires=">=3.5",
+    tests_require=["pytest", "pyfakefs"],
     data_files=[
         ("bin",
             ["scripts/zielen", "scripts/zielend"]),
