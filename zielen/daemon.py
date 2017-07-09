@@ -125,7 +125,7 @@ class Daemon(Command):
                     # this inside the conditional statement prevents the
                     # cooldown period from lasting more than
                     # self.COOLDOWN_PERIOD seconds.
-                    self._cooldown_files.update({path: timestamp})
+                    self._cooldown_files[path] = timestamp
 
             # Remove any file paths that were modified more than
             # self.COOLDOWN_PERIOD seconds in the past.

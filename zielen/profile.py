@@ -377,8 +377,8 @@ class ProfileExcludeFile:
             start_path: The directory to search in for files that match the
                 patterns.
         """
-        self._matches.update({start_path: set()})
-        self._all_matches.update({start_path: set()})
+        self._matches[start_path] = set()
+        self._all_matches[start_path] = set()
 
         for line in self._readlines():
             # This assumes that cases where the user may accidentally leave
