@@ -176,11 +176,9 @@ class SyncDir:
                         break
                 else:
                     if rel:
-                        output.update({
-                            rel_path: entry.stat(follow_symlinks=False)})
+                        output[rel_path] = entry.stat(follow_symlinks=False)
                     else:
-                        output.update({
-                            entry.path: entry.stat(follow_symlinks=False)})
+                        output[entry.path] = entry.stat(follow_symlinks=False)
 
         return output
 
