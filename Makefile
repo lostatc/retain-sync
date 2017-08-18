@@ -5,11 +5,11 @@ MANDIR = $(PREFIX)/share/man
 build:
 	make -C "docs" man
 	sed "s|@bindir@|$(BINDIR)|" "docs/unit/zielen@.service.in" > "docs/unit/zielen@.service"
-	python setup.py build
-	python setup.py egg_info
+	python3 setup.py build
+	python3 setup.py egg_info
 
 install:
-	python setup.py install \
+	python3 setup.py install \
 		--prefix "$(PREFIX)" \
 		--single-version-externally-managed \
 		--record "installed_files.txt"
@@ -26,7 +26,7 @@ clean:
 	find "zielen" -depth -name "__pycache__" -type d | xargs rm -rf
 
 develop:
-	python setup.py develop \
+	python3 setup.py develop \
 		--prefix "$(PREFIX)" \
 		--user
 
