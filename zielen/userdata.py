@@ -235,7 +235,7 @@ class DestSyncDir(SyncDir):
     def __init__(self, path: str) -> None:
         super().__init__(path)
         self.util_dir = os.path.join(self.path, ".zielen")
-        self.safe_path = os.path.join(self.util_dir, "..")
+        self.safe_path = os.path.normpath(os.path.join(self.util_dir, ".."))
         self.trash_dir = os.path.join(self.util_dir, "Trash")
         self._ex_dir = os.path.join(self.util_dir, "exclude")
         self._db_file = DestDBFile(os.path.join(self.util_dir, "remote.db"))
