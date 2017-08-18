@@ -44,6 +44,7 @@ class Command(abc.ABC):
         _lock_socket: A unix domain socket used for locking a profile.
     """
     def __init__(self) -> None:
+        os.makedirs(PROFILES_DIR, exist_ok=True)
         self.profiles = {
             entry.name: Profile(entry.name)
             for entry in os.scandir(PROFILES_DIR)
