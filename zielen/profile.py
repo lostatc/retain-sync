@@ -147,12 +147,14 @@ class Profile:
 
     @staticmethod
     def _convert_epoch(timestamp: str) -> float:
+        """Convert a human-readable timestamp to epoch time."""
         return datetime.datetime.strptime(
             timestamp, "%Y-%m-%dT%H:%M:%S.%f").replace(
             tzinfo=datetime.timezone.utc).timestamp()
 
     @staticmethod
     def _convert_timestamp(epoch: float) -> str:
+        """Convert an epoch timestamp to a human-readable one."""
         # Use strftime() instead of isoformat() because the latter
         # doesn't print the decimal point if the microsecond is 0,
         # which would prevent it from being parsed by strptime().
@@ -273,6 +275,7 @@ class Profile:
 
     @property
     def trash_dirs(self) -> List[str]:
+        """The directories in which to search for deleted files."""
         dirs = self._cfg_file.vals["TrashDirs"].split(":")
         for index, element in enumerate(dirs.copy()):
             dirs[index] = os.path.expanduser(
@@ -854,7 +857,7 @@ class ProfileConfigFile(ConfigFile):
             "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"),
         "TrashDirs": os.path.join(XDG_DATA_HOME, "Trash/files"),
         "PriorityHalfLife": "120",
-        "UseTrash": "no",
+        "UseTrash": "yes",
         "SyncExtraFiles": "yes",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
