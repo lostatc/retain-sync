@@ -28,7 +28,7 @@ from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.userdata import TrashDir
 from zielen.utils import timestamp_path
 from zielen.profile import ProfileExcludeFile
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 from zielen.fs import FilesManager
 
 DeletedPaths = NamedTuple(

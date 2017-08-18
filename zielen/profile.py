@@ -35,7 +35,7 @@ from typing import (
 import pkg_resources
 
 from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
-from zielen.container import JSONFile, ConfigFile, SyncDBFile
+from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
 from zielen.utils import DictProperty, secure_string
 from zielen.exceptions import FileParseError

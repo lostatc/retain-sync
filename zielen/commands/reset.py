@@ -23,7 +23,7 @@ import shutil
 from zielen.exceptions import (
     ServerError, AvailableSpaceError, FileTransferError)
 from zielen.io import rec_clone
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 
 
 class ResetCommand(Command):

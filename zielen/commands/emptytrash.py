@@ -20,7 +20,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import shutil
 
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 
 
 class EmptyTrashCommand(Command):

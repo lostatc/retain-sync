@@ -27,7 +27,7 @@ import subprocess
 
 import pyinotify
 
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 
 
 class Daemon(Command):

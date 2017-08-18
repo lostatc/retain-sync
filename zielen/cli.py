@@ -24,7 +24,7 @@ import argparse
 import pkg_resources
 from textwrap import dedent
 
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 from zielen.daemon import Daemon
 from zielen.exceptions import ProgramError, InputError
 from zielen.commands.emptytrash import EmptyTrashCommand

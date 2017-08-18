@@ -26,7 +26,7 @@ from typing import (
     Tuple, Iterable, List, Dict, NamedTuple, Generator, Union, Set)
 
 from zielen.exceptions import ServerError
-from zielen.container import SyncDBFile
+from zielen.containerbase import SyncDBFile
 from zielen.io import rec_scan, checksum, total_size
 from zielen.profile import ProfileExcludeFile
 from zielen.utils import FactoryDict, secure_string

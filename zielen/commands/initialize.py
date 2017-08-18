@@ -32,7 +32,7 @@ from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.fs import FilesManager
 from zielen.userdata import LocalSyncDir, DestSyncDir
 from zielen.profile import Profile, ProfileConfigFile
-from zielen.basecommand import Command
+from zielen.commandbase import Command
 
 
 class InitializeCommand(Command):
