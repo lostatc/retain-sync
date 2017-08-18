@@ -247,21 +247,23 @@ class Profile:
     @property
     def storage_limit(self) -> int:
         """The number of bytes of data to keep in the local directory."""
-        num, unit = re.findall(
-            r"^([0-9]+)\s*([KMG](?:B|iB)?)$",
+        num, prefix, unit = re.findall(
+            r"^([0-9]+)\s*([kKMG])(B|iB)?$",
             self._cfg_file.vals["StorageLimit"])[0]
-        if unit in ["K", "KiB"]:
-            return int(num) * 1024
-        elif unit in ["M", "MiB"]:
-            return int(num) * 1024**2
-        elif unit in ["G", "GiB"]:
-            return int(num) * 1024**3
-        elif unit == "KB":
-            return int(num) * 1000
-        elif unit == "MB":
-            return int(num) * 1000**2
-        elif unit == "GB":
-            return int(num) * 1000**3
+
+        if unit == "iB" or not unit:
+            base = 1024
+        elif unit == "B":
+            base = 1000
+
+        if prefix in ["k", "K"]:
+            exponent = 1
+        elif prefix == "M":
+            exponent = 2
+        elif prefix == "G":
+            exponent = 3
+
+        return int(num) * base**exponent
 
     @property
     def sync_interval(self) -> int:
@@ -1000,7 +1002,7 @@ class ProfileConfigFile(ConfigFile):
                             return "must be in a directory with write access"
 
         elif key == "StorageLimit":
-            if not re.search(r"^[0-9]+\s*[KMG](B|iB)?$", value):
+            if not re.search(r"^[0-9]+\s*[kKMG](B|iB)?$", value):
                 return "must be an integer followed by a unit (e.g. 10GB)"
         elif key == "SyncInterval":
             if not re.search("^[0-9]+$", value):
