@@ -22,7 +22,7 @@ import hashlib
 import os
 import sys
 import tempfile
-from textwrap import indent
+import textwrap
 from typing import Iterable
 
 from zielen.utils import shell_cmd, ProgressBar
@@ -86,7 +86,8 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
             # Print the last five lines of rsync's stderr.
             raise FileTransferError(
                 "the file transfer failed to complete\n"
-                + indent("\n".join(stderr.splitlines()[-5:]), "    "))
+                + textwrap.indent(
+                    "\n".join(stderr.splitlines()[-5:]), "rsync: "))
 
 
 def rec_clone(source: str, dest: str, files=None, exclude=None, msg="",
