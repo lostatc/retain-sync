@@ -138,7 +138,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     (
-        master_doc,
+        "zielen.1",
         'zielen',
         'distribute files based on how frequently they are accessed',
         [author],

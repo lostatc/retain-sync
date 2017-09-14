@@ -1,3 +1,6 @@
+========
+zielen.1
+========
 SYNOPSIS
 ========
 **zielen** [*global_options*] *command* [*command_options*] [*command_args*]
@@ -7,7 +10,7 @@ DESCRIPTION
 **zielen** is a program that distributes files between a local and remote
 directory based on how frequently they're accessed with the intent of
 conserving disk space. This remote directory can be on a separate hard drive or
-a seprate machine entirely (using ssh). Files are prioritized based on how
+a separate machine entirely (using ssh). Files are prioritized based on how
 frequently and recently they've been accessed as well as the file size. The
 highest-priority files are kept in the local directory for quick access, while
 lower priority files are moved to the remote directory to conserve disk space.
@@ -105,7 +108,7 @@ COMMANDS
 
 **reset** [*options*] *name*\ \|\ *path*
     Retrieve all files from the remote directory and de-initialize the local
-    directory. This command accpets the *name* of a profile or the absolute
+    directory. This command accepts the *name* of a profile or the absolute
     *path* of its local directory.
 
     **-k**, **--keep-remote**
@@ -127,7 +130,7 @@ COMMANDS
 
 **empty-trash** *name*\ \|\ *path*
     Permanently delete all files in the remote trash directory (see TRASH_).
-    This command accpets the *name* of a profile or the absolute *path* of its
+    This command accepts the *name* of a profile or the absolute *path* of its
     local directory.
 
 SYNCING
@@ -150,7 +153,7 @@ limit, it fills the remaining space with the highest-priority individual files
 that remain. This feature can be disabled in the profile config file.
 
 During a sync, files that are new since the last sync have their priority
-artifically inflated in order to keep them in the local directory longer. This
+artificially inflated in order to keep them in the local directory longer. This
 is to prevent files from being removed from the local directory as soon as
 they're created, when they're likely still being used. This only applies to new
 files that were created locally. New files synced from the remote directory do
@@ -228,6 +231,6 @@ FILES
             be configured.
 
         exclude
-            This is the exclude pattern file for the profile. It contians a
+            This is the exclude pattern file for the profile. It contains a
             list of patterns representing files and directories to be excluded
             from syncing (see EXCLUDING_).
