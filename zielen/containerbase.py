@@ -25,7 +25,7 @@ import contextlib
 import hashlib
 from typing import List, Generator, Iterable
 
-from zielen.exceptions import FileParseError, ServerError
+from zielen.exceptions import FileParseError, RemoteError
 from zielen.utils import secure_string
 
 
@@ -164,10 +164,10 @@ class SyncDBFile:
         """Check if database file exists and commit the transaction on exit.
 
         Raises:
-            ServerError: The database file wasn't found.
+            RemoteError: The database file wasn't found.
         """
         if not self.path == ":memory:" and not os.path.isfile(self.path):
-            raise ServerError("could not connect to the database file")
+            raise RemoteError("could not connect to the database file")
         with self._conn:
             yield
 

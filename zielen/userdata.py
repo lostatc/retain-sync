@@ -25,7 +25,7 @@ import hashlib
 from typing import (
     Tuple, Iterable, List, Dict, NamedTuple, Generator, Union, Set)
 
-from zielen.exceptions import ServerError
+from zielen.exceptions import RemoteError
 from zielen.containerbase import SyncDBFile
 from zielen.io import rec_scan, checksum, total_size
 from zielen.profile import ProfileExcludeFile
@@ -275,7 +275,7 @@ class DestSyncDir(SyncDir):
             shutil.copy(filepath, os.path.join(self._ex_dir, profile_id))
         except FileNotFoundError:
             if not os.path.isdir(self.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise

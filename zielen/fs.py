@@ -22,7 +22,7 @@ import os
 import shutil
 from typing import Iterable, Tuple, Set, NamedTuple
 
-from zielen.exceptions import ServerError, AvailableSpaceError
+from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
 from zielen.userdata import LocalSyncDir, DestSyncDir, TrashDir
 from zielen.utils import timestamp_path
@@ -390,7 +390,7 @@ class FilesManager:
                 msg="Updating local files...")
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise
@@ -402,7 +402,7 @@ class FilesManager:
             update_paths: The relative paths of local files to update the
                 remote directory with.
         Raises:
-            ServerError: The remote directory is unmounted.
+            RemoteError: The remote directory is unmounted.
         """
         update_paths = set(update_paths)
         update_files = set(
@@ -418,7 +418,7 @@ class FilesManager:
                 files=update_paths, msg="Updating remote files...")
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise
@@ -472,7 +472,7 @@ class FilesManager:
                 msg="Moving files to remote...")
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise
@@ -748,7 +748,7 @@ class FilesManager:
             self._rename_files(path_pairs, self.dest_dir.safe_path)
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise
@@ -823,7 +823,7 @@ class FilesManager:
             pass
         except FileNotFoundError:
             if not os.path.isdir(self.dest_dir.util_dir):
-                raise ServerError(
+                raise RemoteError(
                     "the connection to the remote directory was lost")
             else:
                 raise

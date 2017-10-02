@@ -23,8 +23,8 @@ class ProgramError(Exception):
     """Base exception for errors anticipated during normal operation."""
 
 
-class ServerError(ProgramError):
-    """Raised whenever a connection to the server cannot be established."""
+class RemoteError(ProgramError):
+    """Raised whenever the remote directory is inaccessible."""
 
 
 class AvailableSpaceError(ProgramError):

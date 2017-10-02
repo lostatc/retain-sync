@@ -23,7 +23,7 @@ import time
 from typing import Iterable, Set, NamedTuple, Tuple, List
 
 
-from zielen.exceptions import ServerError
+from zielen.exceptions import RemoteError
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.userdata import TrashDir
 from zielen.utils import timestamp_path
@@ -69,7 +69,7 @@ class SyncCommand(Command):
         """Run the command.
 
         Raises:
-            ServerError: The connection to the remote directory was lost.
+            RemoteError: The connection to the remote directory was lost.
         """
         self.setup_profile()
         fm = FilesManager(self.local_dir, self.dest_dir, self.profile)

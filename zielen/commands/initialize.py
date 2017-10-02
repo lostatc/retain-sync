@@ -26,7 +26,7 @@ import atexit
 import sqlite3
 import textwrap
 
-from zielen.exceptions import InputError, ServerError, AvailableSpaceError
+from zielen.exceptions import InputError, RemoteError, AvailableSpaceError
 from zielen.connect import SSHConnection
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.fs import FilesManager
@@ -65,7 +65,7 @@ class InitializeCommand(Command):
 
         Raises:
             InputError: The command-line arguments were invalid.
-            ServerError: The connection to the remote directory was lost.
+            RemoteError: The connection to the remote directory was lost.
             AvailableSpaceError: There is not enough space in the local or
                 remote filesystem.
         """

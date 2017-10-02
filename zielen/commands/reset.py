@@ -21,7 +21,7 @@ import os
 import shutil
 
 from zielen.exceptions import (
-    ServerError, AvailableSpaceError, FileTransferError)
+    RemoteError, AvailableSpaceError, FileTransferError)
 from zielen.io import rec_clone
 from zielen.commandbase import Command
 
@@ -65,7 +65,7 @@ class ResetCommand(Command):
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
                 if not os.path.isdir(self.dest_dir.util_dir):
-                    raise ServerError(
+                    raise RemoteError(
                         "the connection to the remote directory was lost")
                 else:
                     raise
