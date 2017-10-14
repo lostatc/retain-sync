@@ -78,7 +78,7 @@ def main_help_item() -> Item:
         "files based on their priorities.")
     commands.add_text("\n")
     commands.add_definition(
-        "reset", "name|path",
+        "reset", "[options] name|path",
         "Retrieve all files from the remote directory and de-initialize the "
         "local directory.")
     commands.add_text("\n")
@@ -139,7 +139,7 @@ def command_help_item() -> Item:
     root_item.add_text("\n")
 
     reset_item = root_item.add_definition(
-        "reset", "name|path",
+        "reset", "[options] name|path",
         "Retrieve all files from the remote directory and de-initialize the "
         "local directory. This command accepts the name of a profile or the "
         "absolute path of its local directory.", item_id="reset")
