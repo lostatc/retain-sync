@@ -53,7 +53,7 @@ class UpdatedPaths(UpdatedPathsBase):
 
 
 class SyncCommand(Command):
-    """Redistribute files between the local and remote directories.
+    """Run the "sync" command.
 
     Attributes:
         profile: The currently selected profile.

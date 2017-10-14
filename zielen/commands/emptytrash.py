@@ -24,7 +24,7 @@ from zielen.commandbase import Command
 
 
 class EmptyTrashCommand(Command):
-    """Permanently delete all files in the remote trash directory.
+    """Run the "empty-trash" command.
 
     Attributes:
         profile: The currently selected profile.

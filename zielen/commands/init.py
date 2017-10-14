@@ -36,14 +36,14 @@ from zielen.commandbase import Command
 
 
 class InitCommand(Command):
-    """Create a new profile for a pair of directories to sync.
+    """Run the "init" command.
 
     Attributes:
-        profile_input: A string representing the selected profile.
+        profile_input: The "name" argument for the command.
         profile: The currently selected profile.
-        exclude: The path of a file containing exclude patterns.
-        template: The path of a template configuration file.
-        add_remote: Start with a set of existing remote files.
+        exclude: The argument for the "--exclude" option.
+        template: The argument for the "--template" option.
+        add_remote: The "--add-remote" options was given.
         local_dir: A LocalSyncDir object representing the local directory.
         dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the connection to the

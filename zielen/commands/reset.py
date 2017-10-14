@@ -27,7 +27,7 @@ from zielen.commandbase import Command
 
 
 class ResetCommand(Command):
-    """Retrieve files from the remote and de-initialize the local directory.
+    """Run the "reset" command.
 
     Attributes:
         profile: The currently selected profile.
@@ -35,8 +35,8 @@ class ResetCommand(Command):
         dest_dir: A DestSyncDir object representing the destination directory.
         connection: A Connection object representing the connection to the
             remote directory.
-        keep_remote: Keep a copy of the files in the remote directory.
-        no_retrieve: Don't copy files to the local directory.
+        keep_remote: The "--keep-remote" option was given.
+        no_retrieve: The "--no-retrieve" option was given.
     """
     def __init__(self, profile_input: str, keep_remote=False,
                  no_retrieve=False) -> None:

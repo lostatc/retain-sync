@@ -22,7 +22,7 @@ from zielen.commandbase import Command
 
 
 class ListCommand(Command):
-    """Print a table of all initialized profiles."""
+    """Run the "list" command."""
     def __init__(self) -> None:
         super().__init__()
 
