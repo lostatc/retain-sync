@@ -11,19 +11,4 @@ setup(
     install_requires=["Sphinx", "pyinotify", "linotype"],
     python_requires=">=3.5",
     tests_require=["pytest", "pyfakefs"],
-    data_files=[
-        ("bin",
-            ["scripts/zielen", "scripts/zielend"]),
-        ("share/licenses/zielen",
-            ["LICENSE"]),
-        ("share/zielen",
-            ["docs/templates/config-template"]),
-        ("lib/systemd/user",
-            ["docs/unit/zielen@.service"]),
-        ("share/man/man1",
-            ["docs/_build/man/zielen.1"])
-        ],
-    packages=[
-        "zielen", "zielen.commands"
-        ]
-    )
+    packages=["zielen", "zielen.commands"])
