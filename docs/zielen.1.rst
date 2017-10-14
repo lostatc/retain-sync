@@ -3,7 +3,7 @@ zielen.1
 ========
 SYNOPSIS
 ========
-**zielen** [*global_options*] *command* [*command_options*] [*command_args*]
+**zielen** [*global_options*] *command* [*command_args*]
 
 DESCRIPTION
 ===========
@@ -83,6 +83,10 @@ COMMANDS
     exclude : @rst
         See EXCLUDING_.
 
+    template
+        A blank template can usually be found at
+        /usr/share/zielen/config-template.
+
     empty-trash : @rst
         See TRASH_.
 
@@ -94,7 +98,7 @@ the file that was modified the least recently. The new file name contains the
 word "conflict" and the date and time of the sync.
 
 When calculating which files to storey locally, **zielen** first considers
-whole directory tree. Once no more of these directory trees can fit within the
+whole directory trees. Once no more of these directory trees can fit within the
 storage limit, it fills the remaining space with the highest-priority
 individual files that remain. This behavior can be changed in the profile
 config file.

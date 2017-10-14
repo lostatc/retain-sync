@@ -117,9 +117,8 @@ def command_help_item() -> Item:
         "-t, --template", "file",
         "Get settings for the profile from the template file instead of "
         "prompting the user interactively. The user will still be prompted "
-        "for any mandatory information that is missing from the template. A "
-        "blank template can usually be found at "
-        "/usr/share/zielen/config-template.", item_id="template")
+        "for any mandatory information that is missing from the template.",
+        item_id="template")
     init_item.add_text("\n")
     init_item.add_definition(
         "-a, --add-remote", "",
@@ -147,17 +146,15 @@ def command_help_item() -> Item:
     reset_item.add_definition(
         "-k, --keep-remote", "",
         "Copy files from the remote directory to the local one instead of "
-        "moving them. This leaves a copy of the files in the remote "
-        "directory, which is useful when that remote directory is shared "
-        "with other profiles that may also want to retrieve the files.",
+        "moving them. This is useful when remote directory is shared with "
+        "other profiles that may also want to retrieve the files.",
         item_id="keep-remote")
     reset_item.add_text("\n")
     reset_item.add_definition(
         "-n, --no-retrieve", "",
-        "Don't retrieve files from the remote directory. Remote files stay "
-        "in the remote directory, and symbolic links to remote files are "
-        "removed from the local directory. This option supersedes "
-        "**--keep-remote**.", item_id="no-retrieve")
+        "Don't retrieve files from the remote directory. Symbolic links to "
+        "remote files are removed from the local directory. This option "
+        "supersedes **--keep-remote**.", item_id="no-retrieve")
     root_item.add_text("\n")
 
     list_item = root_item.add_definition(
