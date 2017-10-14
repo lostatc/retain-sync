@@ -66,72 +66,25 @@ Storage Limit
 
 GLOBAL OPTIONS
 ==============
-**--help**
-    Display a usage message and exit.
-
-**--version**
-    Print the version number and exit.
-
-**--debug**
-    Print a full stack trace instead of an error message if an error occurs.
-
-**-q**, **--quiet**
-    Suppress all non-error output.
+.. This imports documentation from the code.
+.. linotype::
+    :filepath: ../zielen/cli.py
+    :function: main_help_item
+    :item_id: global_opts
+    :children:
 
 COMMANDS
 ========
-**initialize** [*options*] *name*
-    Create a new profile, called *name*, representing a pair of directories to
-    sync. Move files from the local directory to the remote one.
+.. This imports documentation from the code.
+.. linotype::
+    :filepath: ../zielen/cli.py
+    :function: command_help_item
 
-    **-e**, **--exclude** *file*
-        Get patterns from *file* representing files and directories to exclude
-        from syncing (see EXCLUDING_).
+    exclude : @rst
+        See EXCLUDING_.
 
-    **-t**, **--template** *file*
-        Get settings for the profile from the template *file* instead of
-        prompting the user interactively. The user will still be prompted for
-        any mandatory information that is missing from the template. A blank
-        template can usually be found at /usr/share/zielen/config-template.
-
-    **-a**, **--add-remote**
-        Instead of moving local files to an empty remote directory, start with
-        an existing remote directory and an empty local directory. Using this
-        option, it is possible for two or more profiles to share a remote
-        directory.
-
-**sync** *name*\ \|\ *path*
-    Bring the local and remote directories in sync and redistribute files based
-    on their priorities. This command accpets the *name* of a profile or the
-    absolute *path* of its local directory. This command is run automatically
-    at intervals while the daemon is running.
-
-**reset** [*options*] *name*\ \|\ *path*
-    Retrieve all files from the remote directory and de-initialize the local
-    directory. This command accepts the *name* of a profile or the absolute
-    *path* of its local directory.
-
-    **-k**, **--keep-remote**
-        Copy files from the remote directory to the local one instead of moving
-        them. This leaves a copy of the files in the remote directory, which is
-        useful when that remote directory is shared with other profiles that
-        may also want to retrieve the files.
-
-    **-n**, **--no-retrieve**
-        Don't retrieve files from the remote directory. This still
-        de-initializes the local directory, but leaves it with whatever files
-        are already in it. Remote files stay in the remote directory, and
-        symbolic links to remote files are removed from the local directory.
-        This option supersedes **--keep-remote**.
-
-**list**
-    Print a table of all profiles names and the paths of their local
-    directories.
-
-**empty-trash** *name*\ \|\ *path*
-    Permanently delete all files in the remote trash directory (see TRASH_).
-    This command accepts the *name* of a profile or the absolute *path* of its
-    local directory.
+    empty-trash : @rst
+        See TRASH_.
 
 SYNCING
 =======

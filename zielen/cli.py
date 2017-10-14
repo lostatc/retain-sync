@@ -24,6 +24,8 @@ import argparse
 import pkg_resources
 from textwrap import dedent
 
+from linotype import Item, Formatter, DefinitionStyle
+
 from zielen.commandbase import Command
 from zielen.daemon import Daemon
 from zielen.exceptions import ProgramError, InputError
@@ -136,6 +138,145 @@ def usage(command: str) -> None:
     print(help_msg)
 
 
+def main_help_item() -> Item:
+    """Structure the main help message.
+
+    Returns:
+        An Item object with the message.
+    """
+    formatter = Formatter()
+    root_item = Item(formatter)
+
+    usage = root_item.add_text("Usage:")
+    usage.add_definition(
+        "zielen", "[global_options] command [command_args]", "")
+    root_item.add_text("\n")
+
+    global_opts = root_item.add_text("Global Options:", item_id="global_opts")
+    global_opts.formatter.definition_style = DefinitionStyle.ALIGNED
+    global_opts.add_definition(
+        "    --help", "",
+        "Print a usage message and exit.")
+    global_opts.add_definition(
+        "    --version", "",
+        "Print the version number and exit.")
+    global_opts.add_definition(
+        "    --debug", "",
+        "Print a full stack trace instead of an error message if an error "
+        "occurs.")
+    global_opts.add_definition(
+        "-q, --quiet", "",
+        "Suppress all non-error output.")
+    root_item.add_text("\n")
+
+    commands = root_item.add_text("Commands:", item_id="commands")
+    commands.add_definition(
+        "initialize", "[options] name",
+        "Create a new profile, called name, representing a pair of "
+        "directories to sync.")
+    commands.add_text("\n")
+    commands.add_definition(
+        "sync", "name|path",
+        "Bring the local and remote directories in sync and redistribute "
+        "files based on their priorities.")
+    commands.add_text("\n")
+    commands.add_definition(
+        "reset", "name|path",
+        "Retrieve all files from the remote directory and de-initialize the "
+        "local directory.")
+    commands.add_text("\n")
+    commands.add_definition(
+        "list", "",
+        "Print a table of all profiles names and the paths of their local "
+        "directories.")
+    commands.add_text("\n")
+    commands.add_definition(
+        "empty-trash", "name|path",
+        "Permanently delete all files in the remote trash directory.")
+
+    return root_item
+
+
+def command_help_item() -> Item:
+    """Structure the help message for each command.
+
+    Returns:
+        An Item object with the message.
+    """
+    formatter = Formatter()
+    root_item = Item(formatter)
+
+    initialize_item = root_item.add_definition(
+        "initialize", "[options] name",
+        "Create a new profile, called name, representing a pair of "
+        "directories to sync. Move files from the local directory to the "
+        "remote one.", item_id="initialize")
+    initialize_item.add_text("\n")
+    initialize_item.add_definition(
+        "-e, --exclude", "file",
+        "Get patterns from file representing files and directories to "
+        "exclude from syncing.", item_id="exclude")
+    initialize_item.add_text("\n")
+    initialize_item.add_definition(
+        "-t, --template", "file",
+        "Get settings for the profile from the template file instead of "
+        "prompting the user interactively. The user will still be prompted "
+        "for any mandatory information that is missing from the template. A "
+        "blank template can usually be found at "
+        "/usr/share/zielen/config-template.", item_id="template")
+    initialize_item.add_text("\n")
+    initialize_item.add_definition(
+        "-a, --add-remote", "",
+        "Instead of moving local files to an empty remote directory, "
+        "start with an existing remote directory and an empty local "
+        "directory. Using this option, it is possible for two or more "
+        "profiles to share a remote directory.", item_id="add-remote")
+    root_item.add_text("\n")
+
+    sync_item = root_item.add_definition(
+        "sync", "name|path",
+        "Retrieve all files from the remote directory and de-initialize the "
+        "local directory. This command accepts the name of a profile or the "
+        "absolute path of its local directory.", item_id="sync")
+    root_item.add_text("\n")
+
+    reset_item = root_item.add_definition(
+        "reset", "name|path",
+        "Retrieve all files from the remote directory and de-initialize the "
+        "local directory. This command accepts the name of a profile or the "
+        "absolute path of its local directory.", item_id="reset")
+    reset_item.add_text("\n")
+    reset_item.add_definition(
+        "-k, --keep-remote", "",
+        "Copy files from the remote directory to the local one instead of "
+        "moving them. This leaves a copy of the files in the remote "
+        "directory, which is useful when that remote directory is shared "
+        "with other profiles that may also want to retrieve the files.",
+        item_id="keep-remote")
+    reset_item.add_text("\n")
+    reset_item.add_definition(
+        "-n, --no-retrieve", "",
+        "Don't retrieve files from the remote directory. Remote files stay "
+        "in the remote directory, and symbolic links to remote files are "
+        "removed from the local directory. This option supersedes "
+        "**--keep-remote**.", item_id="no-retrieve")
+    root_item.add_text("\n")
+
+    list_item = root_item.add_definition(
+        "list", "",
+        "Print a table of all profiles names and the paths of their local "
+        "directories.", item_id="list")
+    root_item.add_text("\n")
+
+    empty_trash_item = root_item.add_definition(
+        "empty-trash", "name|path",
+        "Permanently delete all files in the remote trash directory. This "
+        "command accepts the name of a profile or the absolute path of its "
+        "local directory.", item_id="empty-trash")
+
+    return root_item
+
+
 class CustomArgumentParser(argparse.ArgumentParser):
     """Set custom formatting of error messages for argparse."""
     def error(self, message) -> None:
@@ -148,7 +289,10 @@ class HelpAction(argparse.Action):
         super().__init__(nargs=nargs, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None) -> None:
-        usage(namespace.command)
+        if namespace.command:
+            print(command_help_item().format(item_id=namespace.command))
+        else:
+            print(main_help_item().format())
         parser.exit()
 
 
