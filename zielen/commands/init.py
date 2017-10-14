@@ -1,4 +1,4 @@
-"""A class for the 'initialize' command.
+"""A class for the 'init' command.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -35,7 +35,7 @@ from zielen.profile import Profile, ProfileConfigFile
 from zielen.commandbase import Command
 
 
-class InitializeCommand(Command):
+class InitCommand(Command):
     """Create a new profile for a pair of directories to sync.
 
     Attributes:

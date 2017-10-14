@@ -137,7 +137,5 @@ class Command(abc.ABC):
     def print_interrupt_msg() -> None:
         """Warn the user that the profile is only partially initialized."""
         print(
-            textwrap.dedent("""
-                Initialization was interrupted.
-                Please run 'zielen initialize' to complete it or 'zielen reset' to cancel it."""),
-            file=sys.stderr)
+            "Initialization was interrupted.\nPlease run 'zielen init' to "
+            "complete it or 'zielen reset' to cancel it.", file=sys.stderr)

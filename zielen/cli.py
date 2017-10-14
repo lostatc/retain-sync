@@ -68,7 +68,7 @@ def main_help_item() -> Item:
 
     commands = root_item.add_text("Commands:", item_id="commands")
     commands.add_definition(
-        "initialize", "[options] name",
+        "init", "[options] name",
         "Create a new profile, called name, representing a pair of "
         "directories to sync.")
     commands.add_text("\n")
@@ -102,26 +102,26 @@ def command_help_item() -> Item:
     """
     root_item = Item()
 
-    initialize_item = root_item.add_definition(
-        "initialize", "[options] name",
+    init_item = root_item.add_definition(
+        "init", "[options] name",
         "Create a new profile, called name, representing a pair of "
         "directories to sync. Move files from the local directory to the "
-        "remote one.", item_id="initialize")
-    initialize_item.add_text("\n")
-    initialize_item.add_definition(
+        "remote one.", item_id="init")
+    init_item.add_text("\n")
+    init_item.add_definition(
         "-e, --exclude", "file",
         "Get patterns from file representing files and directories to "
         "exclude from syncing.", item_id="exclude")
-    initialize_item.add_text("\n")
-    initialize_item.add_definition(
+    init_item.add_text("\n")
+    init_item.add_definition(
         "-t, --template", "file",
         "Get settings for the profile from the template file instead of "
         "prompting the user interactively. The user will still be prompted "
         "for any mandatory information that is missing from the template. A "
         "blank template can usually be found at "
         "/usr/share/zielen/config-template.", item_id="template")
-    initialize_item.add_text("\n")
-    initialize_item.add_definition(
+    init_item.add_text("\n")
+    init_item.add_definition(
         "-a, --add-remote", "",
         "Instead of moving local files to an empty remote directory, "
         "start with an existing remote directory and an empty local "
@@ -230,13 +230,13 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command")
     subparsers.required = True
 
-    parser_init = subparsers.add_parser("initialize", add_help=False)
+    parser_init = subparsers.add_parser("init", add_help=False)
     parser_init.add_argument("--help", action=HelpAction)
     parser_init.add_argument("--exclude", "-e")
     parser_init.add_argument("--template", "-t")
     parser_init.add_argument("--add-remote", "-a", action="store_true")
     parser_init.add_argument("profile", metavar="profile name")
-    parser_init.set_defaults(command="initialize")
+    parser_init.set_defaults(command="init")
 
     parser_sync = subparsers.add_parser("sync", add_help=False)
     parser_sync.add_argument("--help", action=HelpAction)
@@ -304,8 +304,8 @@ def daemon(profile_name) -> int:
 
 def def_command(cmd_args) -> Command:
     """Get an Command subclass instance from the command-line input."""
-    if cmd_args.command == "initialize":
-        return InitializeCommand(
+    if cmd_args.command == "init":
+        return InitCommand(
             cmd_args.profile, cmd_args.exclude, cmd_args.template,
             cmd_args.add_remote)
     elif cmd_args.command == "sync":
