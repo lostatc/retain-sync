@@ -24,7 +24,7 @@ import argparse
 import pkg_resources
 from textwrap import dedent
 
-from linotype import Item, Formatter, DefinitionStyle
+from linotype import Item, DefinitionStyle
 
 from zielen.commandbase import Command
 from zielen.daemon import Daemon
@@ -144,8 +144,7 @@ def main_help_item() -> Item:
     Returns:
         An Item object with the message.
     """
-    formatter = Formatter()
-    root_item = Item(formatter)
+    root_item = Item()
 
     usage = root_item.add_text("Usage:")
     usage.add_definition(
@@ -203,8 +202,7 @@ def command_help_item() -> Item:
     Returns:
         An Item object with the message.
     """
-    formatter = Formatter()
-    root_item = Item(formatter)
+    root_item = Item()
 
     initialize_item = root_item.add_definition(
         "initialize", "[options] name",
@@ -235,9 +233,11 @@ def command_help_item() -> Item:
 
     sync_item = root_item.add_definition(
         "sync", "name|path",
-        "Retrieve all files from the remote directory and de-initialize the "
-        "local directory. This command accepts the name of a profile or the "
-        "absolute path of its local directory.", item_id="sync")
+        "Bring the local and remote directories in sync and redistribute "
+        "files based on their priorities. This command is run automatically "
+        "at regular intervals by the daemon. This command accepts the name "
+        "of a profile or the absolute path of its local directory.",
+        item_id="sync")
     root_item.add_text("\n")
 
     reset_item = root_item.add_definition(
