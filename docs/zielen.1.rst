@@ -88,37 +88,26 @@ COMMANDS
 
 SYNCING
 =======
-Whenever a profile is initialized, **zielen** will direct the user to start the
-daemon for that profile. The daemon monitors file access in the local directory
-and runs the **sync** command at a regular interval, which is configurable in
-the profile config file (see FILES_). The default interval is 20 minutes.
-
 A sync conflict occurs when a file has been modified in both the local and
-remote directories since the last sync. Such conflicts are handled by renaming
+remote directories since the last sync. These conflicts are handled by renaming
 the file that was modified the least recently. The new file name contains the
-word "conflict" and the date and time of the sync. This copy is treated as a
-new, independent file that is synced like any other.
+word "conflict" and the date and time of the sync.
 
-When calculating which files to store locally, **zielen** first considers whole
-directories, and when a directory is selected, it includes all of its
-subdirectories. Once no more whole directories can fit within the storage
-limit, it fills the remaining space with the highest-priority individual files
-that remain. This feature can be disabled in the profile config file.
-
-During a sync, files that are new since the last sync have their priority
-artificially inflated in order to keep them in the local directory longer. This
-is to prevent files from being removed from the local directory as soon as
-they're created, when they're likely still being used. This only applies to new
-files that were created locally. New files synced from the remote directory do
-not have their priority inflated. This feature can be disabled in the profile
+When calculating which files to storey locally, **zielen** first considers
+whole directory tree. Once no more of these directory trees can fit within the
+storage limit, it fills the remaining space with the highest-priority
+individual files that remain. This behavior can be changed in the profile
 config file.
 
-**zielen** uses **rsync** for copying files between the local and remote
-directories, and should preserve permissions, modification times, ownership,
-hard links, ACLs, extended attributes and sparse files as long as both
-filesystems support them. The program automatically excludes absolute symbolic
-links and symbolic links that point to files outside the local directory, but
-relative symbolic links are still synced.
+During a sync, local files that are new since the last sync have their priority
+artificially inflated in order to keep them in the local directory longer. This
+is to prevent files from being removed from the local directory as soon as
+they're created, when they're likely still being used. This behavior can be
+changed in the profile config file.
+
+**zielen** automatically excludes absolute symbolic links and relative symbolic
+links that point to files outside the local directory, but other symbolic links
+are still synced.
 
 EXCLUDING
 =========
@@ -127,11 +116,11 @@ file (see FILES_). Each line in the file specifies a shell globbing pattern
 that represents files to exclude. Excluded files stay in the local directory
 and don't count toward the storage limit. If an excluded file is not already in
 the local directory, it is copied from the remote directory during the next
-sync. In single-client configurations, files are removed from the remote
-directory once they are excluded. In multi-client configurations, a file is
-removed from the remote directory only when it has been excluded by each client
-that shares that remote directory. Until then, a copy remains in the remote
-directory and all copies of the file stay in sync.
+sync. When only one client is using a remote directory, files are removed from
+the remote directory once they are excluded. When multiple clients are sharing
+a remote directory, a file is removed from the remote directory only when it
+has been excluded by each client that shares that remote directory. Until then,
+a copy remains in the remote directory and all copies of the file stay in sync.
 
 Patterns have the following format:
 
@@ -154,14 +143,14 @@ Patterns have the following format:
 TRASH
 =====
 Before **zielen** deletes a file in the remote directory, it first searches for
-the file in the user's local trash directory by comparing file sizes first and
-then checksums. If it finds a copy of the file in the user's local trash, it
-permanently deletes the file in the remote directory. Otherwise, it moves the
-file to a remote trash directory. This directory is '.zielen/Trash' under the
-root of the remote directory. This feature can be disabled in the profile
-config file. The command **empty-trash** can be used to permanently delete all
-files in the remote trash directory. The list of local directories that are
-searched for deleted files can be altered in the profile config file.
+the file in the user's local trash directory. If it finds a copy of the file in
+the user's local trash, it permanently deletes the file in the remote
+directory. Otherwise, it moves the file to a remote trash directory. This
+directory is '.zielen/Trash' under the root of the remote directory. This
+feature can be disabled in the profile config file. The command **empty-trash**
+can be used to permanently delete all files in the remote trash directory. The
+list of local directories that are searched for deleted files can be altered in
+the profile config file.
 
 FILES
 =====
