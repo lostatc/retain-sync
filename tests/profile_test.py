@@ -22,7 +22,7 @@ import re
 
 import pytest
 
-from zielen import PROGRAM_DIR
+from zielen.paths import get_program_dir
 from zielen.exceptions import FileParseError
 from zielen.profile import ProfileDBFile, PathData, ProfileConfigFile
 
@@ -152,7 +152,7 @@ class TestProfileDBFile:
 class TestProfileConfigFile:
     @pytest.fixture
     def cfg_file(self, fs):
-        os.makedirs(PROGRAM_DIR)
+        os.makedirs(get_program_dir())
         os.makedirs("/empty")
         os.makedirs("/not_empty")
         fs.CreateFile("/not_empty/file")
@@ -172,7 +172,7 @@ class TestProfileConfigFile:
     @pytest.mark.parametrize(
         "key,values", [
             ("LocalDir", [
-                "", "rel_path", PROGRAM_DIR, "/nonexistent", "/root",
+                "", "rel_path", get_program_dir(), "/nonexistent", "/root",
                 "/not_empty/file"]),
             ("RemoteHost", ["", "with space"]),
             ("RemoteUser", ["", "with space"]),

@@ -26,7 +26,7 @@ import subprocess
 import tempfile
 from textwrap import indent
 
-from zielen import XDG_RUNTIME_DIR
+from zielen.paths import get_xdg_runtime_dir
 from zielen.utils import shell_cmd
 from zielen.exceptions import RemoteError, InputError
 
@@ -192,8 +192,8 @@ class SSHConnection(Connection):
 
     def _connect(self) -> None:
         """Start an ssh master connection and stop on program exit."""
-        os.makedirs(XDG_RUNTIME_DIR, exist_ok=True)
-        self._ssh_args.extend(["-S", os.path.join(XDG_RUNTIME_DIR, "%C")])
+        os.makedirs(get_xdg_runtime_dir(), exist_ok=True)
+        self._ssh_args.extend(["-S", os.path.join(get_xdg_runtime_dir(), "%C")])
         shell_cmd(self._ssh_args + ["-NM"])
 
     def _execute(self, remote_cmd: list) -> subprocess.Popen:

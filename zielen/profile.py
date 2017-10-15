@@ -34,7 +34,7 @@ from typing import (
 
 import pkg_resources
 
-from zielen import XDG_DATA_HOME, PROGRAM_DIR, PROFILES_DIR
+from zielen.paths import get_xdg_data_home, get_program_dir, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
 from zielen.utils import DictProperty, secure_string
@@ -60,7 +60,7 @@ class Profile:
     """
     def __init__(self, name: str) -> None:
         self.name = name
-        self.path = os.path.join(PROFILES_DIR, self.name)
+        self.path = os.path.join(get_profiles_dir(), self.name)
         self.mnt_dir = os.path.join(self.path, "mnt")
         self._ex_file = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
@@ -351,10 +351,6 @@ class ProfileExcludeFile:
                 # from syncing.
                 #
                 # The patterns follow shell globbing rules as described in zielen(1).
-                #
-                # Lines with a leading slash are patterns that match relative to the root of
-                # the sync directory. Lines without a leading slash are patterns that match the
-                # ends of file paths anywhere in the tree.
                 """))
             if infile == "-":
                 for line in sys.stdin.read():
@@ -857,7 +853,7 @@ class ProfileConfigFile(ConfigFile):
         "SyncInterval": "20",
         "SshfsOptions": (
             "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"),
-        "TrashDirs": os.path.join(XDG_DATA_HOME, "Trash/files"),
+        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "PriorityHalfLife": "120",
         "UseTrash": "yes",
         "SyncExtraFiles": "yes",
@@ -908,8 +904,8 @@ class ProfileConfigFile(ConfigFile):
                 return "must be an absolute path"
 
             value = os.path.expanduser(os.path.normpath(value))
-            if (os.path.commonpath([value, PROGRAM_DIR])
-                    in [value, PROGRAM_DIR]):
+            if (os.path.commonpath([value, get_program_dir()])
+                    in [value, get_program_dir()]):
                 return "must not contain zielen config files"
 
             overlap_profiles = []
@@ -944,7 +940,7 @@ class ProfileConfigFile(ConfigFile):
                 if os.path.isdir(value):
                     if not os.access(value, os.W_OK):
                         return "must be a directory with write access"
-                    elif self.add_remote and os.stat(value).st_size > 0:
+                    elif self.add_remote and list(os.scandir(value)):
                         return "must be an empty directory"
                 else:
                     return "must be a directory"
@@ -988,7 +984,7 @@ class ProfileConfigFile(ConfigFile):
                         if not os.access(value, os.W_OK):
                             return "must be a directory with write access"
                         elif (self.add_remote is False
-                                and os.stat(value).st_size > 0):
+                                and list(os.scandir(value))):
                             return "must be an empty directory"
                     else:
                         return "must be a directory"

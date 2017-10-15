@@ -24,8 +24,7 @@ import socket
 import sys
 import textwrap
 
-
-from zielen import PROFILES_DIR
+from zielen.paths import get_profiles_dir
 from zielen.userdata import LocalSyncDir, DestSyncDir
 from zielen.connect import SSHConnection
 from zielen.profile import Profile
@@ -44,10 +43,10 @@ class Command(abc.ABC):
         _lock_socket: A unix domain socket used for locking a profile.
     """
     def __init__(self) -> None:
-        os.makedirs(PROFILES_DIR, exist_ok=True)
+        os.makedirs(get_profiles_dir(), exist_ok=True)
         self.profiles = {
             entry.name: Profile(entry.name)
-            for entry in os.scandir(PROFILES_DIR)
+            for entry in os.scandir(get_profiles_dir())
             if entry.is_dir(follow_symlinks=False)}
         self.profile = None
         self.local_dir = None
