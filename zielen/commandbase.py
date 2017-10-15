@@ -31,6 +31,16 @@ from zielen.profile import Profile
 from zielen.exceptions import InputError, StatusError
 
 
+def unlock(func):
+    """Unlock the profile when the function returns."""
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        finally:
+            self._lock_socket.close()
+    return wrapper
+
+
 class Command(abc.ABC):
     """Base class for program commands.
 

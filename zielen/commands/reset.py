@@ -23,7 +23,7 @@ import shutil
 from zielen.exceptions import (
     RemoteError, AvailableSpaceError, FileTransferError)
 from zielen.io import rec_clone
-from zielen.commandbase import Command
+from zielen.commandbase import Command, unlock
 
 
 class ResetCommand(Command):
@@ -45,6 +45,7 @@ class ResetCommand(Command):
         self.keep_remote = keep_remote
         self.no_retrieve = no_retrieve
 
+    @unlock
     def main(self) -> None:
         """Run the command."""
         self.setup_profile()

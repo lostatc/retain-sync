@@ -20,7 +20,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import shutil
 
-from zielen.commandbase import Command
+from zielen.commandbase import Command, unlock
 
 
 class EmptyTrashCommand(Command):
@@ -39,6 +39,7 @@ class EmptyTrashCommand(Command):
         self.dest_dir = None
         self.connection = None
 
+    @unlock
     def main(self) -> None:
         """Run the command."""
         self.setup_profile()

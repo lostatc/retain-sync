@@ -28,7 +28,7 @@ from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.userdata import TrashDir
 from zielen.utils import timestamp_path
 from zielen.profile import ProfileExcludeFile
-from zielen.commandbase import Command
+from zielen.commandbase import Command, unlock
 from zielen.fs import FilesManager
 
 DeletedPaths = NamedTuple(
@@ -65,6 +65,7 @@ class SyncCommand(Command):
         super().__init__()
         self.profile = self.select_profile(profile_input)
 
+    @unlock
     def main(self) -> None:
         """Run the command.
 
