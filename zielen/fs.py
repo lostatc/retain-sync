@@ -344,7 +344,7 @@ class FilesManager:
                 - dir_size
                 + subdirs_size
                 + len(contained_files - selected_files) * symlink_size)
-            if new_remaining_space > 0:
+            if new_remaining_space >= 0:
                 # Add the current directory to the set of selected files and
                 # remove all of its subdirectories from the set.
                 selected_subdirs |= contained_dirs
