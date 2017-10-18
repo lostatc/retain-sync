@@ -6,8 +6,8 @@ MAN_DIR = $(PREFIX)/share/man
 LICENSE_DIR = $(PREFIX)/share/licenses/zielen
 SHARE_DIR = $(PREFIX)/share/zielen
 
-INSTALL_DATA = install -m 644
-INSTALL_BIN = install -m 755
+INSTALL_DATA = install -m 644 -D
+INSTALL_BIN = install -m 755 -D
 
 build:
 	make -C "docs" man
@@ -20,12 +20,12 @@ install:
 		--prefix "$(PREFIX)" \
 		--single-version-externally-managed \
 		--record "installed_files.txt"
-	$(INSTALL_BIN) "scripts/zielen" "$(BIN_DIR)"
-	$(INSTALL_BIN) "scripts/zielend" "$(BIN_DIR)"
-	$(INSTALL_DATA) "LICENSE" "$(LICENSE_DIR)"
-	$(INSTALL_DATA) "docs/templates/config-template" "$(SHARE_DIR)"
-	$(INSTALL_DATA) "docs/unit/zielen@.service" "$(UNIT_DIR)"
-	$(INSTALL_DATA) "docs/_build/man/zielen.1" "$(MAN_DIR)/man1"
+	$(INSTALL_BIN) "scripts/zielen" -t "$(BIN_DIR)"
+	$(INSTALL_BIN) "scripts/zielend" -t "$(BIN_DIR)"
+	$(INSTALL_DATA) "LICENSE" -t "$(LICENSE_DIR)"
+	$(INSTALL_DATA) "docs/templates/config-template" -t "$(SHARE_DIR)"
+	$(INSTALL_DATA) "docs/unit/zielen@.service" -t "$(UNIT_DIR)"
+	$(INSTALL_DATA) "docs/_build/man/zielen.1" -t "$(MAN_DIR)/man1"
 	gzip -9f "$(MAN_DIR)/man1/zielen.1"
 
 uninstall:
