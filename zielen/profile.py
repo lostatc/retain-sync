@@ -85,12 +85,13 @@ class Profile:
 
     def read(self) -> None:
         """Load data from persistent storage."""
-        # The order here is important. If a file is not found,
-        # all subsequent files will not be read. The info file should be
-        # read first.
+        # The order here is important. If a file is not found, 
+        # all subsequent files will not be read. The info file should be 
+        # read first. 
         self._info_file.read()
         self._cfg_file.read()
         self._cfg_file.check_all()
+        self._ex_file.reset()
 
     def generate(
             self, add_remote: bool, exclude_path=None,
@@ -338,6 +339,10 @@ class ProfileExcludeFile:
         self.path = path
         self._matches = {}
         self._all_matches = {}
+        
+    def reset(self) -> None:
+        self._matches.clear()
+        self._all_matches.clear()
 
     def generate(self, infile=None) -> None:
         """Generate a new file with comments.

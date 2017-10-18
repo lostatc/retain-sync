@@ -54,7 +54,7 @@ help:
 	@echo "make install:    Install the program normally."
 	@echo "make uninstall:  Uninstall the program."
 	@echo "make clean:      Remove generated files."
-	@echo "make develop:	Install the program in development mode."
+	@echo "make develop:    Install the program in development mode."
 	@echo "make help:       Show this help message."
 
 .PHONY: build install uninstall clean develop help
