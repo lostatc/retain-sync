@@ -341,6 +341,7 @@ class ProfileExcludeFile:
         self._all_matches = {}
         
     def reset(self) -> None:
+        """Clear cached information."""
         self._matches.clear()
         self._all_matches.clear()
 

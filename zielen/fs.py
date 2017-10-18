@@ -198,9 +198,13 @@ class FilesManager:
         if exclude is None:
             exclude = []
 
+        # File stats must be fetched again because files in the remote 
+        # directory may have been updated by changes in the local directory,
+        # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         file_stats = self.dest_dir.scan_paths(
-            dirs=False, exclude=self.profile.ex_matches(self.local_dir.path))
+            dirs=False, exclude=self.profile.ex_matches(self.local_dir.path),
+            memoize=False)
         adjusted_priorities = []
 
         # Adjust directory priorities for size.
@@ -257,10 +261,14 @@ class FilesManager:
             local directory and the amount of space remaining (in bytes) until
             the storage limit is reached.
         """
+        # File stats must be fetched again because files in the remote 
+        # directory may have been updated by changes in the local directory,
+        # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         local_dirs = self.profile.get_paths(directory=True)
         dir_stats = self.dest_dir.scan_paths(
-            exclude=self.profile.ex_matches(self.local_dir.path))
+            exclude=self.profile.ex_matches(self.local_dir.path),
+            memoize=False)
         adjusted_priorities = []
 
         # Calculate the disk usage of each directory and adjust directory
