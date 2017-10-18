@@ -463,7 +463,7 @@ class ProfileInfoFile(JSONFile):
             add_remote: The '--add-remote' command-line option is set.
         """
         unique_id = uuid.uuid4().hex
-        version = float(pkg_resources.get_distribution("zielen").version)
+        version = pkg_resources.get_distribution("zielen").version
         self.vals.update({
             "Status": "partial",
             "LastSync": None,
