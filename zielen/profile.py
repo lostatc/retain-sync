@@ -196,11 +196,11 @@ class Profile:
     @property
     def add_remote(self) -> bool:
         """Whether the '--add-remote' flag was given at initialization."""
-        return self._info_file.vals["InitOpts"]["add_remote"]
+        return self._info_file.vals["InitOptions"]["add_remote"]
 
     @add_remote.setter
     def add_remote(self, value: bool) -> None:
-        self._info_file.vals["InitOpts"]["add_remote"] = value
+        self._info_file.vals["InitOptions"]["add_remote"] = value
 
     @property
     def local_path(self) -> str:
@@ -434,9 +434,9 @@ class ProfileInfoFile(JSONFile):
             "LastAdjust": None,
             "Version": version,
             "ID": unique_id,
-            "InitOpts": {}
+            "InitOptions": {}
             })
-        self.vals["InitOpts"].update(init_options)
+        self.vals["InitOptions"].update(init_options)
         self.write()
 
 
