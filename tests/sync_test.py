@@ -75,9 +75,6 @@ def init_profile(
     with open("template", "w") as file:
         file.write(textwrap.dedent("""\
             LocalDir={0}
-            RemoteHost=localhost
-            RemoteUser=
-            Port=
             RemoteDir={1}
             StorageLimit={2}KiB
             TrashDirs={3}
@@ -121,7 +118,7 @@ def test_new_local_files_are_synced(command):
         file.write("B"*BLOCK_SIZE*2)
     command.main()
 
-    remote_paths = set(command.dest_dir.scan_paths(memoize=False).keys())
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
     assert remote_paths == TEST_PATHS | {"letters/upper/B.txt"}
 
 
@@ -155,7 +152,7 @@ def test_local_deletion_is_synced(command):
     os.remove("local/letters/a.txt")
     command.main()
 
-    remote_paths = set(command.dest_dir.scan_paths(memoize=False).keys())
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
     assert remote_paths == TEST_PATHS - {"letters/a.txt"}
 
 
@@ -206,7 +203,7 @@ def test_conflict_file_is_created(command):
     command.main()
 
     local_paths = command.local_dir.scan_paths(memoize=False).keys()
-    remote_paths = command.dest_dir.scan_paths(memoize=False).keys()
+    remote_paths = command.remote_dir.scan_paths(memoize=False).keys()
     local_conflict_path = os.path.join(
         "local", list(local_paths - TEST_PATHS)[0])
     remote_conflict_path = os.path.join(
@@ -254,7 +251,7 @@ def test_remote_files_moved_to_trash(command):
     command.main()
 
     remote_trash_names = [
-        entry.name for entry in os.scandir(command.dest_dir.trash_dir)]
+        entry.name for entry in os.scandir(command.remote_dir.trash_dir)]
     assert "a.txt" in remote_trash_names
 
 
@@ -263,7 +260,7 @@ def test_remote_files_not_moved_to_trash(command):
     shutil.move("local/letters/a.txt", "trash/deleted.txt")
     command.main()
 
-    assert not list(os.scandir(command.dest_dir.trash_dir))
+    assert not list(os.scandir(command.remote_dir.trash_dir))
 
 
 def test_excluded_files_removed_from_remote_directory(command):
@@ -272,7 +269,7 @@ def test_excluded_files_removed_from_remote_directory(command):
         file.write("/letters/a.txt")
     command.main()
 
-    remote_paths = set(command.dest_dir.scan_paths(memoize=False).keys())
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
     assert remote_paths == TEST_PATHS - {"letters/a.txt"}
 
 
@@ -296,7 +293,7 @@ def test_excluded_files_are_not_synced(command):
         file.write("/letters/upper/B.txt")
     command.main()
 
-    remote_paths = set(command.dest_dir.scan_paths(memoize=False).keys())
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
     assert remote_paths == TEST_PATHS
 
 
@@ -311,7 +308,7 @@ def test_partially_excluded_files_stay_in_remote_directory(command):
         file.write("/letters/upper/B.txt")
     command.main()
 
-    remote_paths = set(command.dest_dir.scan_paths(memoize=False).keys())
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
     assert remote_paths == TEST_PATHS | {"letters/upper/B.txt"}
     
     
@@ -348,7 +345,7 @@ def test_option_use_trash(command):
         file.write("UseTrash=no\n")
     command.main()
 
-    assert not list(os.scandir(command.dest_dir.trash_dir))
+    assert not list(os.scandir(command.remote_dir.trash_dir))
 
 
 def test_option_sync_extra_files(command):

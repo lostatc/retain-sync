@@ -29,14 +29,14 @@ class EmptyTrashCommand(Command):
     Attributes:
         profile: The currently selected profile.
         local_dir: A LocalSyncDir object representing the local directory.
-        dest_dir: A DestSyncDir object representing the destination directory.
+        remote_dir: A RemoteSyncDir object representing the remote directory.
         connection: A Connection object representing the remote connection.
     """
     def __init__(self, profile_input: str) -> None:
         super().__init__()
         self.profile = self.select_profile(profile_input)
         self.local_dir = None
-        self.dest_dir = None
+        self.remote_dir = None
         self.connection = None
 
     @unlock
@@ -45,7 +45,7 @@ class EmptyTrashCommand(Command):
         self.setup_profile()
 
         files_deleted = 0
-        for path in os.scandir(self.dest_dir.trash_dir):
+        for path in os.scandir(self.remote_dir.trash_dir):
             try:
                 os.remove(path)
                 files_deleted += 1

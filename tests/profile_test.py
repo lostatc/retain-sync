@@ -162,9 +162,6 @@ class TestProfileConfigFile:
         cfg = ProfileConfigFile("/config")
         cfg.raw_vals = {
             "LocalDir": "",
-            "RemoteHost": "",
-            "RemoteUser": "",
-            "Port": "",
             "RemoteDir": "",
             "StorageLimit": ""}
         return cfg
@@ -174,39 +171,29 @@ class TestProfileConfigFile:
             ("LocalDir", [
                 "", "rel_path", get_program_dir(), "/nonexistent", "/root",
                 "/not_empty/file"]),
-            ("RemoteHost", ["", "with space"]),
-            ("RemoteUser", ["", "with space"]),
-            ("Port", ["", "0", "65536", "abc"]),
             ("RemoteDir", [
                 "", "rel/path", "/root", "/not_empty/file"]),
             ("StorageLimit", ["", "abc", "123", "3.14", "123QiB"]),
             ("SyncInterval", ["", "abc", "3.14"]),
-            ("SshfsOptions", ["with space"]),
             ("TrashDirs", ["rel/path", "/abs/path:rel/path"]),
             ("PriorityHalfLife", ["", "abc"])
             ])
     def test_incorrect_syntax(self, cfg_file, key, values):
         """Incorrect config values return an error string."""
-        cfg_file.raw_vals["RemoteHost"] = "localhost"
         for value in values:
             assert isinstance(cfg_file.check_value(key, value), str)
 
     @pytest.mark.parametrize(
         "key,values", [
             ("LocalDir", ["/empty"]),
-            ("RemoteHost", ["localhost"]),
-            ("RemoteUser", ["user_name"]),
-            ("Port", ["22"]),
             ("RemoteDir", ["/empty"]),
             ("StorageLimit", ["50MiB", "20 GB"]),
             ("SyncInterval", ["20"]),
-            ("SshfsOptions", ["reconnect,ServerAliveInterval=5"]),
             ("TrashDirs", ["/abs/path:~/path"]),
             ("PriorityHalfLife", ["120"])
             ])
     def test_correct_syntax(self, cfg_file, key, values):
         """Correct config values return None."""
-        cfg_file.raw_vals["RemoteHost"] = "localhost"
         for value in values:
             assert cfg_file.check_value(key, value) is None
 

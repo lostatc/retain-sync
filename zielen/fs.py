@@ -24,7 +24,7 @@ from typing import Iterable, Tuple, Set, NamedTuple
 
 from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
-from zielen.userdata import LocalSyncDir, DestSyncDir, TrashDir
+from zielen.userdata import LocalSyncDir, RemoteSyncDir, TrashDir
 from zielen.utils import timestamp_path
 from zielen.io import is_unsafe_symlink, symlink_tree, rec_clone
 
@@ -164,19 +164,19 @@ class FilesManager:
 
     Args:
         local_dir: A LocalSyncDir object for the local directory.
-        dest_dir: A DestSyncDir object for the remote directory.
+        remote_dir: A RemoteSyncDir object for the remote directory.
         profile: A Profile object for the current profile.
 
     Attributes:
         local_dir: A LocalSyncDir object for the local directory.
-        dest_dir: A DestSyncDir object for the remote directory.
+        remote_dir: A RemoteSyncDir object for the remote directory.
         profile: A Profile object for the current profile.
     """
     def __init__(
-            self, local_dir: LocalSyncDir, dest_dir: DestSyncDir,
+            self, local_dir: LocalSyncDir, remote_dir: RemoteSyncDir,
             profile: Profile) -> None:
         self.local_dir = local_dir
-        self.dest_dir = dest_dir
+        self.remote_dir = remote_dir
         self.profile = profile
 
     def prioritize_files(
@@ -202,7 +202,7 @@ class FilesManager:
         # directory may have been updated by changes in the local directory,
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
-        file_stats = self.dest_dir.scan_paths(
+        file_stats = self.remote_dir.scan_paths(
             dirs=False, exclude=self.profile.ex_matches(self.local_dir.path),
             memoize=False)
         adjusted_priorities = []
@@ -266,7 +266,7 @@ class FilesManager:
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         local_dirs = self.profile.get_paths(directory=True)
-        dir_stats = self.dest_dir.scan_paths(
+        dir_stats = self.remote_dir.scan_paths(
             exclude=self.profile.ex_matches(self.local_dir.path),
             memoize=False)
         adjusted_priorities = []
@@ -276,7 +276,7 @@ class FilesManager:
         for dir_path, dir_data in local_dirs.items():
             dir_priority = dir_data.priority
             dir_size = 0
-            for sub_path in self.dest_dir.get_paths(root=dir_path):
+            for sub_path in self.remote_dir.get_paths(root=dir_path):
                 # Get the size of the files in the remote directory, as
                 # symlinks in the local directory are not followed.
                 dir_size += dir_stats[sub_path].st_blocks * 512
@@ -388,18 +388,17 @@ class FilesManager:
 
         try:
             symlink_tree(
-                self.dest_dir.safe_path, self.local_dir.path,
-                self.dest_dir.get_paths(directory=False),
-                self.dest_dir.get_paths(directory=True))
+                self.remote_dir.safe_path, self.local_dir.path,
+                self.remote_dir.get_paths(directory=False),
+                self.remote_dir.get_paths(directory=True))
 
             rec_clone(
-                self.dest_dir.safe_path, self.local_dir.path,
+                self.remote_dir.safe_path, self.local_dir.path,
                 files=update_paths,
                 msg="Updating local files...")
         except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+            if not os.path.isdir(self.remote_dir.util_dir):
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 
@@ -422,17 +421,16 @@ class FilesManager:
         # Copy modified local files to the remote directory.
         try:
             rec_clone(
-                self.local_dir.path, self.dest_dir.safe_path,
+                self.local_dir.path, self.remote_dir.safe_path,
                 files=update_paths, msg="Updating remote files...")
         except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+            if not os.path.isdir(self.remote_dir.util_dir):
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 
         # Update the time of the last sync for files that have been modified.
-        self.dest_dir.add_paths(update_files, update_dirs, replace=True)
+        self.remote_dir.add_paths(update_files, update_dirs, replace=True)
 
     def _setup_dir(self, unsafe_symlinks: Set[str]) -> None:
         """Add file paths to both databases and overwrite with symlinks.
@@ -440,18 +438,18 @@ class FilesManager:
         Args:
             unsafe_symlinks: The paths of symlinks that should not be included.
         """
-        remote_files = self.dest_dir.scan_paths(
+        remote_files = self.remote_dir.scan_paths(
             dirs=False).keys() - unsafe_symlinks
-        remote_dirs = self.dest_dir.scan_paths(
+        remote_dirs = self.remote_dir.scan_paths(
             files=False, symlinks=False).keys()
 
         self.profile.add_paths(remote_files, remote_dirs)
-        self.dest_dir.add_paths(remote_files, remote_dirs)
+        self.remote_dir.add_paths(remote_files, remote_dirs)
 
         # Overwrite local files with symlinks to the corresponding files in the
         # remote dir.
         symlink_tree(
-            self.dest_dir.safe_path, self.local_dir.path,
+            self.remote_dir.safe_path, self.local_dir.path,
             self.profile.get_paths(directory=False),
             self.profile.get_paths(directory=True),
             overwrite=True)
@@ -467,21 +465,20 @@ class FilesManager:
 
         # Check that there is enough remote space to accommodate local
         # files.
-        if self.local_dir.disk_usage() > self.dest_dir.space_avail():
+        if self.local_dir.disk_usage() > self.remote_dir.space_avail():
             raise AvailableSpaceError(
                 "not enough space in remote to accommodate local files")
 
         try:
             rec_clone(
-                self.local_dir.path, self.dest_dir.safe_path,
+                self.local_dir.path, self.remote_dir.safe_path,
                 exclude=(
                     self.profile.ex_matches(self.local_dir.path)
                     | unsafe_symlinks),
                 msg="Moving files to remote...")
         except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+            if not os.path.isdir(self.remote_dir.util_dir):
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 
@@ -490,11 +487,11 @@ class FilesManager:
     def setup_from_remote(self) -> None:
         """Symlink initial remote files to the local directory."""
         unsafe_symlinks = {
-            link_path for link_path in self.dest_dir.scan_paths(
+            link_path for link_path in self.remote_dir.scan_paths(
                 files=False, dirs=False).keys()
             if is_unsafe_symlink(
-                os.path.join(self.dest_dir.path, link_path),
-                self.dest_dir.path)}
+                os.path.join(self.remote_dir.path, link_path),
+                self.remote_dir.path)}
 
         self._setup_dir(unsafe_symlinks)
 
@@ -528,7 +525,7 @@ class FilesManager:
             in self.local_dir.scan_paths().items()}
         remote_mtimes = {
             path: data.st_mtime for path, data
-            in self.dest_dir.scan_paths().items()}
+            in self.remote_dir.scan_paths().items()}
 
         local_diff = PathsDiff(local_paths)
         remote_diff = PathsDiff(remote_paths)
@@ -607,7 +604,7 @@ class FilesManager:
         new_local_paths -= self.profile.ex_all_matches(
             self.local_dir.path)
         new_remote_paths = {
-            path for path in self.dest_dir.scan_paths().keys()
+            path for path in self.remote_dir.scan_paths().keys()
             if not self.profile.get_path_info(path)}
 
         return UpdatedPaths(new_local_paths, new_remote_paths)
@@ -633,7 +630,7 @@ class FilesManager:
             (path, data.st_mtime) for path, data in self.local_dir.scan_paths(
                 dirs=False).items())
         remote_mtimes = (
-            (path, data.st_mtime) for path, data in self.dest_dir.scan_paths(
+            (path, data.st_mtime) for path, data in self.remote_dir.scan_paths(
                 dirs=False).items())
 
         # Only include file paths that are in the database to exclude files
@@ -647,7 +644,7 @@ class FilesManager:
             path for path, mtime in remote_mtimes
             if mtime > last_sync and self.profile.get_path_info(path)}
 
-        remote_mod_paths |= self.dest_dir.get_paths(
+        remote_mod_paths |= self.remote_dir.get_paths(
             directory=False, min_lastsync=last_sync).keys()
 
         return UpdatedPaths(local_mod_paths, remote_mod_paths)
@@ -666,7 +663,7 @@ class FilesManager:
             be moved to the trash.
         """
         local_paths = self.local_dir.scan_paths().keys()
-        remote_paths = self.dest_dir.scan_paths().keys()
+        remote_paths = self.remote_dir.scan_paths().keys()
         known_paths = self.profile.get_paths().keys()
 
         # Compute files that need to be deleted, not including the files
@@ -678,7 +675,7 @@ class FilesManager:
             sub_paths.remove(path)
             local_del_paths -= sub_paths
         for path in remote_del_paths.copy():
-            sub_paths = set(self.dest_dir.get_paths(root=path).keys())
+            sub_paths = set(self.remote_dir.get_paths(root=path).keys())
             sub_paths.remove(path)
             remote_del_paths -= sub_paths
 
@@ -687,9 +684,9 @@ class FilesManager:
         if self.profile.use_trash:
             local_trash_dir = TrashDir(self.profile.trash_dirs)
             for path in remote_del_paths:
-                dest_path = os.path.join(self.dest_dir.safe_path, path)
+                remote_path = os.path.join(self.remote_dir.safe_path, path)
                 try:
-                    if not local_trash_dir.check_file(dest_path):
+                    if not local_trash_dir.check_file(remote_path):
                         trash_paths.add(path)
                 except FileNotFoundError:
                     # This is needed in case the previous sync was
@@ -730,9 +727,9 @@ class FilesManager:
                 new_file_paths.add(new_path)
 
         self.profile.rm_paths(old_paths)
-        self.dest_dir.rm_paths(old_paths)
+        self.remote_dir.rm_paths(old_paths)
         self.profile.add_paths(new_file_paths, new_dir_paths)
-        self.dest_dir.add_paths(new_file_paths, new_dir_paths)
+        self.remote_dir.add_paths(new_file_paths, new_dir_paths)
 
     def rename_local_files(
             self, path_pairs: Iterable[Tuple[str, str]]) -> None:
@@ -753,11 +750,10 @@ class FilesManager:
                 renamed (first) and their new paths (second).
         """
         try:
-            self._rename_files(path_pairs, self.dest_dir.safe_path)
+            self._rename_files(path_pairs, self.remote_dir.safe_path)
         except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+            if not os.path.isdir(self.remote_dir.util_dir):
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 
@@ -779,7 +775,7 @@ class FilesManager:
                 pass
 
         self.profile.rm_paths(paths)
-        self.dest_dir.rm_paths(paths)
+        self.remote_dir.rm_paths(paths)
 
     def rm_local_files(self, paths: Iterable[str]) -> None:
         """Delete local files and remove them from both databases.
@@ -800,7 +796,7 @@ class FilesManager:
         Args:
             paths: The relative paths of files to remove.
         """
-        self._rm_files(paths, self.dest_dir.path)
+        self._rm_files(paths, self.remote_dir.path)
 
     def rm_excluded_files(self, excluded_paths: Iterable[str]) -> None:
         """Remove excluded files from the remote directory.
@@ -811,9 +807,9 @@ class FilesManager:
         Args:
             excluded_paths: The paths of excluded files to remove.
         """
-        rm_paths = self.dest_dir.check_excluded(
+        rm_paths = self.remote_dir.check_excluded(
             excluded_paths, self.local_dir.path)
-        rm_paths &= self.dest_dir.get_paths().keys()
+        rm_paths &= self.remote_dir.get_paths().keys()
         self.rm_remote_files(rm_paths)
 
     def trash_files(self, paths: Iterable[str]) -> None:
@@ -826,18 +822,17 @@ class FilesManager:
             paths: The relative paths of files to move to the trash.
         """
         try:
-            os.mkdir(self.dest_dir.trash_dir)
+            os.mkdir(self.remote_dir.trash_dir)
         except FileExistsError:
             pass
         except FileNotFoundError:
-            if not os.path.isdir(self.dest_dir.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+            if not os.path.isdir(self.remote_dir.util_dir):
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 
         trash_filenames = {
-            entry.name for entry in os.scandir(self.dest_dir.trash_dir)}
+            entry.name for entry in os.scandir(self.remote_dir.trash_dir)}
         old_paths = list(paths)
         old_filenames = [os.path.basename(path) for path in old_paths]
 
@@ -859,11 +854,11 @@ class FilesManager:
         for old_path, new_filename in zip(old_paths, new_filenames):
             try:
                 os.rename(
-                    os.path.join(self.dest_dir.safe_path, old_path),
-                    os.path.join(self.dest_dir.trash_dir, new_filename))
+                    os.path.join(self.remote_dir.safe_path, old_path),
+                    os.path.join(self.remote_dir.trash_dir, new_filename))
             except FileNotFoundError:
                 # This could happen if a previous sync was interrupted.
                 pass
 
         self.profile.rm_paths(old_paths)
-        self.dest_dir.rm_paths(old_paths)
+        self.remote_dir.rm_paths(old_paths)

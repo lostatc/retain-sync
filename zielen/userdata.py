@@ -214,13 +214,8 @@ class LocalSyncDir(SyncDir):
         os.makedirs(path, exist_ok=True)
 
 
-class DestSyncDir(SyncDir):
+class RemoteSyncDir(SyncDir):
     """Perform operations on a remote sync directory.
-
-    The "destination directory" is the location in the local filesystem where
-    remote files can be accessed. This distinction is important when the remote
-    directory is on another computer. In that case, the destination directory
-    is the mount point.
 
     Attributes:
         util_dir: Contains special program files.
@@ -275,8 +270,7 @@ class DestSyncDir(SyncDir):
             shutil.copy(filepath, os.path.join(self._ex_dir, profile_id))
         except FileNotFoundError:
             if not os.path.isdir(self.util_dir):
-                raise RemoteError(
-                    "the connection to the remote directory was lost")
+                raise RemoteError("the remote directory could not be found")
             else:
                 raise
 

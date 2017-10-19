@@ -26,11 +26,10 @@ import atexit
 import sqlite3
 import textwrap
 
-from zielen.exceptions import InputError, RemoteError, AvailableSpaceError
-from zielen.connect import SSHConnection
+from zielen.exceptions import InputError
 from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
 from zielen.fs import FilesManager
-from zielen.userdata import LocalSyncDir, DestSyncDir
+from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.profile import Profile, ProfileConfigFile
 from zielen.commandbase import Command, unlock
 
@@ -45,9 +44,7 @@ class InitCommand(Command):
         template: The argument for the "--template" option.
         add_remote: The "--add-remote" options was given.
         local_dir: A LocalSyncDir object representing the local directory.
-        dest_dir: A DestSyncDir object representing the destination directory.
-        connection: A Connection object representing the connection to the
-            remote directory.
+        remote_dir: A RemoteSyncDir object representing the remote directory.
     """
     def __init__(self, profile_input: str, exclude=None, template=None,
                  add_remote=False) -> None:
@@ -57,8 +54,7 @@ class InitCommand(Command):
         self.template = template
         self.add_remote = add_remote
         self.local_dir = None
-        self.dest_dir = None
-        self.connection = None
+        self.remote_dir = None
 
     @unlock
     def main(self) -> None:
@@ -66,9 +62,6 @@ class InitCommand(Command):
 
         Raises:
             InputError: The command-line arguments were invalid.
-            RemoteError: The connection to the remote directory was lost.
-            AvailableSpaceError: There is not enough space in the local or
-                remote filesystem.
         """
         # Define cleanup functions.
         def cleanup_profile() -> None:
@@ -127,15 +120,8 @@ class InitCommand(Command):
             self.add_remote = self.profile.add_remote
 
             self.local_dir = LocalSyncDir(self.profile.local_path)
-            if self.profile.remote_host:
-                self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-                self.connection = SSHConnection(
-                    self.profile.remote_host, self.profile.remote_user,
-                    self.profile.port, self.profile.remote_path,
-                    self.profile.sshfs_options)
-            else:
-                self.dest_dir = DestSyncDir(self.profile.remote_path)
-            fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
+            self.remote_dir = RemoteSyncDir(self.profile.remote_path)
+            fm = FilesManager(self.local_dir, self.remote_dir, self.profile)
         else:
             # Start a new initialization.
             atexit.register(delete_profile)
@@ -144,16 +130,8 @@ class InitCommand(Command):
             self.profile.generate(self.add_remote, self.exclude, self.template)
 
             self.local_dir = LocalSyncDir(self.profile.local_path)
-            if self.profile.remote_host:
-                self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-                self.connection = SSHConnection(
-                    self.profile.remote_host, self.profile.remote_user,
-                    self.profile.port, self.profile.remote_path,
-                    self.profile.sshfs_options)
-                self.connection.check_remote(self.add_remote)
-            else:
-                self.dest_dir = DestSyncDir(self.profile.remote_path)
-            fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
+            self.remote_dir = RemoteSyncDir(self.profile.remote_path)
+            fm = FilesManager(self.local_dir, self.remote_dir, self.profile)
 
             # The profile is now partially initialized. If the
             # initialization is interrupted from this point, it can be
@@ -161,11 +139,7 @@ class InitCommand(Command):
             atexit.register(self.print_interrupt_msg)
             atexit.unregister(delete_profile)
 
-        if self.profile.remote_host:
-            atexit.register(self.connection.unmount, self.dest_dir.path)
-            self.connection.mount(self.dest_dir.path)
-
-        self.dest_dir.generate()
+        self.remote_dir.generate()
 
         # Copy files and/or create symlinks.
         if self.add_remote:
@@ -175,12 +149,10 @@ class InitCommand(Command):
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
-        self.dest_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
+        self.remote_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
 
         # The profile is now fully initialized. Update the profile.
-        if self.profile.remote_host:
-            atexit.unregister(self.connection.unmount)
-        self.dest_dir.write()
+        self.remote_dir.write()
         self.profile.status = "initialized"
         self.profile.last_sync = time.time()
         self.profile.last_adjust = time.time()

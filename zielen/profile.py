@@ -50,7 +50,6 @@ class Profile:
     Attributes:
         name: The name of the profile.
         path: The path of the profile directory.
-        mnt_dir: The path of the remote mountpoint.
         cfg_path: The path of the configuration file.
         ex_path: The path of the exclude file.
         _ex_file: An object for the exclude pattern file.
@@ -61,7 +60,6 @@ class Profile:
     def __init__(self, name: str) -> None:
         self.name = name
         self.path = os.path.join(get_profiles_dir(), self.name)
-        self.mnt_dir = os.path.join(self.path, "mnt")
         self._ex_file = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
         self._info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
@@ -116,11 +114,8 @@ class Profile:
 
         self._cfg_file.add_remote = add_remote
         self._cfg_file.prompt()
+
         if template_path:
-            # This final check is necessary for cases where a template was
-            # used that contained values dependent on other unspecified
-            # values for validity checking (e.g. 'RemoteDir' and 'RemoteHost').
-            self._cfg_file.check_all(context="template file")
             self._cfg_file.write(template_path)
         else:
             # TODO: Get the path of the master config template from
@@ -218,28 +213,6 @@ class Profile:
             os.path.normpath(self._cfg_file.vals["LocalDir"]))
 
     @property
-    def remote_host(self) -> Optional[str]:
-        """The hostname, ip address or domain name of the remote machine.
-
-        'None' refers to the local machine.
-        """
-        value = self._cfg_file.vals["RemoteHost"]
-        if value in self._cfg_file.HOST_SYNONYMS:
-            return None
-        else:
-            return value
-
-    @property
-    def remote_user(self) -> str:
-        """The name of the user on the remote machine."""
-        return self._cfg_file.vals["RemoteUser"]
-
-    @property
-    def port(self) -> str:
-        """The port number for the connection."""
-        return self._cfg_file.vals["Port"]
-
-    @property
     def remote_path(self) -> str:
         """The absolute path of the remote directory."""
         return os.path.expanduser(
@@ -270,11 +243,6 @@ class Profile:
     def sync_interval(self) -> int:
         """The number of seconds the daemon will wait between syncs."""
         return int(self._cfg_file.vals["SyncInterval"]) * 60
-
-    @property
-    def sshfs_options(self) -> str:
-        """The mount options to pass to sshfs."""
-        return self._cfg_file.vals["SshfsOptions"]
 
     @property
     def trash_dirs(self) -> List[str]:
@@ -801,32 +769,26 @@ class ProfileDBFile(SyncDBFile):
 class ProfileConfigFile(ConfigFile):
     """The profile's configuration file.
 
-    The default values for some options are stored in the code. This allows
-    the user to comment those values out to return them to their default
-    values, and it also allows for new values to be added in the future
-    without requiring users to update their config files. These values are
-    not commented out by default, however, so that the defaults can be
-    changed in the future without affecting existing users.
+    The default values for some options are stored in this class. This
+    allows the user to comment those values out to return them to their
+    default values, and it also allows for new values to be added in the
+    future without requiring users to update their config files. These
+    values are not commented out by default, however, so that the defaults
+    can be changed in the future without affecting existing users.
 
     Attributes:
         _instances: A weakly-referenced set of instances of this class.
         TRUE_VALS: A list of strings that are recognized as boolean true.
         FALSE_VALS: A list of strings that are recognized as boolean false.
-        HOST_SYNONYMS: A list of strings that are synonyms for 'localhost'.
-        _req_keys: A list of config keys that must be included in the config
-            file.
-        _opt_keys: A list of config keys that may be commented out or omitted.
+        _required_keys: A list of config keys that must be included in the
+            config file.
+        _optional_keys: A list of config keys that may be commented out or
+            omitted.
         _all_keys: A list of all keys that are recognized in the config file.
-        _prompt_keys: A subset of config keys that the user needs to be
-            prompted for values for.
         _bool_keys: A subset of config keys that must have boolean values.
-        _connect_keys: A subset of config keys that only need values when
-            the remote directory is on another machine.
         _defaults: A dictionary of default string values for optional config
             keys.
-        _subs: A dictionary of string values to substitute in if the user
-            leaves a prompt blank.
-        _prompt_msgs: The messages to use when prompting the user for config
+        _prompt_messages: The messages to use when prompting the user for config
             values.
         path: The path of the configuration file.
         profile: The Profile object that the config file belongs to.
@@ -837,47 +799,31 @@ class ProfileConfigFile(ConfigFile):
     _instances = weakref.WeakSet()
     TRUE_VALS = ["yes", "true"]
     FALSE_VALS = ["no", "false"]
-    HOST_SYNONYMS = ["localhost", "127.0.0.1"]
-    _req_keys = [
-        "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
-        "StorageLimit"
+    _required_keys = [
+        "LocalDir", "RemoteDir", "StorageLimit"
         ]
-    _opt_keys = [
-        "SyncInterval", "SshfsOptions", "TrashDirs", "PriorityHalfLife",
-        "UseTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+    _optional_keys = [
+        "SyncInterval", "PriorityHalfLife", "TrashDirs", "UseTrash",
+        "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
-    _all_keys = _req_keys + _opt_keys
-    _prompt_keys = [
-        "LocalDir", "RemoteHost", "RemoteUser", "Port", "RemoteDir",
-        "StorageLimit"
-        ]
+    _all_keys = _required_keys + _optional_keys
     _bool_keys = [
         "UseTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
         ]
-    _connect_keys = ["RemoteUser", "Port"]
     _defaults = {
         "SyncInterval": "20",
-        "SshfsOptions": (
-            "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3"),
-        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "PriorityHalfLife": "120",
+        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "UseTrash": "yes",
         "SyncExtraFiles": "yes",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
         }
-    _subs = {
-        "RemoteHost":   HOST_SYNONYMS[0],
-        "RemoteUser":   getpass.getuser(),
-        "Port":         "22"
-        }
-    _prompt_msgs = {
-        "LocalDir":     "Local directory path",
-        "RemoteHost":   "Hostname, IP address or domain name of the remote",
-        "RemoteUser":   "Your user name on the server",
-        "Port":         "Port number for the connection",
-        "RemoteDir":    "Remote directory path",
-        "StorageLimit": "Amount of data to keep synced locally"
+    _prompt_messages = {
+        "LocalDir":     "The path of the local sync directory.",
+        "RemoteDir":    "The path of the remote sync directory.",
+        "StorageLimit": "The amount of data to keep in the local directory. "
+                        "This accepts KB, MB, GB, KiB, MiB and GiB as units. "
         }
 
     def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
@@ -897,7 +843,7 @@ class ProfileConfigFile(ConfigFile):
             A string corresponding to the syntax error (if any).
         """
         # Check if required values are blank.
-        if key in self._req_keys and not value:
+        if key in self._required_keys and not value:
             return "must not be blank"
 
         # Check boolean values.
@@ -961,47 +907,27 @@ class ProfileConfigFile(ConfigFile):
                         return "must be a directory with write access"
                 else:
                     return "must be an existing directory"
-        elif key == "RemoteHost":
-            if not value:
-                return "must not be blank"
-            if re.search("\s+", value):
-                return "must not contain spaces"
-        elif key == "RemoteUser":
-            if not value:
-                return "must not be blank"
-            if re.search("\s+", value):
-                return "must not contain spaces"
-        elif key == "Port":
-            if not value:
-                return "must not be blank"
-            if (not re.search("^[0-9]+$", value)
-                    or not 65535 > int(value) > 1):
-                return "must be an integer in the range 1-65535"
         elif key == "RemoteDir":
-            # In order to keep the interactive interface responsive, we don't
-            # do any checking of the remote directory that requires connecting
-            # over ssh.
             if not re.search("^~?/", value):
                 return "must be an absolute path"
             value = os.path.expanduser(os.path.normpath(value))
-            if self.raw_vals["RemoteHost"] in self.HOST_SYNONYMS:
-                if os.path.exists(value):
-                    if os.path.isdir(value):
-                        if not os.access(value, os.W_OK):
-                            return "must be a directory with write access"
-                        elif (self.add_remote is False
-                                and list(os.scandir(value))):
-                            return "must be an empty directory"
-                    else:
-                        return "must be a directory"
+            if os.path.exists(value):
+                if os.path.isdir(value):
+                    if not os.access(value, os.W_OK):
+                        return "must be a directory with write access"
+                    elif (self.add_remote is False
+                            and list(os.scandir(value))):
+                        return "must be an empty directory"
                 else:
-                    if self.add_remote:
-                        return "must be an existing directory"
-                    else:
-                        try:
-                            os.makedirs(value)
-                        except PermissionError:
-                            return "must be in a directory with write access"
+                    return "must be a directory"
+            else:
+                if self.add_remote:
+                    return "must be an existing directory"
+                else:
+                    try:
+                        os.makedirs(value)
+                    except PermissionError:
+                        return "must be in a directory with write access"
 
         elif key == "StorageLimit":
             if not re.search(r"^[0-9]+\s*[kKMG](B|iB)?$", value):
@@ -1009,10 +935,6 @@ class ProfileConfigFile(ConfigFile):
         elif key == "SyncInterval":
             if not re.search("^[0-9]+$", value):
                 return "must be an integer"
-        elif key == "SshfsOptions":
-            if value:
-                if re.search("\s+", value):
-                    return "must not contain spaces"
         elif key == "TrashDirs":
             if value:
                 if re.search("(^|:)(?!~?/)", value):
@@ -1035,7 +957,7 @@ class ProfileConfigFile(ConfigFile):
         parse_errors = []
 
         # Check that all key names are valid.
-        missing_keys = set(self._req_keys) - self.raw_vals.keys()
+        missing_keys = set(self._required_keys) - self.raw_vals.keys()
         unrecognized_keys = self.raw_vals.keys() - set(self._all_keys)
         for key in missing_keys:
             parse_errors.append(
@@ -1046,12 +968,6 @@ class ProfileConfigFile(ConfigFile):
 
         # Check values for valid syntax.
         for key, value in self.raw_vals.items():
-            # If the remote directory is on the local machine, then certain
-            # options should not be checked.
-            if (self.raw_vals["RemoteHost"] in self.HOST_SYNONYMS
-                    and key in self._connect_keys):
-                continue
-
             if check_empty or not check_empty and value:
                 err_msg = self.check_value(key, value)
                 if err_msg:
@@ -1076,38 +992,27 @@ class ProfileConfigFile(ConfigFile):
 
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
-        msg_printed = False
-        for key in self._prompt_keys:
-            # If the remote directory is on the local machine, then the user
-            # should not be prompted for certain settings.
-            if (self.raw_vals.get("RemoteHost") in self.HOST_SYNONYMS
-                    and key in self._connect_keys):
-                self.vals[key] = ""
-                continue
+        prompt_keys = [
+            key for key in  self._required_keys
+            if key not in self.raw_vals.keys()]
+        if not prompt_keys:
+            return
 
-            if key in self._subs:
-                # Add the default value to the end of the prompt message.
-                self._prompt_msgs[key] += " ({}): ".format(self._subs[key])
-            else:
-                self._prompt_msgs[key] += ": "
-
-            # We don't use a defaultdict for this so that we can know if a
-            # config file has been read based on whether raw_vals is empty.
-            if not self.raw_vals.get(key):
-                if not msg_printed:
-                    print(textwrap.dedent("""\
-                    Please enter values for the following settings. Leave blank to accept the
-                    default value if one is given in parentheses.
-                    """))
-                    msg_printed = True
-                while True:
-                    usr_input = input(self._prompt_msgs[key]).strip()
-                    if not usr_input and key in self._subs:
-                        usr_input = self._subs[key]
-                    err_msg = self.check_value(key, usr_input)
-                    if err_msg:
-                        print("Error: this value " + err_msg, file=sys.stderr)
-                    else:
-                        break
-                self.vals[key] = usr_input
+        print(textwrap.dedent("""\
+            Please enter values for the following settings.
+            """))
+        for key in prompt_keys:
+            while True:
+                print("\n".join(
+                    textwrap.wrap(self._prompt_messages[key], width=79)))
+                user_input = input("> ").strip()
+                print()
+                error_message = self.check_value(key, user_input)
+                if error_message:
+                    print(
+                        "Error: this value " + error_message, file=sys.stderr)
+                else:
+                    break
+                print()
+            self.vals[key] = user_input
         print()

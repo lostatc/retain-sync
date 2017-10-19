@@ -3,23 +3,11 @@
 #
 
 
-
 # The following options must always be present.
 # =============================================================================
 
 # The path of the local sync directory.
 LocalDir=
-
-# The hostname, IP address or domain name of the remote. Use 'localhost' if the
-# remote directory is on the local machine.
-RemoteHost=
-
-# The user name on the server. This is ignored if 'RemoteHost' is 'localhost'.
-RemoteUser=
-
-# The port number for the connection. This is ignored if 'RemoteHost' is
-# 'localhost'.
-Port=
 
 # The path of the remote sync directory.
 RemoteDir=
@@ -29,7 +17,6 @@ RemoteDir=
 StorageLimit=
 
 
-
 # The following options can be commented out or omitted and their default
 # values will be used.
 # =============================================================================
@@ -37,18 +24,15 @@ StorageLimit=
 # The amount of time (in minutes) that the daemon will wait between syncs.
 SyncInterval=20
 
-# Mount options to pass to sshfs.
-SshfsOptions=reconnect,ServerAliveInterval=5,ServerAliveCountMax=3
-
-# A colon-separated list of directory paths in which to search for deleted
-# files.
-TrashDirs=~/.local/share/Trash/files
-
 # The priority of every file decreases exponentially over time while the
 # machine is running. This value is the half-life of file priorities in hours.
 # Increasing it increases the amount of time that files "remember" being
 # accessed. Decreasing it weights the file priority toward more recent access.
 PriorityHalfLife=120
+
+# A colon-separated list of directory paths in which to search for deleted
+# files.
+TrashDirs=~/.local/share/Trash/files
 
 # When local files are deleted and aren't found in the user's local trash
 # directory, put the remote copy in the remote trash directory instead of

@@ -32,9 +32,7 @@ class ResetCommand(Command):
     Attributes:
         profile: The currently selected profile.
         local_dir: A LocalSyncDir object representing the local directory.
-        dest_dir: A DestSyncDir object representing the destination directory.
-        connection: A Connection object representing the connection to the
-            remote directory.
+        remote_dir: A RemoteSyncDir object representing the remote directory.
         keep_remote: The "--keep-remote" option was given.
         no_retrieve: The "--no-retrieve" option was given.
     """
@@ -47,42 +45,51 @@ class ResetCommand(Command):
 
     @unlock
     def main(self) -> None:
-        """Run the command."""
+        """Run the command.
+
+        Raises:
+            RemoteError: The remote directory could not be found.
+        """
         self.setup_profile()
 
         if not self.no_retrieve:
             # Check if there is enough space locally to accommodate remote
             # files.
-            if self.dest_dir.disk_usage() > self.local_dir.space_avail():
+            if self.remote_dir.disk_usage() > self.local_dir.space_avail():
                 raise AvailableSpaceError(
                     "not enough local space to accommodate remote files")
 
             # Retrieve remote files.
             try:
                 rec_clone(
-                    self.dest_dir.safe_path, self.local_dir.path,
-                    files=self.dest_dir.get_paths(),
+                    self.remote_dir.safe_path, self.local_dir.path,
+                    files=self.remote_dir.get_paths(),
                     msg="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
-                if not os.path.isdir(self.dest_dir.util_dir):
+                if not os.path.isdir(self.remote_dir.util_dir):
                     raise RemoteError(
-                        "the connection to the remote directory was lost")
+                        "the remote directory could not be found")
                 else:
                     raise
 
             if not self.keep_remote:
                 # Check that the remote directory contains only empty
                 # directories and the util directory.
-                if self.dest_dir.scan_paths(dirs=False, memoize=False):
+                if self.remote_dir.scan_paths(dirs=False, memoize=False):
                     raise FileTransferError("some files were not retrieved")
 
-                # Close the database connection, and then remove the program
-                # directory. If the database connection is not closed,
-                # the util directory will not be able to be deleted.
-                self.dest_dir.close()
+                # Close the database connection, and then remove the
+                # contents of the remote directory. If the database
+                # connection is not closed, the util directory will not be
+                # able to be deleted.
+                self.remote_dir.close()
                 try:
-                    shutil.rmtree(self.dest_dir.path)
+                    for entry in os.scandir(self.remote_dir.path):
+                        if entry.is_dir:
+                            shutil.rmtree(entry.path)
+                        else:
+                            os.remove(entry.path)
                 except FileNotFoundError:
                     pass
 
@@ -97,15 +104,8 @@ class ResetCommand(Command):
                 link_dest = os.path.join(os.path.dirname(full_path), link_dest)
             if os.path.commonpath([
                     link_dest,
-                    self.dest_dir.safe_path]) == self.dest_dir.safe_path:
+                    self.remote_dir.safe_path]) == self.remote_dir.safe_path:
                 os.remove(full_path)
 
-        self.dest_dir.rm_exclude_file(self.profile.id)
-
-        # Unmount the remote directory and delete the profile directory.
-        if self.profile.remote_host:
-            # The directory will not unmount if the database connection is
-            # still open.
-            self.dest_dir.close()
-            self.connection.unmount(self.profile.mnt_dir)
+        self.remote_dir.rm_exclude_file(self.profile.id)
         shutil.rmtree(self.profile.path)

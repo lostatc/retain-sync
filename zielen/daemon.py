@@ -73,10 +73,7 @@ class Daemon(Command):
         sync_thread.start()
 
         local_dir = self.profile.local_path
-        if self.profile.remote_host:
-            dest_dir = self.profile.mnt_dir
-        else:
-            dest_dir = self.profile.remote_path
+        remote_dir = self.profile.remote_path
 
         wm = pyinotify.WatchManager()
         notifier = pyinotify.ThreadedNotifier(
@@ -85,7 +82,7 @@ class Daemon(Command):
         notifier.start()
 
         mask = pyinotify.IN_OPEN | pyinotify.IN_CREATE
-        watch_paths = [local_dir, dest_dir]
+        watch_paths = [local_dir, remote_dir]
         for watch_path in watch_paths:
             wm.add_watch(watch_path, mask, rec=True, auto_add=True)
 

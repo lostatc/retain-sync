@@ -22,12 +22,6 @@ import shutil
 import time
 from typing import Iterable, Set, NamedTuple, Tuple, List
 
-
-from zielen.exceptions import RemoteError
-from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
-from zielen.userdata import TrashDir
-from zielen.utils import timestamp_path
-from zielen.profile import ProfileExcludeFile
 from zielen.commandbase import Command, unlock
 from zielen.fs import FilesManager
 
@@ -58,7 +52,7 @@ class SyncCommand(Command):
     Attributes:
         profile: The currently selected profile.
         local_dir: A LocalSyncDir object representing the local directory.
-        dest_dir: A DestSyncDir object representing the destination directory.
+        remote_dir: A RemoteSyncDir object representing the remote directory.
         connection: A Connection object representing the remote connection.
     """
     def __init__(self, profile_input: str) -> None:
@@ -67,22 +61,18 @@ class SyncCommand(Command):
 
     @unlock
     def main(self) -> None:
-        """Run the command.
-
-        Raises:
-            RemoteError: The connection to the remote directory was lost.
-        """
+        """Run the command."""
         self.setup_profile()
-        fm = FilesManager(self.local_dir, self.dest_dir, self.profile)
-        self.dest_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
+        fm = FilesManager(self.local_dir, self.remote_dir, self.profile)
+        self.remote_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
 
         # Scan the local and remote directories.
         file_paths = (
             self.local_dir.scan_paths(dirs=False).keys()
-            | self.dest_dir.scan_paths(dirs=False).keys())
+            | self.remote_dir.scan_paths(dirs=False).keys())
         dir_paths = (
             self.local_dir.scan_paths(files=False, symlinks=False).keys()
-            | self.dest_dir.scan_paths(files=False, symlinks=False).keys())
+            | self.remote_dir.scan_paths(files=False, symlinks=False).keys())
 
         # Get the paths of files that have been added, deleted or modified
         # since the last sync.
@@ -96,7 +86,7 @@ class SyncCommand(Command):
         new_local_dirs = (new_paths.local - file_paths)
         new_file_paths = (new_paths.all - dir_paths)
         new_dir_paths = (new_paths.all - file_paths)
-        self.dest_dir.add_paths(new_file_paths, new_dir_paths)
+        self.remote_dir.add_paths(new_file_paths, new_dir_paths)
         self.profile.add_paths(new_file_paths, new_dir_paths)
         if self.profile.inflate_priority:
             self.profile.add_inflated(
@@ -114,7 +104,7 @@ class SyncCommand(Command):
 
         # Add any new files that have been created in the process of
         # handling conflicts to both databases.
-        self.dest_dir.add_paths(updated_paths.all, [])
+        self.remote_dir.add_paths(updated_paths.all, [])
         self.profile.add_paths(updated_paths.all, [])
         if self.profile.inflate_priority:
             self.profile.add_inflated(
@@ -129,7 +119,7 @@ class SyncCommand(Command):
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
             self.profile.ex_all_matches(self.local_dir.path)
-            & self.dest_dir.scan_paths().keys())
+            & self.remote_dir.scan_paths().keys())
 
         # Decide which files and directories to keep in the local directory.
         remaining_space, selected_dirs = fm.prioritize_dirs(
@@ -150,6 +140,6 @@ class SyncCommand(Command):
 
         # The sync is now complete. Update the time of the last sync in the
         # info file.
-        self.dest_dir.write()
+        self.remote_dir.write()
         self.profile.last_sync = time.time()
         self.profile.write()

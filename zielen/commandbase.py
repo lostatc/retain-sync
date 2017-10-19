@@ -25,19 +25,21 @@ import sys
 import textwrap
 
 from zielen.paths import get_profiles_dir
-from zielen.userdata import LocalSyncDir, DestSyncDir
-from zielen.connect import SSHConnection
+from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.profile import Profile
 from zielen.exceptions import InputError, StatusError
 
 
 def unlock(func):
-    """Unlock the profile when the function returns."""
+    """Unlock the profile when the function exits."""
     def wrapper(self, *args, **kwargs):
         try:
             return func(self, *args, **kwargs)
         finally:
-            self._lock_socket.close()
+            try:
+                self.lock_socket.close()
+            except AttributeError:
+                pass
     return wrapper
 
 
@@ -48,9 +50,8 @@ class Command(abc.ABC):
         profiles: A dictionary of Profile instances.
         profile: The currently selected profile.
         local_dir: A LocalSyncDir object representing the local directory.
-        dest_dir: A DestSyncDir object representing the destination directory.
-        connection: A Connection object representing the remote connection.
-        _lock_socket: A unix domain socket used for locking a profile.
+        remote_dir: A RemoteSyncDir object representing the remote directory.
+        lock_socket: A unix domain socket used for locking a profile.
     """
     def __init__(self) -> None:
         os.makedirs(get_profiles_dir(), exist_ok=True)
@@ -60,9 +61,8 @@ class Command(abc.ABC):
             if entry.is_dir(follow_symlinks=False)}
         self.profile = None
         self.local_dir = None
-        self.dest_dir = None
-        self.connection = None
-        self._lock_socket = None
+        self.remote_dir = None
+        self.lock_socket = None
 
     @abc.abstractmethod
     def main(self) -> None:
@@ -107,19 +107,7 @@ class Command(abc.ABC):
             raise InputError("invalid profile")
 
         self.local_dir = LocalSyncDir(self.profile.local_path)
-        if self.profile.remote_host:
-            self.connection = SSHConnection(
-                self.profile.remote_host, self.profile.remote_user,
-                self.profile.port, self.profile.remote_path,
-                self.profile.sshfs_options)
-            if not os.path.isdir(self.profile.mnt_dir):
-                # Unmount if mountpoint is broken.
-                self.connection.unmount(self.profile.mnt_dir)
-            if not os.path.ismount(self.profile.mnt_dir):
-                self.connection.mount(self.profile.mnt_dir)
-            self.dest_dir = DestSyncDir(self.profile.mnt_dir)
-        else:
-            self.dest_dir = DestSyncDir(self.profile.remote_path)
+        self.remote_dir = RemoteSyncDir(self.profile.remote_path)
 
     def lock(self) -> None:
         """Lock the profile if not already locked.
@@ -131,13 +119,13 @@ class Command(abc.ABC):
         Raises:
             StatusError: The program is already locked for this profile.
         """
-        self._lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
             # We can't use the profile ID here because during
             # initialization, the info file hasn't been generated yet.
             instance_id = "-".join([
                 "zielen", str(os.getuid()), self.profile.name])
-            self._lock_socket.bind("\0" + instance_id)
+            self.lock_socket.bind("\0" + instance_id)
         except socket.error:
             raise StatusError(
                 "another operation on this profile is already taking place")

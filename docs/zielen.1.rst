@@ -10,22 +10,20 @@ DESCRIPTION
 **zielen** is a program that distributes files between a local and remote
 directory based on how frequently they're accessed with the intent of
 conserving disk space. This remote directory can be on a separate hard drive or
-a separate machine entirely (using ssh). Files are prioritized based on how
-frequently and recently they've been accessed as well as the file size. The
-highest-priority files are kept in the local directory for quick access, while
-lower priority files are moved to the remote directory to conserve disk space.
-It uses symbolic links to allow files in the remote directory to be accessible
-from the local one. The user can specify how much data they want to remain in
-the local directory at any given point in time. Multiple local directories can
-be synced concurrently with either different remote directories or the same
-one. Since local directories on different machines can pair with the same
-remote directory, **zielen** can be used to sync files between machines.
+a separate machine entirely as long as it is accessible through the filesystem.
 
-**zielen** is intended as a single-user solution only. It does not require root
-access, and is meant to run as an unprivileged user. If the remote directory is
-located on a separate machine, **zielen** does not need to be installed on that
-machine to function, although you do need to have passwordless ssh access to it
-(i.e. via public key authentication with an ssh agent).
+Files are prioritized based on how frequently and recently they've been
+accessed as well as the file size. The highest-priority files are kept in the
+local directory for quick access, while lower priority files are moved to the
+remote directory to conserve disk space.  It uses symbolic links to allow files
+in the remote directory to be accessible from the local one. The user can
+specify how much data they want to remain in the local directory at any given
+point in time. Since local directories on different machines can pair with the
+same remote directory, **zielen** can be used to sync files between machines.
+
+**zielen** does not require root access, and is meant to run as an unprivileged
+user. If the remote directory is located on a separate machine, **zielen** does
+not need to be installed on that machine to function.
 
 Terminology
 -----------
@@ -61,8 +59,7 @@ Storage Limit
     the local directory. The program will fill the local directory until it
     reaches this size, starting with the highest priority files. File size is
     calculated based on disk usage as opposed to apparent size. Excluded files
-    don't count toward the storage limit. Setting it to zero will prevent any
-    files from remaining in the local directory.
+    don't count toward the storage limit (See EXCLUDING_).
 
 GLOBAL OPTIONS
 ==============
@@ -165,10 +162,6 @@ FILES
     profiles/<name>/
         This directory exists for each profile that the user has created, where
         <name> is the name of the profile.
-
-        mnt/
-            This is the sshfs mountpoint for the remote directory. Symbolic
-            links in the local directory point to files in this directory.
 
         config
             This is the configuration file for the profile. It contains
