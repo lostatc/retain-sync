@@ -153,26 +153,19 @@ class TestProfileConfigFile:
     @pytest.fixture
     def cfg_file(self, fs):
         os.makedirs(get_program_dir())
-        os.makedirs("/empty")
-        os.makedirs("/not_empty")
-        fs.CreateFile("/not_empty/file")
-        os.makedirs("/root")
-        os.chmod("/root", 000)
 
         cfg = ProfileConfigFile("/config")
         cfg.raw_vals = {
             "LocalDir": "",
             "RemoteDir": "",
             "StorageLimit": ""}
+
         return cfg
 
     @pytest.mark.parametrize(
         "key,values", [
-            ("LocalDir", [
-                "", "rel_path", get_program_dir(), "/nonexistent", "/root",
-                "/not_empty/file"]),
-            ("RemoteDir", [
-                "", "rel/path", "/root", "/not_empty/file"]),
+            ("LocalDir", ["", "rel_path"]),
+            ("RemoteDir", ["", "rel/path"]),
             ("StorageLimit", ["", "abc", "123", "3.14", "123QiB"]),
             ("SyncInterval", ["", "abc", "3.14"]),
             ("TrashDirs", ["rel/path", "/abs/path:rel/path"]),

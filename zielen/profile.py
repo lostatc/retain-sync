@@ -22,7 +22,6 @@ import re
 import sys
 import glob
 import uuid
-import weakref
 import getpass
 import sqlite3
 import datetime
@@ -34,7 +33,7 @@ from typing import (
 
 import pkg_resources
 
-from zielen.paths import get_xdg_data_home, get_program_dir, get_profiles_dir
+from zielen.paths import get_xdg_data_home, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
 from zielen.utils import DictProperty, secure_string
@@ -65,8 +64,7 @@ class Profile:
         self._info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
         self._db_file = ProfileDBFile(
             os.path.join(self.path, "local.db"))
-        self._cfg_file = ProfileConfigFile(
-            os.path.join(self.path, "config"), profile_obj=self)
+        self._cfg_file = ProfileConfigFile(os.path.join(self.path, "config"))
 
         # Import methods from content classes.
         self.cfg_path = self._cfg_file.path
@@ -92,13 +90,13 @@ class Profile:
         self._ex_file.reset()
 
     def generate(
-            self, add_remote: bool, exclude_path=None,
+            self, init_options: Dict[str, Any], exclude_path=None,
             template_path=None) -> None:
         """Generate files for storing persistent data."""
         os.makedirs(self.path, exist_ok=True)
 
         self._ex_file.generate(exclude_path)
-        self._info_file.generate(self.name, add_remote)
+        self._info_file.generate(self.name, init_options)
 
         try:
             self._db_file.create()
@@ -106,13 +104,11 @@ class Profile:
             pass
 
         if template_path:
-            template_file = ProfileConfigFile(
-                template_path, add_remote=add_remote)
+            template_file = ProfileConfigFile(template_path)
             template_file.read()
             template_file.check_all(check_empty=False, context="template file")
             self._cfg_file.raw_vals = template_file.raw_vals
 
-        self._cfg_file.add_remote = add_remote
         self._cfg_file.prompt()
 
         if template_path:
@@ -423,7 +419,7 @@ class ProfileInfoFile(JSONFile):
         super().__init__(path)
         self.vals = collections.defaultdict(lambda: None)
 
-    def generate(self, name: str, add_remote=False) -> None:
+    def generate(self, name: str, init_options: Dict[str, Any]) -> None:
         """Generate info for a new profile.
 
         Args:
@@ -438,10 +434,9 @@ class ProfileInfoFile(JSONFile):
             "LastAdjust": None,
             "Version": version,
             "ID": unique_id,
-            "InitOpts": {
-                "add_remote": add_remote
-                }
+            "InitOpts": {}
             })
+        self.vals["InitOpts"].update(init_options)
         self.write()
 
 
@@ -777,7 +772,6 @@ class ProfileConfigFile(ConfigFile):
     can be changed in the future without affecting existing users.
 
     Attributes:
-        _instances: A weakly-referenced set of instances of this class.
         TRUE_VALS: A list of strings that are recognized as boolean true.
         FALSE_VALS: A list of strings that are recognized as boolean false.
         _required_keys: A list of config keys that must be included in the
@@ -796,7 +790,6 @@ class ProfileConfigFile(ConfigFile):
         raw_vals: A dictionary of raw config value strings.
         vals: A dict property of parsed config values.
     """
-    _instances = weakref.WeakSet()
     TRUE_VALS = ["yes", "true"]
     FALSE_VALS = ["no", "false"]
     _required_keys = [
@@ -826,12 +819,6 @@ class ProfileConfigFile(ConfigFile):
                         "This accepts KB, MB, GB, KiB, MiB and GiB as units. "
         }
 
-    def __init__(self, path: str, profile_obj=None, add_remote=None) -> None:
-        super().__init__(path)
-        self.profile = profile_obj
-        self.add_remote = add_remote
-        self._instances.add(self)
-
     def check_value(self, key: str, value: str) -> Optional[str]:
         """Check the syntax of a config option and return an error message.
 
@@ -854,81 +841,9 @@ class ProfileConfigFile(ConfigFile):
         if key == "LocalDir":
             if not re.search("^~?/", value):
                 return "must be an absolute path"
-
-            value = os.path.expanduser(os.path.normpath(value))
-            if (os.path.commonpath([value, get_program_dir()])
-                    in [value, get_program_dir()]):
-                return "must not contain zielen config files"
-
-            overlap_profiles = []
-            for instance in self._instances:
-                # Check if value overlaps with the 'LocalDir' of another
-                # profile.
-                if (not instance.profile
-                        or not os.path.isfile(instance.path)
-                        or not self.profile
-                        or instance.profile.name == self.profile.name):
-                    # Do not include instances that do not belong to a
-                    # profile, instances that do not have a config file in
-                    # the filesystem or the current instance.
-                    continue
-                name = instance.profile.name
-                if not instance.raw_vals:
-                    instance.read()
-                other_value = os.path.expanduser(
-                    os.path.normpath(instance.vals["LocalDir"]))
-                common = os.path.commonpath([other_value, value])
-                if common in [other_value, value]:
-                    overlap_profiles.append(name)
-
-            if overlap_profiles:
-                # Print a comma-separated list of conflicting profile names
-                # after the error message.
-                suffix = "s" if len(overlap_profiles) > 1 else ""
-                return ("overlaps with the profile{0} {1}".format(
-                    suffix,
-                    ", ".join("'{}'".format(x) for x in overlap_profiles)))
-            elif os.path.exists(value):
-                if os.path.isdir(value):
-                    if not os.access(value, os.W_OK):
-                        return "must be a directory with write access"
-                    elif self.add_remote and list(os.scandir(value)):
-                        return "must be an empty directory"
-                else:
-                    return "must be a directory"
-            else:
-                if self.add_remote:
-                    check_path = value
-                    while os.path.dirname(check_path) != check_path:
-                        if os.access(check_path, os.W_OK):
-                            break
-                        check_path = os.path.dirname(check_path)
-                    else:
-                        return "must be a directory with write access"
-                else:
-                    return "must be an existing directory"
         elif key == "RemoteDir":
             if not re.search("^~?/", value):
                 return "must be an absolute path"
-            value = os.path.expanduser(os.path.normpath(value))
-            if os.path.exists(value):
-                if os.path.isdir(value):
-                    if not os.access(value, os.W_OK):
-                        return "must be a directory with write access"
-                    elif (self.add_remote is False
-                            and list(os.scandir(value))):
-                        return "must be an empty directory"
-                else:
-                    return "must be a directory"
-            else:
-                if self.add_remote:
-                    return "must be an existing directory"
-                else:
-                    try:
-                        os.makedirs(value)
-                    except PermissionError:
-                        return "must be in a directory with write access"
-
         elif key == "StorageLimit":
             if not re.search(r"^[0-9]+\s*[kKMG](B|iB)?$", value):
                 return "must be an integer followed by a unit (e.g. 10GB)"
@@ -993,8 +908,8 @@ class ProfileConfigFile(ConfigFile):
     def prompt(self) -> None:
         """Prompt the user interactively for unset required values."""
         prompt_keys = [
-            key for key in  self._required_keys
-            if key not in self.raw_vals.keys()]
+            key for key in self._required_keys
+            if key not in self.raw_vals.keys() or not self.raw_vals[key]]
         if not prompt_keys:
             return
 
@@ -1015,4 +930,3 @@ class ProfileConfigFile(ConfigFile):
                     break
                 print()
             self.vals[key] = user_input
-        print()

@@ -23,7 +23,7 @@ import os
 import sys
 import tempfile
 import textwrap
-from typing import Iterable
+from typing import Iterable, Optional
 
 from zielen.utils import shell_cmd, ProgressBar
 from zielen.exceptions import FileTransferError
@@ -262,3 +262,31 @@ def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
                     parent_path.rstrip(os.sep) + os.sep)):
             return False
     return True
+
+
+def check_dir(path: str, expect_empty: bool) -> Optional[str]:
+    """Check if a given directory path is valid.
+
+    Args:
+        path: The directory path to check.
+        expect_empty: The directory should either be empty or not exist.
+
+    Returns:
+        An error message if the directory is not valid, and None otherwise.
+    """
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            if not os.access(path, os.W_OK):
+                return "must be a directory with write access"
+            elif expect_empty and list(os.scandir(path)):
+                return "must be an empty directory"
+        else:
+            return "must be a directory"
+    else:
+        if expect_empty:
+            try:
+                os.makedirs(path)
+            except PermissionError:
+                return "must be in a directory with write access"
+        else:
+            return "must be an existing directory"

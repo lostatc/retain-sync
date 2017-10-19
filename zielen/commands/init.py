@@ -19,18 +19,18 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import os
 import re
-import sys
 import time
 import shutil
 import atexit
-import sqlite3
 import textwrap
+from typing import Optional
 
+from zielen.paths import get_program_dir
 from zielen.exceptions import InputError
-from zielen.io import rec_clone, symlink_tree, is_unsafe_symlink
+from zielen.io import check_dir
 from zielen.fs import FilesManager
 from zielen.userdata import LocalSyncDir, RemoteSyncDir
-from zielen.profile import Profile, ProfileConfigFile
+from zielen.profile import Profile
 from zielen.commandbase import Command, unlock
 
 
@@ -95,8 +95,8 @@ class InitCommand(Command):
                 raise InputError(
                     "argument for '--template' is not a valid file")
 
-        self.profile = Profile(self.profile_input)
         atexit.register(cleanup_profile)
+        self.profile = Profile(self.profile_input)
         try:
             self.profile.read()
         except FileNotFoundError:
@@ -127,7 +127,24 @@ class InitCommand(Command):
             atexit.register(delete_profile)
 
             # Generate all files in the profile directory.
-            self.profile.generate(self.add_remote, self.exclude, self.template)
+            init_options = {
+                "add_remote": self.add_remote}
+            self.profile.generate(
+                init_options=init_options, exclude_path=self.exclude,
+                template_path=self.template)
+
+            # Check validity of local and remote directories.
+            error_message = check_dir(
+                self.profile.local_path, self.add_remote)
+            if error_message:
+                raise InputError("local directory {}".format(error_message))
+            error_message = self._verify_local_dir(self.profile.local_path)
+            if error_message:
+                raise InputError(error_message)
+            error_message = check_dir(
+                self.profile.remote_path, not self.add_remote)
+            if error_message:
+                raise InputError("remote directory {}".format(error_message))
 
             self.local_dir = LocalSyncDir(self.profile.local_path)
             self.remote_dir = RemoteSyncDir(self.profile.remote_path)
@@ -164,3 +181,38 @@ class InitCommand(Command):
             'systemctl --user start zielen@{0}.service'
             'systemctl --user enable zielen@{0}.service'""".format(
                 self.profile.name)))
+
+    def _verify_local_dir(self, dir_path: str) -> Optional[str]:
+        """Verity that local directory path doesn't overlap other profiles.
+
+        Also verify that the local directory path doesn't overlap with the
+        program directory.
+
+        Args:
+            dir_path: The absolute path of the local directory.
+
+        Returns:
+            An error message if the local directory is invalid and None
+            otherwise.
+        """
+        common_path = os.path.commonpath([dir_path, get_program_dir()])
+        if common_path in [dir_path, get_program_dir()]:
+            return "local directory must not contain zielen config files"
+
+        overlap_profiles = []
+        for name, profile in self.profiles.items():
+            if profile is self.profile or not os.path.isfile(profile.cfg_path):
+                continue
+
+            profile.read()
+
+            common_path = os.path.commonpath([profile.local_path, dir_path])
+            if common_path in [profile.local_path, dir_path]:
+                overlap_profiles.append(name)
+
+        if overlap_profiles:
+            # Print a comma-separated list of conflicting profile names
+            # after the error message.
+            suffix = "s" if len(overlap_profiles) > 1 else ""
+            return "local directory overlaps with the profile{0} {1}".format(
+                suffix, ", ".join("'{}'".format(x) for x in overlap_profiles))
