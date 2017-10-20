@@ -27,6 +27,8 @@ import pytest
 
 from zielen.commands.sync import SyncCommand
 from zielen.commands.init import InitCommand
+from zielen.profile import PathData as LocalPathData
+from zielen.userdata import PathData as RemotePathData
 
 # zielen takes the disk usage of files into account as opposed to their
 # apparent size when calculating which ones to keep in the local directory.
@@ -408,3 +410,23 @@ def test_option_account_for_size(command):
         "letters/upper/A.txt"}
     assert local_paths == {"numbers/1.txt"}
     assert local_symlink_paths == expected_symlink_paths
+
+
+def test_deleted_files_are_removed_from_databases(command):
+    """Files removed from both directories are removed from both databases."""
+    os.remove("local/letters/a.txt")
+    os.remove("remote/letters/a.txt")
+    command.main()
+
+    assert "letters/a.txt" not in command.profile.get_paths()
+    assert "letters/a.txt" not in command.remote_dir.get_paths()
+
+
+def test_excluded_files_are_removed_from_databases(command):
+    """Excluded files are removed from both databases."""
+    with open(command.profile.ex_path, "a") as file:
+        file.write("/letters/a.txt")
+    command.main()
+
+    assert "letters/a.txt" not in command.profile.get_paths()
+    assert "letters/a.txt" not in command.remote_dir.get_paths()
