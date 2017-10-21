@@ -83,7 +83,6 @@ def init_profile(
             """.format(
             local_path, remote_path, BLOCK_SIZE*10 // 1024, trash_path)))
 
-    # This is done in a subprocess
     init_command = InitCommand(
         profile_name, template="template", add_remote=add_remote)
     init_command.main()

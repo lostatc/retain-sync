@@ -76,6 +76,8 @@ def temp_dir(monkeypatch):
         "XDG_CONFIG_HOME", os.path.join(tmp_dir.name, "home", ".config"))
     os.chdir(tmp_dir.name)
 
+    # This function must yield instead of returning so that the temporary
+    # directory object isn't cleaned up before the test.
     yield tmp_dir.name
 
     tmp_dir.cleanup()
