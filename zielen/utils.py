@@ -18,6 +18,7 @@ You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import os
+import re
 import atexit
 import collections
 import shutil
@@ -25,7 +26,7 @@ import subprocess
 import datetime
 import random
 import string
-from typing import List
+from typing import List, Tuple
 
 
 def shell_cmd(input_cmd: list) -> subprocess.Popen:
@@ -185,32 +186,101 @@ class ProgressBar:
                   flush=True, end="\r")
 
 
-def print_table(headers: list, data: List[tuple]) -> None:
-    """Print input values in a formatted ascii table.
+class BoxTable:
+    """Format a table using box-drawing characters.
 
-    All values in the table are left-aligned, and columns are as wide as
-    their longest value.
+    This table allows for ANSI escape codes in the data. Each row must have
+    the same number of columns. The contents of each row are left-aligned.
+    Empty rows are converted to horizontal separators.
 
-    Args:
-        headers: The values to use as column headings.
-        data: The values used to fill the body of the table. Each item in this
-            tuple represents a row in the table.
+    Attributes:
+        data: The table data, where each item is a row in the table. The first
+            row makes up the table headers.
     """
-    column_lengths = []
-    for content, header in zip(zip(*data), headers):
-        column = [str(item) for item in [*content, header]]
-        column_lengths.append(len(max(column, key=len)))
+    HORIZONTAL_CHAR = "\u2500"
+    VERTICAL_CHAR = "\u2502"
+    TOP_RIGHT_CHAR = "\u2510"
+    TOP_LEFT_CHAR = "\u250c"
+    BOTTOM_RIGHT_CHAR = "\u2518"
+    BOTTOM_LEFT_CHAR = "\u2514"
+    CROSS_CHAR = "\u253c"
+    TOP_TEE_CHAR = "\u252c"
+    BOTTOM_TEE_CHAR = "\u2534"
+    LEFT_TEE_CHAR = "\u251c"
+    RIGHT_TEE_CHAR = "\u2524"
+    ANSI_REGEX = re.compile("(\x1b\\[[0-9;]+m)")
 
-    # Print the table header.
-    print(" | ".join([
-        "{0:<{1}}".format(name, width)
-        for name, width in zip(headers, column_lengths)]))
+    def __init__(self, data: List[Tuple[str, ...]]):
+        if not all(len(row) == len(data[0]) for row in data):
+            raise ValueError("each row must be the same length")
+        self.data = data
+        self._lengths = self._get_column_lengths()
 
-    # Print the separator between the header and body.
-    print("-+-".join(["-"*length for length in column_lengths]))
+    def _get_column_lengths(self) -> List[int]:
+        """Get the length of each column in the table."""
+        columns = [column for column in zip(*self.data)]
+        lengths = []
+        for column in columns:
+            visible_column = [self.ANSI_REGEX.sub("", item) for item in column]
+            lengths.append(len(max(visible_column, key=len)))
+        return lengths
 
-    # Print the table body.
-    for row in data:
-        print(" | ".join([
-             "{0:<{1}}".format(field, width)
-             for field, width in zip(row, column_lengths)]))
+    def _get_separator(self) -> List[str]:
+        """Get the inside portion of a separator row."""
+        return [self.HORIZONTAL_CHAR * (length+2) for length in self._lengths]
+
+    def _format_top_separator(self) -> str:
+        """Format the top border of the table."""
+        return (
+            self.TOP_LEFT_CHAR
+            + self.TOP_TEE_CHAR.join(self._get_separator())
+            + self.TOP_RIGHT_CHAR)
+
+    def _format_bottom_separator(self) -> str:
+        """Format the top border of the table."""
+        return (
+            self.BOTTOM_LEFT_CHAR
+            + self.BOTTOM_TEE_CHAR.join(self._get_separator())
+            + self.BOTTOM_RIGHT_CHAR)
+
+    def _format_inside_separator(self) -> str:
+        """Format the row separator."""
+        return (
+            self.LEFT_TEE_CHAR
+            + self.CROSS_CHAR.join(self._get_separator())
+            + self.RIGHT_TEE_CHAR)
+
+    def _format_row(self) -> str:
+        """Format a row containing data."""
+        for row in self.data:
+            if not any(row):
+                yield self._format_inside_separator()
+            else:
+                # str.format() can't be used for padding because it doesn't
+                # ignore ANSI escape sequences.
+                padding = [
+                    length - len(self.ANSI_REGEX.sub("", text))
+                    for text, length in zip(row, self._lengths)]
+                inside = " {} ".format(self.VERTICAL_CHAR).join(
+                    text + " "*spaces for text, spaces in zip(row, padding))
+
+                yield (
+                    self.VERTICAL_CHAR
+                    + " " + inside + " "
+                    + self.VERTICAL_CHAR)
+
+    def format(self) -> str:
+        """Format the table data into a string.
+
+        Returns:
+            The table as a string.
+        """
+        data_rows = self._format_row()
+        table_lines = [
+            self._format_top_separator(),
+            next(data_rows),
+            self._format_inside_separator(),
+            *data_rows,
+            self._format_bottom_separator()]
+
+        return "\n".join(table_lines)

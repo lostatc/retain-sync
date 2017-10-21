@@ -17,7 +17,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-from zielen.utils import print_table
+from zielen.utils import BoxTable
 from zielen.commandbase import Command
 
 
@@ -29,12 +29,14 @@ class ListCommand(Command):
     def main(self) -> None:
         if not self.profiles:
             print("\n-- No profiles --\n")
-        else:
-            for name, profile in self.profiles.items():
-                profile.read()
+            return
 
-            table_headers = ["Profile", "Local Directory"]
-            table_data = [
-                (name, profile.local_path)
-                for name, profile in self.profiles.items()]
-            print_table(table_headers, table_data)
+        for name, profile in self.profiles.items():
+            profile.read()
+
+        table_data = [
+            (name, profile.local_path)
+            for name, profile in self.profiles.items()]
+        table_data.insert(0, ("Profile", "Local Directory"))
+        table = BoxTable(table_data)
+        print(table.format())
