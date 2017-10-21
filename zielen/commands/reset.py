@@ -31,8 +31,6 @@ class ResetCommand(Command):
 
     Attributes:
         profile: The currently selected profile.
-        local_dir: A LocalSyncDir object representing the local directory.
-        remote_dir: A RemoteSyncDir object representing the remote directory.
         keep_remote: The "--keep-remote" option was given.
         no_retrieve: The "--no-retrieve" option was given.
     """

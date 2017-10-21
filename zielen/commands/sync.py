@@ -51,9 +51,6 @@ class SyncCommand(Command):
 
     Attributes:
         profile: The currently selected profile.
-        local_dir: A LocalSyncDir object representing the local directory.
-        remote_dir: A RemoteSyncDir object representing the remote directory.
-        connection: A Connection object representing the remote connection.
     """
     def __init__(self, profile_input: str) -> None:
         super().__init__()

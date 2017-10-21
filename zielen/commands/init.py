@@ -43,8 +43,6 @@ class InitCommand(Command):
         exclude: The argument for the "--exclude" option.
         template: The argument for the "--template" option.
         add_remote: The "--add-remote" options was given.
-        local_dir: A LocalSyncDir object representing the local directory.
-        remote_dir: A RemoteSyncDir object representing the remote directory.
     """
     def __init__(self, profile_input: str, exclude=None, template=None,
                  add_remote=False) -> None:
@@ -53,8 +51,6 @@ class InitCommand(Command):
         self.exclude = exclude
         self.template = template
         self.add_remote = add_remote
-        self.local_dir = None
-        self.remote_dir = None
 
     @unlock
     def main(self) -> None:
