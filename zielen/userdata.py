@@ -233,7 +233,7 @@ class RemoteSyncDir(SyncDir):
         self.safe_path = os.path.normpath(os.path.join(self.util_dir, ".."))
         self.trash_dir = os.path.join(self.util_dir, "Trash")
         self._ex_dir = os.path.join(self.util_dir, "exclude")
-        self._db_file = DestDBFile(os.path.join(self.util_dir, "remote.db"))
+        self._db_file = RemoteDBFile(os.path.join(self.util_dir, "remote.db"))
 
         # Import methods from content classes.
         self.add_paths = self._db_file.add_paths
@@ -321,7 +321,7 @@ class RemoteSyncDir(SyncDir):
             exclude=exclude, memoize=memoize)
 
 
-class DestDBFile(SyncDBFile):
+class RemoteDBFile(SyncDBFile):
     """Manipulate the remote file database.
 
     This database uses a transitive closure table to represent the file

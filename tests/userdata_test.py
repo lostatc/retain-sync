@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from zielen.userdata import TrashDir, DestDBFile, PathData, SyncDir
+from zielen.userdata import TrashDir, RemoteDBFile, PathData, SyncDir
 
 
 class TestTrashDir:
@@ -147,7 +147,7 @@ class TestProfileDBFile:
             "documents/report.odt"
         ]
 
-        database = DestDBFile(":memory:")
+        database = RemoteDBFile(":memory:")
         database.create()
         monkeypatch.setattr("time.time", lambda: 1495316810)
         database.add_paths(test_files, test_dirs)
