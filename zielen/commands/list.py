@@ -17,6 +17,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
+from zielen.profile import ProfileConfigFile
 from zielen.utils import BoxTable
 from zielen.commandbase import Command
 
@@ -31,12 +32,20 @@ class ListCommand(Command):
             print("\n-- No profiles --\n")
             return
 
+        config_files = []
         for name, profile in self.profiles.items():
-            profile.read()
+            # New ProfileConfigFile objects are created so that they syntax
+            # of the config files isn't checked.
+            config_file = ProfileConfigFile(profile.cfg_path)
+            config_file.read()
+            config_files.append((name, config_file))
 
-        table_data = [
-            (name, profile.local_path)
-            for name, profile in self.profiles.items()]
-        table_data.insert(0, ("Profile", "Local Directory"))
+        table_data = [(
+                name, config_file.vals["LocalDir"],
+                config_file.vals["RemoteDir"],
+                config_file.vals["StorageLimit"])
+            for name, config_file in config_files]
+        table_data.insert(0, (
+            "Profile", "Local Directory", "Remote Directory", "Limit"))
         table = BoxTable(table_data)
         print(table.format())
