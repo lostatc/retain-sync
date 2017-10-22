@@ -94,7 +94,7 @@ remote directories since the last sync. These conflicts are handled by renaming
 the file that was modified the least recently. The new file name contains the
 word "conflict" and the date and time of the sync.
 
-When calculating which files to storey locally, **zielen** considers whole
+When calculating which files to store locally, **zielen** considers whole
 directory trees. If a directory is retained locally, than all of its
 subdirectories are retained as well.
 
@@ -130,8 +130,8 @@ Patterns have the following format:
 * A set of brackets '[]' matches any single character contained within the
   brackets.
 * To match any of the above meta-characters literally, wrap them in brackets.
-* File names starting with a dot '.' are not matched unless the pattern
-  explicitly includes a dot.
+* File names starting with a dot '.' (hidden files) are not matched unless the
+  pattern explicitly includes a dot.
 * Patterns ending with a slash only match directory paths.
 * Patterns starting with a slash match file paths relative to the root of the
   sync directory.
@@ -145,11 +145,14 @@ Before **zielen** deletes a file in the remote directory, it first searches for
 the file in the user's local trash directory. If it finds a copy of the file in
 the user's local trash, it permanently deletes the file in the remote
 directory. Otherwise, it moves the file to a remote trash directory. This
-directory is '.zielen/Trash' under the root of the remote directory. This
-feature can be disabled in the profile config file. The command **empty-trash**
-can be used to permanently delete all files in the remote trash directory. The
-list of local directories that are searched for deleted files can be altered in
-the profile config file.
+directory is '.zielen/Trash' in the remote directory.
+
+This feature can be disabled in the profile config file. Files in the remote
+trash directory are automatically deleted after 30 days, but this can be
+customized in the profile config file. The command **empty-trash** can be used
+to permanently delete all files in the remote trash directory. The list of
+local directories that are searched for deleted files can be altered in the
+profile config file.
 
 FILES
 =====

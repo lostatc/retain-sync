@@ -250,6 +250,15 @@ class Profile:
         return dirs
 
     @property
+    def cleanup_period(self) -> Optional[int]:
+        """The number of seconds before files in the trash are deleted."""
+        value = self._cfg_file.vals["TrashCleanupPeriod"]
+        if value.startswith("-"):
+            return None
+        else:
+            return int(value) * 60 * 60 * 24
+
+    @property
     def priority_half_life(self) -> int:
         """The half-life of file priorities in seconds."""
         return int(self._cfg_file.vals["PriorityHalfLife"]) * 60**2
@@ -791,8 +800,8 @@ class ProfileConfigFile(ConfigFile):
         "LocalDir", "RemoteDir", "StorageLimit"
         ]
     _optional_keys = [
-        "SyncInterval", "PriorityHalfLife", "TrashDirs", "UseTrash",
-        "InflatePriority", "AccountForSize"
+        "SyncInterval", "PriorityHalfLife", "UseTrash", "TrashDirs",
+        "TrashCleanupPeriod", "InflatePriority", "AccountForSize"
         ]
     _all_keys = _required_keys + _optional_keys
     _bool_keys = [
@@ -801,8 +810,9 @@ class ProfileConfigFile(ConfigFile):
     _defaults = {
         "SyncInterval": "20",
         "PriorityHalfLife": "120",
-        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "UseTrash": "yes",
+        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
+        "TrashCleanupPeriod": "30",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
         }
@@ -844,12 +854,15 @@ class ProfileConfigFile(ConfigFile):
         elif key == "SyncInterval":
             if not re.search("^[0-9]+$", value):
                 return "must be an integer"
+        elif key == "PriorityHalfLife":
+            if not re.search("^[0-9]+$", value):
+                return "must be an integer"
         elif key == "TrashDirs":
             if value:
                 if re.search("(^|:)(?!~?/)", value):
                     return "only accepts absolute paths"
-        elif key == "PriorityHalfLife":
-            if not re.search("^[0-9]+$", value):
+        elif key == "TrashCleanupPeriod":
+            if not re.search(r"^-?[0-9]+$", value):
                 return "must be an integer"
 
     def check_all(self, check_empty=True, context="config file") -> None:

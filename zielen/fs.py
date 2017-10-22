@@ -17,8 +17,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import copy
 import os
+import copy
+import time
 import shutil
 from typing import Iterable, Tuple, Set, NamedTuple
 
@@ -862,3 +863,13 @@ class FilesManager:
 
         self.profile.rm_paths(old_paths)
         self.remote_dir.rm_paths(old_paths)
+
+    def cleanup_trash(self) -> None:
+        """Delete old files from the remote trash directory."""
+        cutoff_time = time.time() - self.profile.cleanup_period
+        for entry in os.scandir(self.remote_dir.trash_dir):
+            if entry.stat().st_mtime <= cutoff_time:
+                try:
+                    shutil.rmtree(entry.path)
+                except NotADirectoryError:
+                    os.remove(entry.path)

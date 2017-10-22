@@ -132,6 +132,10 @@ class SyncCommand(Command):
         # Remove excluded files that are still in the remote directory.
         fm.rm_excluded_files(remote_excluded_files)
 
+        # Clean up the remote trash directory.
+        if self.profile.cleanup_period:
+            fm.cleanup_trash()
+
         # The sync is now complete. Update the time of the last sync in the
         # info file.
         self.remote_dir.write()

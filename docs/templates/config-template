@@ -30,16 +30,21 @@ SyncInterval=20
 # accessed. Decreasing it weights the file priority toward more recent access.
 PriorityHalfLife=120
 
-# A colon-separated list of directory paths in which to search for deleted
-# files.
-TrashDirs=~/.local/share/Trash/files
-
 # When local files are deleted and aren't found in the user's local trash
 # directory, put the remote copy in the remote trash directory instead of
 # permanently deleting them.
 UseTrash=yes
 
-# Inflate the priority of new local files so that they stick around longer.
+# A colon-separated list of local directory paths in which to search for
+# deleted files.
+TrashDirs=~/.local/share/Trash/files
+
+# The number of days that files remain in the remote trash directory before
+# they are deleted. If set to a negative number, files are never deleted.
+TrashCleanupPeriod=30
+
+# Inflate the priority of new local files so that they stay in the local
+# directory longer.
 InflatePriority=yes
 
 # Take file size into account when prioritizing files (smaller files take

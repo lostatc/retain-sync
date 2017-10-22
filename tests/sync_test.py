@@ -97,6 +97,8 @@ def init_profile(
 @pytest.fixture
 def command(monkeypatch):
     """Return a SyncCommand instance."""
+    # These tests must use a temporary directory instead of pyfakefs because
+    # modules written in C (like sqlite3) can't access a fake filesystem.
     tmp_dir = tempfile.TemporaryDirectory(prefix="zielen-")
     monkeypatch.setenv(
         "XDG_CONFIG_HOME", os.path.join(tmp_dir.name, "home", ".config"))
@@ -339,6 +341,20 @@ def test_priority_of_new_files_is_inflated(command):
     assert command.profile.get_path_info("letters/upper/B.txt").priority == 3.0
 
 
+def test_trash_directory_is_cleaned_up(command, monkeypatch):
+    """Files in the remote trash directory are automatically cleaned up."""
+    test_trash_file = os.path.join(command.remote_dir.trash_dir, "test.txt")
+    with open(test_trash_file, "w") as file:
+        file.write("a")
+    current_time = time.time()
+    monkeypatch.setattr("time.time", lambda: current_time + 60*60*24*30)
+    command.main()
+
+    remote_trash_names = [
+        entry.name for entry in os.scandir(command.remote_dir.trash_dir)]
+    assert "test.txt" not in remote_trash_names
+
+
 def test_option_use_trash(command):
     """The config option 'UseTrash' works as expected."""
     os.remove("local/letters/a.txt")
@@ -347,6 +363,22 @@ def test_option_use_trash(command):
     command.main()
 
     assert not list(os.scandir(command.remote_dir.trash_dir))
+
+
+def test_option_trash_cleanup_period(command, monkeypatch):
+    """The config option 'TrashCleanupPeriod' works as expected."""
+    test_trash_file = os.path.join(command.remote_dir.trash_dir, "test.txt")
+    with open(test_trash_file, "w") as file:
+        file.write("a")
+    with open(command.profile.cfg_path, "a") as file:
+        file.write("TrashCleanupPeriod=-1\n")
+    current_time = time.time()
+    monkeypatch.setattr("time.time", lambda: current_time + 60*60*24*30)
+    command.main()
+
+    remote_trash_names = [
+        entry.name for entry in os.scandir(command.remote_dir.trash_dir)]
+    assert "test.txt" in remote_trash_names
 
 
 def test_option_inflate_priority(command):
