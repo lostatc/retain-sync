@@ -267,11 +267,6 @@ class Profile:
         return self._convert_bool(self._cfg_file.vals["UseTrash"])
 
     @property
-    def sync_extra_files(self) -> bool:
-        """Fill the remaining space with individual files."""
-        return self._convert_bool(self._cfg_file.vals["SyncExtraFiles"])
-
-    @property
     def inflate_priority(self) -> bool:
         """Inflate the priority of new local files."""
         return self._convert_bool(self._cfg_file.vals["InflatePriority"])
@@ -797,18 +792,17 @@ class ProfileConfigFile(ConfigFile):
         ]
     _optional_keys = [
         "SyncInterval", "PriorityHalfLife", "TrashDirs", "UseTrash",
-        "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        "InflatePriority", "AccountForSize"
         ]
     _all_keys = _required_keys + _optional_keys
     _bool_keys = [
-        "UseTrash", "SyncExtraFiles", "InflatePriority", "AccountForSize"
+        "UseTrash", "InflatePriority", "AccountForSize"
         ]
     _defaults = {
         "SyncInterval": "20",
         "PriorityHalfLife": "120",
         "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "UseTrash": "yes",
-        "SyncExtraFiles": "yes",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
         }

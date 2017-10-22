@@ -94,11 +94,9 @@ remote directories since the last sync. These conflicts are handled by renaming
 the file that was modified the least recently. The new file name contains the
 word "conflict" and the date and time of the sync.
 
-When calculating which files to storey locally, **zielen** first considers
-whole directory trees. Once no more of these directory trees can fit within the
-storage limit, it fills the remaining space with the highest-priority
-individual files that remain. This behavior can be changed in the profile
-config file.
+When calculating which files to storey locally, **zielen** considers whole
+directory trees. If a directory is retained locally, than all of its
+subdirectories are retained as well.
 
 During a sync, local files that are new since the last sync have their priority
 artificially inflated in order to keep them in the local directory longer. This

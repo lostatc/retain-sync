@@ -121,11 +121,8 @@ class SyncCommand(Command):
         # Decide which files and directories to keep in the local directory.
         remaining_space, selected_dirs = fm.prioritize_dirs(
             self.profile.storage_limit)
-        if self.profile.sync_extra_files:
-            remaining_space, selected_files = fm.prioritize_files(
-                remaining_space, exclude=selected_dirs)
-        else:
-            selected_files = set()
+        remaining_space, selected_files = fm.prioritize_files(
+            remaining_space, exclude=selected_dirs)
 
         # Copy the selected files as well as any excluded files still in the
         # remote directory to the local directory and replace all others

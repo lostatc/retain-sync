@@ -349,35 +349,6 @@ def test_option_use_trash(command):
     assert not list(os.scandir(command.remote_dir.trash_dir))
 
 
-def test_option_sync_extra_files(command):
-    """The config option 'SyncExtraFiles' works as expected."""
-    time.sleep(0.1)
-    with open("local/letters/a.txt", "w") as file:
-        file.write("a"*BLOCK_SIZE*3)
-    with open("local/letters/upper/A.txt", "w") as file:
-        file.write("A"*BLOCK_SIZE*4)
-    with open("local/numbers/1.txt", "w") as file:
-        file.write("1"*BLOCK_SIZE*7)
-    with open("local/_.txt", "w") as file:
-        file.write("_"*BLOCK_SIZE*1)
-    with open(command.profile.cfg_path, "a") as file:
-        file.write("SyncExtraFiles=no\n")
-    command.main()
-
-    local_paths = set(command.local_dir.scan_paths(
-        memoize=False, symlinks=False, dirs=False).keys())
-    local_symlink_paths = set(command.local_dir.scan_paths(
-        memoize=False, files=False, dirs=False).keys())
-    expected_paths = {
-        "letters/a.txt",
-        "letters/upper/A.txt"}
-    expected_symlink_paths = {
-        "numbers/1.txt",
-        "_.txt"}
-    assert local_paths == expected_paths
-    assert local_symlink_paths == expected_symlink_paths
-
-
 def test_option_inflate_priority(command):
     """The config option 'InflatePriority' works as expected."""
     command.profile.increment(["numbers/1.txt"], 2)

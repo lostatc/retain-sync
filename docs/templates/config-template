@@ -39,11 +39,6 @@ TrashDirs=~/.local/share/Trash/files
 # permanently deleting them.
 UseTrash=yes
 
-# When selecting which directories should be retained locally, start selecting
-# individual files to fill the remaining space once no more directories can fit
-# within the storage limit.
-SyncExtraFiles=yes
-
 # Inflate the priority of new local files so that they stick around longer.
 InflatePriority=yes
 
