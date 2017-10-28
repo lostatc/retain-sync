@@ -198,20 +198,16 @@ class BoxTable:
             row makes up the table headers.
     """
     HORIZONTAL_CHAR = "\u2500"
-    HEAVY_HORIZONTAL_CHAR = "\u2501"
     VERTICAL_CHAR = "\u2502"
     TOP_RIGHT_CHAR = "\u2510"
     TOP_LEFT_CHAR = "\u250c"
     BOTTOM_RIGHT_CHAR = "\u2518"
     BOTTOM_LEFT_CHAR = "\u2514"
     CROSS_CHAR = "\u253c"
-    HEAVY_CROSS_CHAR = "\u253f"
     TOP_TEE_CHAR = "\u252c"
     BOTTOM_TEE_CHAR = "\u2534"
     LEFT_TEE_CHAR = "\u251c"
-    HEAVY_LEFT_TEE_CHAR = "\u251d"
     RIGHT_TEE_CHAR = "\u2524"
-    HEAVY_RIGHT_TEE_CHAR = "\u2525"
     ANSI_REGEX = re.compile("(\x1b\\[[0-9;]+m)")
 
     def __init__(self, data: List[Tuple[str, ...]]):
@@ -229,38 +225,29 @@ class BoxTable:
             lengths.append(len(max(visible_column, key=len)))
         return lengths
 
-    def _get_separator(self, char: str) -> List[str]:
+    def _get_separator(self) -> List[str]:
         """Get the inside portion of a separator row."""
-        return [char * (length+2) for length in self._lengths]
+        return [self.HORIZONTAL_CHAR * (length+2) for length in self._lengths]
 
     def _format_top_separator(self) -> str:
         """Format the top border of the table."""
         return (
             self.TOP_LEFT_CHAR
-            + self.TOP_TEE_CHAR.join(self._get_separator(self.HORIZONTAL_CHAR))
+            + self.TOP_TEE_CHAR.join(self._get_separator())
             + self.TOP_RIGHT_CHAR)
 
     def _format_bottom_separator(self) -> str:
         """Format the top border of the table."""
         return (
             self.BOTTOM_LEFT_CHAR
-            + self.BOTTOM_TEE_CHAR.join(
-                self._get_separator(self.HORIZONTAL_CHAR))
+            + self.BOTTOM_TEE_CHAR.join(self._get_separator())
             + self.BOTTOM_RIGHT_CHAR)
-
-    def _format_header_separator(self) -> str:
-        """Format the row separator."""
-        return (
-            self.HEAVY_LEFT_TEE_CHAR
-            + self.HEAVY_CROSS_CHAR.join(
-                self._get_separator(self.HEAVY_HORIZONTAL_CHAR))
-            + self.HEAVY_RIGHT_TEE_CHAR)
 
     def _format_inside_separator(self) -> str:
         """Format the row separator."""
         return (
             self.LEFT_TEE_CHAR
-            + self.CROSS_CHAR.join(self._get_separator(self.HORIZONTAL_CHAR))
+            + self.CROSS_CHAR.join(self._get_separator())
             + self.RIGHT_TEE_CHAR)
 
     def _format_row(self) -> str:
@@ -292,7 +279,7 @@ class BoxTable:
         table_lines = [
             self._format_top_separator(),
             next(data_rows),
-            self._format_header_separator(),
+            self._format_inside_separator(),
             *data_rows,
             self._format_bottom_separator()]
 
