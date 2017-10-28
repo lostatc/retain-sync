@@ -117,7 +117,7 @@ def test_add_remote(temp_dir):
 
 def test_create_exclude_file(temp_dir):
     """Exclude patterns passed in are added to the exclude file."""
-    exclude_patterns = "*.\n/letters/a.txt\n"
+    exclude_patterns = ".*\n/letters/a.txt\n"
     with open("exclude", "w") as file:
         file.write(exclude_patterns)
     create_files(temp_dir, "local", "remote", "local")

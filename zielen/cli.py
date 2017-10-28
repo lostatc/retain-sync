@@ -24,7 +24,7 @@ import argparse
 import pkg_resources
 from textwrap import dedent
 
-from linotype import Item, DefinitionStyle
+from linotype import Item, DefStyle
 
 from zielen.commandbase import Command
 from zielen.daemon import Daemon
@@ -45,49 +45,49 @@ def main_help_item() -> Item:
     root_item = Item()
 
     usage = root_item.add_text("Usage:")
-    usage.add_definition(
+    usage.add_def(
         "zielen", "[global_options] command [command_args]", "")
     root_item.add_text("\n")
 
     global_opts = root_item.add_text("Global Options:", item_id="global_opts")
-    global_opts.formatter.definition_style = DefinitionStyle.ALIGNED
-    global_opts.add_definition(
+    global_opts.formatter.def_style = DefStyle.ALIGNED
+    global_opts.add_def(
         "    --help", "",
         "Print a usage message and exit.")
-    global_opts.add_definition(
+    global_opts.add_def(
         "    --version", "",
         "Print the version number and exit.")
-    global_opts.add_definition(
+    global_opts.add_def(
         "    --debug", "",
         "Print a full stack trace instead of an error message if an error "
         "occurs.")
-    global_opts.add_definition(
+    global_opts.add_def(
         "-q, --quiet", "",
         "Suppress all non-error output.")
     root_item.add_text("\n")
 
     commands = root_item.add_text("Commands:", item_id="commands")
-    commands.add_definition(
+    commands.add_def(
         "init", "[options] name",
         "Create a new profile, called name, representing a pair of "
         "directories to sync.")
     commands.add_text("\n")
-    commands.add_definition(
+    commands.add_def(
         "sync", "name|path",
         "Bring the local and remote directories in sync and redistribute "
         "files based on their priorities.")
     commands.add_text("\n")
-    commands.add_definition(
+    commands.add_def(
         "reset", "[options] name|path",
         "Retrieve all files from the remote directory and de-initialize the "
         "local directory.")
     commands.add_text("\n")
-    commands.add_definition(
+    commands.add_def(
         "list", "",
         "Print a table of all profiles names and the paths of their local "
         "directories.")
     commands.add_text("\n")
-    commands.add_definition(
+    commands.add_def(
         "empty-trash", "name|path",
         "Permanently delete all files in the remote trash directory.")
 
@@ -102,25 +102,25 @@ def command_help_item() -> Item:
     """
     root_item = Item()
 
-    init_item = root_item.add_definition(
+    init_item = root_item.add_def(
         "init", "[options] name",
         "Create a new profile, called name, representing a pair of "
         "directories to sync. Move files from the local directory to the "
         "remote one.", item_id="init")
     init_item.add_text("\n")
-    init_item.add_definition(
+    init_item.add_def(
         "-e, --exclude", "file",
         "Get patterns from file representing files and directories to "
         "exclude from syncing.", item_id="exclude")
     init_item.add_text("\n")
-    init_item.add_definition(
+    init_item.add_def(
         "-t, --template", "file",
         "Get settings for the profile from the template file instead of "
         "prompting the user interactively. The user will still be prompted "
         "for any mandatory information that is missing from the template.",
         item_id="template")
     init_item.add_text("\n")
-    init_item.add_definition(
+    init_item.add_def(
         "-a, --add-remote", "",
         "Instead of moving local files to an empty remote directory, "
         "start with an existing remote directory and an empty local "
@@ -128,7 +128,7 @@ def command_help_item() -> Item:
         "profiles to share a remote directory.", item_id="add-remote")
     root_item.add_text("\n")
 
-    sync_item = root_item.add_definition(
+    sync_item = root_item.add_def(
         "sync", "name|path",
         "Bring the local and remote directories in sync and redistribute "
         "files based on their priorities. This command is run automatically "
@@ -137,33 +137,33 @@ def command_help_item() -> Item:
         item_id="sync")
     root_item.add_text("\n")
 
-    reset_item = root_item.add_definition(
+    reset_item = root_item.add_def(
         "reset", "[options] name|path",
         "Retrieve all files from the remote directory and de-initialize the "
         "local directory. This command accepts the name of a profile or the "
         "absolute path of its local directory.", item_id="reset")
     reset_item.add_text("\n")
-    reset_item.add_definition(
+    reset_item.add_def(
         "-k, --keep-remote", "",
         "Copy files from the remote directory to the local one instead of "
         "moving them. This is useful when remote directory is shared with "
         "other profiles that may also want to retrieve the files.",
         item_id="keep-remote")
     reset_item.add_text("\n")
-    reset_item.add_definition(
+    reset_item.add_def(
         "-n, --no-retrieve", "",
         "Don't retrieve files from the remote directory. Symbolic links to "
         "remote files are removed from the local directory. This option "
         "supersedes **--keep-remote**.", item_id="no-retrieve")
     root_item.add_text("\n")
 
-    list_item = root_item.add_definition(
+    list_item = root_item.add_def(
         "list", "",
         "Print a table of all profiles names and the paths of their local "
         "directories.", item_id="list")
     root_item.add_text("\n")
 
-    empty_trash_item = root_item.add_definition(
+    empty_trash_item = root_item.add_def(
         "empty-trash", "name|path",
         "Permanently delete all files in the remote trash directory. This "
         "command accepts the name of a profile or the absolute path of its "
