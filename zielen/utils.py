@@ -209,6 +209,7 @@ class BoxTable:
     LEFT_TEE_CHAR = "\u251c"
     RIGHT_TEE_CHAR = "\u2524"
     ANSI_REGEX = re.compile("(\x1b\\[[0-9;]+m)")
+    HEADER_ANSI = ("\x1b[1m", "\x1b[0m")
 
     def __init__(self, data: List[Tuple[str, ...]]):
         if not all(len(row) == len(data[0]) for row in data):
@@ -278,7 +279,7 @@ class BoxTable:
         data_rows = self._format_row()
         table_lines = [
             self._format_top_separator(),
-            next(data_rows),
+            next(data_rows).join(self.HEADER_ANSI),
             self._format_inside_separator(),
             *data_rows,
             self._format_bottom_separator()]
