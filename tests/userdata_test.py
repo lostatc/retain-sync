@@ -63,7 +63,7 @@ class TestSyncDir:
         return SyncDir(base_dir)
 
     def test_get_paths(self, sync_dir):
-        """Relative file db and their stat objects can be retrieved."""
+        """Relative file paths and their stat objects can be retrieved."""
         expected_output = {
             "documents": os.stat("/base/documents"),
             "documents/report.odt": os.stat("/base/documents/report.odt"),
@@ -76,7 +76,7 @@ class TestSyncDir:
         assert sync_dir.scan_paths() == expected_output
 
     def test_get_absolute_paths(self, sync_dir):
-        """Absolute file db and their stat objects can be retrieved."""
+        """Absolute file paths and their stat objects can be retrieved."""
         expected_output = {
             "/base/documents": os.stat("/base/documents"),
             "/base/documents/report.odt": os.stat(
@@ -91,7 +91,7 @@ class TestSyncDir:
         assert sync_dir.scan_paths(rel=False) == expected_output
 
     def test_get_only_file_paths(self, sync_dir):
-        """The db of only normal files can be retrieved."""
+        """The paths of only normal files can be retrieved."""
         expected_output = {
             "documents/report.odt": os.stat("/base/documents/report.odt"),
             "documents/scans/receipt.pdf": os.stat(
@@ -102,8 +102,12 @@ class TestSyncDir:
             symlinks=False, dirs=False) == expected_output
 
     def test_get_paths_except_excluded(self, sync_dir):
-        """The db of certain files can be excluded."""
-        excluded_paths = ["documents"]
+        """The paths of certain files can be excluded."""
+        excluded_paths = [
+            "documents",
+            "documents/scans",
+            "documents/scans/receipt.pdf",
+            "documents/report.odt"]
         expected_output = {
             "pictures": os.stat("/base/pictures"),
             "pictures/portrait.png": os.stat("/base/pictures/portrait.png")}
@@ -126,7 +130,7 @@ class TestSyncDir:
             files["pictures/landscape.png"]
 
     def test_get_memoized_paths(self, monkeypatch, sync_dir):
-        """Cached db is used instead of re-scanning the filesystem."""
+        """Cached data is used instead of re-scanning the filesystem."""
         initial_mtime = sync_dir.scan_paths(
             memoize=True)["documents/report.odt"].st_mtime
         os.utime("/base/documents/report.odt", times=(1495316810, 1495316810))

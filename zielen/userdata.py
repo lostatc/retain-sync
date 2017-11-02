@@ -131,8 +131,7 @@ class SyncDir:
             symlinks: Include symbolic links.
             dirs: Include directories.
             exclude: An iterable of relative paths of files to not include in
-                the output. For paths of directories, all files under the
-                directory are excluded.
+                the output.
             memoize: If true, use cached data. Otherwise, re-scan the
                 filesystem.
             lookup: Return a defaultdict that looks up the stats of files not
@@ -168,17 +167,13 @@ class SyncDir:
                 continue
             elif entry.is_symlink() and not symlinks:
                 continue
+            elif rel_path in exclude:
+                continue
             else:
-                for exclude_path in exclude:
-                    if (rel_path == exclude_path
-                            or rel_path.startswith(
-                                exclude_path.rstrip(os.sep) + os.sep)):
-                        break
+                if rel:
+                    output[rel_path] = entry.stat(follow_symlinks=False)
                 else:
-                    if rel:
-                        output[rel_path] = entry.stat(follow_symlinks=False)
-                    else:
-                        output[entry.path] = entry.stat(follow_symlinks=False)
+                    output[entry.path] = entry.stat(follow_symlinks=False)
 
         return output
 
@@ -278,7 +273,7 @@ class RemoteSyncDir(SyncDir):
         """Remove a profile exclude file from the remote.
 
         Args:
-            profile_id: The unique ID used when adding the exclude file.
+            paaaaaaaaaaaaaaaarofile_id: The unique ID used when adding the exclude file.
         """
         try:
             os.remove(os.path.join(self._exclude_dir, profile_id))
@@ -311,14 +306,18 @@ class RemoteSyncDir(SyncDir):
 
         return rm_files
 
-    def scan_paths(self, rel=True, files=True, symlinks=True, dirs=True,
-                   exclude=None, memoize=True, lookup=True):
+    def scan_paths(
+            self, rel=True, files=True, symlinks=True, dirs=True, exclude=None,
+            memoize=True, lookup=True):
         """Extend parent method to automatically exclude the util directory."""
-        exclude = set() if exclude is None else set(exclude)
-        exclude.add(os.path.relpath(self.util_dir, self.path))
-        return super().scan_paths(
+        rel_util_path = os.path.relpath(self.util_dir, self.path)
+        output = super().scan_paths(
             rel=rel, files=files, symlinks=symlinks, dirs=dirs,
             exclude=exclude, memoize=memoize)
+        output = {
+            path: stats for path, stats in output.items()
+            if os.path.commonpath((path, rel_util_path)) != rel_util_path}
+        return output
 
 
 class RemoteDBFile(SyncDBFile):

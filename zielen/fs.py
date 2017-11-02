@@ -203,9 +203,7 @@ class FilesManager:
         # directory may have been updated by changes in the local directory,
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
-        file_stats = self.remote_dir.scan_paths(
-            dirs=False, exclude=self.profile.exclude_matches(self.local_dir.path),
-            memoize=False)
+        file_stats = self.remote_dir.scan_paths(dirs=False, memoize=False)
         adjusted_priorities = []
 
         # Adjust directory priorities for size.
@@ -267,9 +265,7 @@ class FilesManager:
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         local_dirs = self.profile.get_paths(directory=True)
-        dir_stats = self.remote_dir.scan_paths(
-            exclude=self.profile.exclude_matches(self.local_dir.path),
-            memoize=False)
+        dir_stats = self.remote_dir.scan_paths(memoize=False)
         adjusted_priorities = []
 
         # Calculate the disk usage of each directory and adjust directory
@@ -574,8 +570,8 @@ class FilesManager:
         # Don't include excluded files or files not in the local database
         # (e.g. unsafe symlinks).
         all_paths = (self.local_dir.scan_paths(
-            exclude=self.profile.exclude_matches(self.local_dir.path)).keys()
-                     & self.profile.get_paths().keys())
+            exclude=self.profile.all_exclude_matches(self.local_dir.path)
+            ).keys() & self.profile.get_paths().keys())
 
         # Exclude the paths that are parents of paths in the input.
         stale_paths = set()
