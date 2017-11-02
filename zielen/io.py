@@ -49,13 +49,13 @@ def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
         # mean that rsync should not copy any files. That's why these are only
         # skipped if the argument is None.
         if exclude is not None:
-            ex_file = stack.enter_context(
+            exclude_file = stack.enter_context(
                 tempfile.NamedTemporaryFile(mode="w+"))
             # All file paths must include a leading slash.
-            ex_file.write(
+            exclude_file.write(
                 "\n".join(["/" + path.lstrip("/") for path in exclude]))
-            ex_file.flush()
-            cmd_args.append("--exclude-from=" + ex_file.name)
+            exclude_file.flush()
+            cmd_args.append("--exclude-from=" + exclude_file.name)
         if files is not None:
             paths_file = stack.enter_context(
                 tempfile.NamedTemporaryFile(mode="w+"))

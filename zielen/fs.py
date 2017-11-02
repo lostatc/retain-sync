@@ -204,7 +204,7 @@ class FilesManager:
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         file_stats = self.remote_dir.scan_paths(
-            dirs=False, exclude=self.profile.ex_matches(self.local_dir.path),
+            dirs=False, exclude=self.profile.exclude_matches(self.local_dir.path),
             memoize=False)
         adjusted_priorities = []
 
@@ -268,7 +268,7 @@ class FilesManager:
         local_files = self.profile.get_paths(directory=False)
         local_dirs = self.profile.get_paths(directory=True)
         dir_stats = self.remote_dir.scan_paths(
-            exclude=self.profile.ex_matches(self.local_dir.path),
+            exclude=self.profile.exclude_matches(self.local_dir.path),
             memoize=False)
         adjusted_priorities = []
 
@@ -474,7 +474,7 @@ class FilesManager:
             rec_clone(
                 self.local_dir.path, self.remote_dir.safe_path,
                 exclude=(
-                    self.profile.ex_matches(self.local_dir.path)
+                    self.profile.exclude_matches(self.local_dir.path)
                     | unsafe_symlinks),
                 msg="Moving files to remote...")
         except FileNotFoundError:
@@ -574,7 +574,7 @@ class FilesManager:
         # Don't include excluded files or files not in the local database
         # (e.g. unsafe symlinks).
         all_paths = (self.local_dir.scan_paths(
-            exclude=self.profile.ex_matches(self.local_dir.path)).keys()
+            exclude=self.profile.exclude_matches(self.local_dir.path)).keys()
                      & self.profile.get_paths().keys())
 
         # Exclude the paths that are parents of paths in the input.
@@ -602,7 +602,7 @@ class FilesManager:
             if not self.profile.get_path_info(path)
             and not is_unsafe_symlink(
                 os.path.join(self.local_dir.path, path), self.local_dir.path)}
-        new_local_paths -= self.profile.ex_all_matches(
+        new_local_paths -= self.profile.all_exclude_matches(
             self.local_dir.path)
         new_remote_paths = {
             path for path in self.remote_dir.scan_paths().keys()
@@ -788,7 +788,7 @@ class FilesManager:
             paths: The relative paths of files to remove.
         """
         paths = set(paths)
-        paths -= self.profile.ex_all_matches(self.local_dir.path)
+        paths -= self.profile.all_exclude_matches(self.local_dir.path)
         self._rm_files(paths, self.local_dir.path)
 
     def rm_remote_files(self, paths: Iterable[str]) -> None:

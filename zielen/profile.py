@@ -50,8 +50,8 @@ class Profile:
         name: The name of the profile.
         path: The path of the profile directory.
         cfg_path: The path of the configuration file.
-        ex_path: The path of the exclude file.
-        _ex_file: An object for the exclude pattern file.
+        exclude_path: The path of the exclude file.
+        _exclude_file: An object for the exclude pattern file.
         _info_file: An object for the JSON file for profile metadata.
         _db_file: An object for the file priority database.
         _cfg_file: An object for the profile's configuration file.
@@ -59,7 +59,7 @@ class Profile:
     def __init__(self, name: str) -> None:
         self.name = name
         self.path = os.path.join(get_profiles_dir(), self.name)
-        self._ex_file = ProfileExcludeFile(
+        self._exclude_file = ProfileExcludeFile(
             os.path.join(self.path, "exclude"))
         self._info_file = ProfileInfoFile(os.path.join(self.path, "info.json"))
         self._db_file = ProfileDBFile(
@@ -68,9 +68,9 @@ class Profile:
 
         # Import methods from content classes.
         self.cfg_path = self._cfg_file.path
-        self.ex_path = self._ex_file.path
-        self.ex_matches = self._ex_file.matches
-        self.ex_all_matches = self._ex_file.all_matches
+        self.exclude_path = self._exclude_file.path
+        self.exclude_matches = self._exclude_file.matches
+        self.all_exclude_matches = self._exclude_file.all_matches
         self.add_paths = self._db_file.add_paths
         self.add_inflated = self._db_file.add_inflated
         self.rm_paths = self._db_file.rm_paths
@@ -87,7 +87,7 @@ class Profile:
         self._info_file.read()
         self._cfg_file.read()
         self._cfg_file.check_all()
-        self._ex_file.reset()
+        self._exclude_file.reset()
 
     def generate(
             self, init_options: Dict[str, Any], exclude_path=None,
@@ -95,7 +95,7 @@ class Profile:
         """Generate files for storing persistent data."""
         os.makedirs(self.path, exist_ok=True)
 
-        self._ex_file.generate(exclude_path)
+        self._exclude_file.generate(exclude_path)
         self._info_file.generate(self.name, init_options)
 
         try:

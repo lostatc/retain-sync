@@ -124,7 +124,7 @@ def test_create_exclude_file(temp_dir):
     command = InitCommand("test", template="template", exclude="exclude")
     command.main()
 
-    with open(command.profile.ex_path) as file:
+    with open(command.profile.exclude_path) as file:
         uncommented_lines = "".join(file.readlines()[-2:])
     assert uncommented_lines == exclude_patterns
 

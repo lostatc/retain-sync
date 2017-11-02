@@ -223,7 +223,7 @@ class RemoteSyncDir(SyncDir):
             util_dir is missing. The keeps files from being moved into an empty
             mountpoint.
         trash_dir: The path of the remote trash directory.
-        _ex_dir: The path of the directory containing copies of each client's
+        _exclude_dir: The path of the directory containing copies of each client's
             exclude pattern file.
         _db_file: The remote database object.
     """
@@ -232,7 +232,7 @@ class RemoteSyncDir(SyncDir):
         self.util_dir = os.path.join(self.path, ".zielen")
         self.safe_path = os.path.normpath(os.path.join(self.util_dir, ".."))
         self.trash_dir = os.path.join(self.util_dir, "Trash")
-        self._ex_dir = os.path.join(self.util_dir, "exclude")
+        self._exclude_dir = os.path.join(self.util_dir, "exclude")
         self._db_file = RemoteDBFile(os.path.join(self.util_dir, "remote.db"))
 
         # Import methods from content classes.
@@ -243,7 +243,7 @@ class RemoteSyncDir(SyncDir):
 
     def generate(self) -> None:
         """Generate files for storing persistent data."""
-        os.makedirs(self._ex_dir, exist_ok=True)
+        os.makedirs(self._exclude_dir, exist_ok=True)
         os.makedirs(self.trash_dir, exist_ok=True)
 
         try:
@@ -267,7 +267,7 @@ class RemoteSyncDir(SyncDir):
             profile_id: A unique ID for the profile.
         """
         try:
-            shutil.copy(filepath, os.path.join(self._ex_dir, profile_id))
+            shutil.copy(filepath, os.path.join(self._exclude_dir, profile_id))
         except FileNotFoundError:
             if not os.path.isdir(self.util_dir):
                 raise RemoteError("the remote directory could not be found")
@@ -281,7 +281,7 @@ class RemoteSyncDir(SyncDir):
             profile_id: The unique ID used when adding the exclude file.
         """
         try:
-            os.remove(os.path.join(self._ex_dir, profile_id))
+            os.remove(os.path.join(self._exclude_dir, profile_id))
         except FileNotFoundError:
             pass
 
@@ -298,7 +298,7 @@ class RemoteSyncDir(SyncDir):
             The subset of input paths that have been excluded by each client.
         """
         pattern_files = []
-        for entry in os.scandir(self._ex_dir):
+        for entry in os.scandir(self._exclude_dir):
             pattern_files.append(ProfileExcludeFile(entry.path))
 
         rm_files = set()

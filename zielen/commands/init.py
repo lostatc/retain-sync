@@ -162,7 +162,7 @@ class InitCommand(Command):
 
         # Copy exclude pattern file to remote directory for use when remote dir
         # is shared.
-        self.remote_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
+        self.remote_dir.add_exclude_file(self.profile.exclude_path, self.profile.id)
 
         # The profile is now fully initialized. Update the profile.
         self.remote_dir.write()

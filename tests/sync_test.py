@@ -268,7 +268,7 @@ def test_remote_files_not_moved_to_trash(command):
 
 def test_excluded_files_removed_from_remote_directory(command):
     """Excluded files are removed from the remote directory."""
-    with open(command.profile.ex_path, "a") as file:
+    with open(command.profile.exclude_path, "a") as file:
         file.write("/letters/a.txt")
     command.main()
 
@@ -280,7 +280,7 @@ def test_excluded_files_moved_to_local_directory(command):
     """Excluded files are moved to the local directory."""
     with open("remote/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*4)
-    with open(command.profile.ex_path, "a") as file:
+    with open(command.profile.exclude_path, "a") as file:
         file.write("/letters/upper/B.txt")
     command.main()
 
@@ -292,7 +292,7 @@ def test_excluded_files_are_not_synced(command):
     """Excluded files aren't synced to the remote directory."""
     with open("local/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*2)
-    with open(command.profile.ex_path, "a") as file:
+    with open(command.profile.exclude_path, "a") as file:
         file.write("/letters/upper/B.txt")
     command.main()
 
@@ -307,7 +307,7 @@ def test_partially_excluded_files_stay_in_remote_directory(command):
         add_remote=True)
     with open("local/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*2)
-    with open(command2.profile.ex_path, "a") as file:
+    with open(command2.profile.exclude_path, "a") as file:
         file.write("/letters/upper/B.txt")
     command.main()
 
@@ -322,7 +322,7 @@ def test_partially_excluded_files_stay_in_sync(command):
         add_remote=True)
     with open("local/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*2)
-    with open(command2.profile.ex_path, "a") as file:
+    with open(command2.profile.exclude_path, "a") as file:
         file.write("/letters/upper/B.txt")
     command.main()
     command2.main()
@@ -426,7 +426,7 @@ def test_deleted_files_are_removed_from_databases(command):
 
 def test_excluded_files_are_removed_from_databases(command):
     """Excluded files are removed from both databases."""
-    with open(command.profile.ex_path, "a") as file:
+    with open(command.profile.exclude_path, "a") as file:
         file.write("/letters/a.txt")
     command.main()
 

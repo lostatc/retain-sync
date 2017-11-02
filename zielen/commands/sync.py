@@ -61,7 +61,7 @@ class SyncCommand(Command):
         """Run the command."""
         self.setup_profile()
         fm = FilesManager(self.local_dir, self.remote_dir, self.profile)
-        self.remote_dir.add_exclude_file(self.profile.ex_path, self.profile.id)
+        self.remote_dir.add_exclude_file(self.profile.exclude_path, self.profile.id)
 
         # Scan the local and remote directories.
         file_paths = (
@@ -115,7 +115,7 @@ class SyncCommand(Command):
 
         # Calculate which excluded files are still in the remote directory.
         remote_excluded_files = (
-            self.profile.ex_all_matches(self.local_dir.path)
+            self.profile.all_exclude_matches(self.local_dir.path)
             & self.remote_dir.scan_paths().keys())
 
         # Decide which files and directories to keep in the local directory.
