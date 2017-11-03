@@ -20,13 +20,17 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import re
 import atexit
+import glob
 import collections
 import shutil
 import subprocess
 import datetime
 import random
 import string
+import readline
 from typing import List, Tuple
+
+from zielen.paths import get_home_dir
 
 
 def shell_cmd(input_cmd: list) -> subprocess.Popen:
@@ -77,6 +81,44 @@ def secure_string(length: int) -> str:
     random_string = "".join(random.SystemRandom().choice(
         string.ascii_letters + string.digits) for i in range(length))
     return random_string
+
+
+def contract_user(path: str) -> str:
+    """Do the opposite of os.path.expanduser.
+
+    Args:
+        path: The absolute file path to modify.
+
+    Returns:
+        A new file path with the user's home directory replaced with a tilda.
+    """
+    return os.path.join("~", os.path.relpath(path, get_home_dir()))
+
+
+def set_path_autocomplete() -> None:
+    """Enable file path autocompletion for GNU readline."""
+    def autocomplete(text: str, state: int) -> str:
+        expanded_path = os.path.expanduser(text)
+
+        if os.path.isdir(expanded_path):
+            possible_paths = glob.glob(os.path.join(expanded_path, "*"))
+        else:
+            possible_paths = glob.glob(expanded_path + "*")
+
+        if expanded_path != text:
+            possible_paths = [contract_user(path) for path in possible_paths]
+        possible_paths.append(None)
+
+        return possible_paths[state]
+
+    readline.parse_and_bind("tab: complete")
+    readline.set_completer_delims("")
+    readline.set_completer(autocomplete)
+
+
+def set_no_autocomplete() -> None:
+    """Disable autocompletion for GNU readline."""
+    readline.set_completer(None)
 
 
 class FactoryDict(collections.defaultdict):

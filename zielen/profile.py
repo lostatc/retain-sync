@@ -36,7 +36,8 @@ import pkg_resources
 from zielen.paths import get_xdg_data_home, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
 from zielen.io import rec_scan
-from zielen.utils import DictProperty, secure_string
+from zielen.utils import (
+    DictProperty, secure_string, set_no_autocomplete, set_path_autocomplete)
 from zielen.exceptions import FileParseError
 
 PathData = NamedTuple(
@@ -823,6 +824,12 @@ class ProfileConfigFile(ConfigFile):
                         "This accepts KB, MB, GB, KiB, MiB and GiB as units. "
         }
 
+    _autocomplete_funcs = {
+        "LocalDir": set_path_autocomplete,
+        "RemoteDir": set_path_autocomplete,
+        "StorageLimit": set_no_autocomplete
+        }
+
     def check_value(self, key: str, value: str) -> Optional[str]:
         """Check the syntax of a config option and return an error message.
 
@@ -924,6 +931,7 @@ class ProfileConfigFile(ConfigFile):
             Please enter values for the following settings.
             """))
         for key in prompt_keys:
+            self._autocomplete_funcs[key]()
             while True:
                 print("\n".join(
                     textwrap.wrap(self._prompt_messages[key], width=79)))
