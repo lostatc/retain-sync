@@ -21,21 +21,18 @@ across multiple clients as storage space permits.
 
 Features
 ========
-* Uses rsync's delta-transfer algorithm to only sync the differences between
-  files
 * Allows syncing across filesystem boundaries, including network filesystems
 * Does not require root privileges
 * Gives the user the ability to exclude files from syncing
 * Handles interruptions and dropped connections
 * Provides options for configuring syncing behavior
-* Supports configuration file templates
+* Supports templates for quickly setting up new directories
 
 Installation
 ============
 Dependencies
 ------------
 * `Python <https://www.python.org/>`_ >= 3.5
-* `rsync <https://rsync.samba.org/>`_
 * `pyinotify <https://github.com/seb-m/pyinotify>`_
 * `Sphinx <http://www.sphinx-doc.org/en/stable/>`_
 

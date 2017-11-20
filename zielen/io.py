@@ -19,6 +19,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import contextlib
 import hashlib
+import shutil
 import os
 import sys
 import tempfile
@@ -26,98 +27,94 @@ import textwrap
 from typing import Iterable, Optional
 
 from zielen.utils import shell_cmd, ProgressBar
-from zielen.exceptions import FileTransferError
+
+PROGRESS_BAR_LENGTH = 0.35
 
 
-def _rsync_cmd(add_args: list, files=None, exclude=None, msg="") -> None:
-    """Run an rsync command and print a status bar.
-
-    Args:
-        add_args: A list of arguments to pass to rsync.
-        files: A list of relative paths of files to sync.
-        exclude: A list of relative paths of files to exclude from syncing.
-        msg: A message to display opposite the progress bar. If empty, the bar
-            won't appear.
-
-    Raises:
-        FileTransferError:  Rsync returned a non-zero exit code.
-    """
-    cmd_args = ["rsync", "--info=progress2"]
-
-    with contextlib.ExitStack() as stack:
-        # If an empty list is passed in for the 'files' argument, that should
-        # mean that rsync should not copy any files. That's why these are only
-        # skipped if the argument is None.
-        if exclude is not None:
-            exclude_file = stack.enter_context(
-                tempfile.NamedTemporaryFile(mode="w+"))
-            # All file paths must include a leading slash.
-            exclude_file.write(
-                "\n".join(["/" + path.lstrip("/") for path in exclude]))
-            exclude_file.flush()
-            cmd_args.append("--exclude-from=" + exclude_file.name)
-        if files is not None:
-            paths_file = stack.enter_context(
-                tempfile.NamedTemporaryFile(mode="w+"))
-            # All file paths must include a leading slash.
-            paths_file.write(
-                "\n".join(["/" + path.lstrip("/") for path in files]))
-            paths_file.flush()
-            cmd_args.append("--files-from=" + paths_file.name)
-
-        cmd = shell_cmd(cmd_args + add_args)
-
-        if msg is not None and sys.stdout.isatty():
-            # Print status bar.
-            rsync_bar = ProgressBar(0.35, msg=msg)
-            for line in cmd.stdout:
-                if not line.strip():
-                    continue
-                percent = float(line.split()[1].rstrip("%"))/100
-                rsync_bar.update(percent)
-            cmd.wait()
-            # Make sure that the progress bar is full once the transfer is
-            # completed.
-            rsync_bar.update(1.0)
-            print()
-
-        stdout, stderr = cmd.communicate()
-        if cmd.returncode != 0:
-            # Print the last five lines of rsync's stderr.
-            raise FileTransferError(
-                "the file transfer failed to complete\n"
-                + textwrap.indent(
-                    "\n".join(stderr.splitlines()[-5:]), "rsync: "))
-
-
-def rec_clone(source: str, dest: str, files=None, exclude=None, msg="",
-              rm_source=False) -> None:
+def transfer_tree(
+        source: str, dest: str, files=None, exclude=None,
+        message="", rm_source=False) -> None:
     """Recursively copy files, preserving file metadata.
 
+    Existing files in the destination are overwritten. A progress bar is
+    printed to the terminal displaying the progress of the transfer.
+
     Args:
-        source: The file to copy or directory to copy the contents of.
-        dest: The location to copy the files to.
-        files: A list of relative paths of files to sync. Missing files are
-            ignored.
-        exclude: A list of relative paths of files to exclude from syncing.
-        msg: A message to display opposite the progress bar. If None, the
+        source: The path of the directory to copy the contents of.
+        dest: The path of the directory to copy the files to.
+        files: An iterable of relative paths of files and directories to copy.
+            Missing files are ignored. If None, copy all files.
+        exclude: An iterable of relative paths of files to exclude from
+            copying. Excluding a directory path does not exclude its children.
+            If None, exclude no files.
+        message: A message to display opposite the progress bar. If None, the
             progress bar won't appear.
         rm_source: Remove source files once they are copied to the destination.
 
     Raises:
         FileNotFoundError: The source or destination files couldn't be found.
-        FileTransferError: The file transfer failed.
     """
-    if not os.path.exists(source) or not os.path.exists(os.path.dirname(dest)):
-        raise FileNotFoundError
+    if not os.path.exists(source):
+        raise FileNotFoundError("source not found")
+    elif not os.path.exists(os.path.dirname(dest)):
+        raise FileNotFoundError("dest not found")
 
-    # The rsync option '--archive' does not imply '--recursive' when
-    # '--files-from' is specified, so we have to explicitly include it.
-    rsync_args = [
-        "-asrHAXS", "--ignore-missing-args", os.path.join(source, ""), dest]
-    if rm_source:
-        rsync_args.append("--remove-source-files")
-    _rsync_cmd(rsync_args, files=files, exclude=exclude, msg=msg)
+    use_bar = message is not None and sys.stdout.isatty()
+
+    # Get a set of all source paths that are to be transferred.
+    if files is None:
+        rel_paths = {
+            os.path.relpath(entry.path, source) for entry in scan_tree(source)}
+    else:
+        rel_paths = set()
+        for path in files:
+            try:
+                for entry in scan_tree(os.path.join(source, path)):
+                    rel_paths.add(os.path.relpath(entry.path, source))
+            except NotADirectoryError:
+                rel_paths.add(path)
+
+    if exclude is not None:
+        rel_paths -= set(exclude)
+
+    # Sort the paths so that the path of a directory comes after the paths
+    # of its files. This allows directories to be removed only after their
+    # files have been removed.
+    rel_paths = list(rel_paths)
+    rel_paths.sort(reverse=True)
+
+    source_paths = [os.path.join(source, path) for path in rel_paths]
+    dest_paths = [os.path.join(dest, path) for path in rel_paths]
+
+    if use_bar:
+        source_sizes = {path: os.stat(path).st_size for path in source_paths}
+        total_source_size = sum(source_sizes.values())
+        transferred_size = 0
+        transfer_bar = ProgressBar(PROGRESS_BAR_LENGTH, message=message)
+
+    for source_path, dest_path in zip(source_paths, dest_paths):
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        try:
+            shutil.copy2(source_path, dest_path, follow_symlinks=False)
+        except (shutil.SameFileError, FileExistsError):
+            # The destination file is a symlink.
+            os.remove(dest_path)
+            shutil.copy2(source_path, dest_path, follow_symlinks=False)
+        except IsADirectoryError:
+            os.makedirs(dest_path, exist_ok=True)
+
+        if use_bar:
+            transferred_size += source_sizes[source_path]
+            transfer_bar.update(transferred_size / total_source_size)
+
+        if rm_source:
+            try:
+                os.remove(source_path)
+            except OSError:
+                os.rmdir(source_path)
+
+    if use_bar:
+        print()
 
 
 def symlink_tree(src_dir: str, dest_dir: str,
@@ -127,8 +124,9 @@ def symlink_tree(src_dir: str, dest_dir: str,
 
     This function does not look in the source directory. Instead, the caller
     is expected to provide the paths of all files and directories in the
-    source. Files and directories need to be passed in separately to
-    distinguish files from empty directories.
+    source directory. This is to minimize the number of times that the
+    filesystem is queried. Files and directories need to be passed in
+    separately to distinguish files from empty directories.
 
     Args:
         src_dir: The absolute path of the directory to source files from.
@@ -173,16 +171,19 @@ def symlink_tree(src_dir: str, dest_dir: str,
                         os.symlink(full_src_path, full_dest_path)
 
 
-def rec_scan(path: str):
+def scan_tree(path: str):
     """Recursively scan a directory tree and yield an os.DirEntry object.
 
     Args:
         path: The path of the directory to scan.
+
+    Yields:
+        An os.DirEntry object for each file in the tree.
     """
     for entry in os.scandir(path):
         yield entry
         if entry.is_dir(follow_symlinks=False):
-            yield from rec_scan(entry.path)
+            yield from scan_tree(entry.path)
 
 
 def total_size(path: str) -> int:
@@ -194,13 +195,13 @@ def total_size(path: str) -> int:
     Returns:
         The size of the file in bytes.
     """
-    if os.path.isfile(path):
-        return os.stat(path).st_size
-    else:
+    if os.path.isdir(path):
         dir_size = os.stat(path).st_size
-        for entry in rec_scan(path):
+        for entry in scan_tree(path):
             dir_size += entry.stat().st_size
         return dir_size
+    else:
+        return os.stat(path).st_size
 
 
 def checksum(path: str, hash_func="sha256") -> str:
@@ -218,7 +219,7 @@ def checksum(path: str, hash_func="sha256") -> str:
     file_hash = hashlib.new(hash_func)
     checksum_paths = []
     try:
-        for entry in rec_scan(path):
+        for entry in scan_tree(path):
             if entry.is_file(follow_symlinks=False):
                 checksum_paths.append(entry.path)
     except NotADirectoryError:

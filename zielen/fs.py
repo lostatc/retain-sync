@@ -27,7 +27,7 @@ from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
 from zielen.userdata import LocalSyncDir, RemoteSyncDir, TrashDir
 from zielen.utils import timestamp_path
-from zielen.io import is_unsafe_symlink, symlink_tree, rec_clone
+from zielen.io import is_unsafe_symlink, symlink_tree, transfer_tree
 
 DeletedPaths = NamedTuple(
     "DeletedPaths",
@@ -389,10 +389,10 @@ class FilesManager:
                 self.remote_dir.get_paths(directory=False),
                 self.remote_dir.get_paths(directory=True))
 
-            rec_clone(
+            transfer_tree(
                 self.remote_dir.safe_path, self.local_dir.path,
                 files=update_paths,
-                msg="Updating local files...")
+                message="Updating local files...")
         except FileNotFoundError:
             if not os.path.isdir(self.remote_dir.util_dir):
                 raise RemoteError("the remote directory could not be found")
@@ -417,9 +417,9 @@ class FilesManager:
 
         # Copy modified local files to the remote directory.
         try:
-            rec_clone(
+            transfer_tree(
                 self.local_dir.path, self.remote_dir.safe_path,
-                files=update_paths, msg="Updating remote files...")
+                files=update_paths, message="Updating remote files...")
         except FileNotFoundError:
             if not os.path.isdir(self.remote_dir.util_dir):
                 raise RemoteError("the remote directory could not be found")
@@ -467,12 +467,12 @@ class FilesManager:
                 "not enough space in remote to accommodate local files")
 
         try:
-            rec_clone(
+            transfer_tree(
                 self.local_dir.path, self.remote_dir.safe_path,
                 exclude=(
-                    self.profile.exclude_matches(self.local_dir.path)
+                    self.profile.all_exclude_matches(self.local_dir.path)
                     | unsafe_symlinks),
-                msg="Moving files to remote...")
+                message="Moving files to remote...")
         except FileNotFoundError:
             if not os.path.isdir(self.remote_dir.util_dir):
                 raise RemoteError("the remote directory could not be found")

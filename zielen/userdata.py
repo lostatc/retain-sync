@@ -27,7 +27,7 @@ from typing import (
 
 from zielen.exceptions import RemoteError
 from zielen.containerbase import SyncDBFile
-from zielen.io import rec_scan, checksum, total_size
+from zielen.io import scan_tree, checksum, total_size
 from zielen.profile import ProfileExcludeFile
 from zielen.utils import FactoryDict, secure_string
 
@@ -155,7 +155,7 @@ class SyncDir:
 
         if not memoize or not self._sub_entries:
             self._sub_entries = []
-            for entry in rec_scan(self.path):
+            for entry in scan_tree(self.path):
                 # Computing the relative path is expensive to do each time.
                 rel_path = os.path.relpath(entry.path, self.path)
                 self._sub_entries.append((entry, rel_path))

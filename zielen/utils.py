@@ -181,7 +181,7 @@ class ProgressBar:
     Attributes:
         coverage: The percentage of the width of the terminal window that the
             progress bar should cover as a decimal between 0 and 1.
-        msg: A message to be printed opposite the progress bar.
+        message: A message to be printed opposite the progress bar.
         r_align: Align the progress bar to the right edge of the screen as
             opposed to the left.
         fill_char: The character that will comprise the filled portion of the
@@ -189,10 +189,11 @@ class ProgressBar:
         empty_char: The character that will comprise the empty portion of the
             bar.
     """
-    def __init__(self, coverage: float, msg="", r_align=True, fill_char="#",
-                 empty_char="-") -> None:
+    def __init__(
+            self, coverage: float, message="", r_align=True, fill_char="#",
+            empty_char="-") -> None:
         self.coverage = coverage
-        self.msg = msg
+        self.message = message
         self.r_align = r_align
         self.fill_char = fill_char[0]
         self.empty_char = empty_char[0]
@@ -218,7 +219,7 @@ class ProgressBar:
 
         # Truncate input message so that it doesn't overlap with the bar.
         trunc_length = term_width - len(bar_str) - 1
-        trunc_msg = self.msg[:trunc_length]
+        trunc_msg = self.message[:trunc_length]
 
         if self.r_align:
             print(trunc_msg + bar_str.rjust(term_width - len(trunc_msg)),

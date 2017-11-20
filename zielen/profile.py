@@ -35,7 +35,7 @@ import pkg_resources
 
 from zielen.paths import get_xdg_data_home, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
-from zielen.io import rec_scan
+from zielen.io import scan_tree
 from zielen.utils import (
     DictProperty, secure_string, set_no_autocomplete, set_path_autocomplete)
 from zielen.exceptions import FileParseError
@@ -374,7 +374,7 @@ class ProfileExcludeFile:
                 self._matches[start_path].add(rel_match_path)
                 self._all_matches[start_path].add(rel_match_path)
                 try:
-                    for entry in rec_scan(match_path):
+                    for entry in scan_tree(match_path):
                         self._all_matches[start_path].add(
                             os.path.relpath(entry.path, start_path))
                 except NotADirectoryError:

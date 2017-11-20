@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from zielen.io import total_size, is_unsafe_symlink, rec_scan, symlink_tree
+from zielen.io import total_size, is_unsafe_symlink, scan_tree, symlink_tree
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def test_rec_scan(files):
     """A directory can be recursively scanned for files."""
     expected_output = {
         "/docs/report.odt", "/docs/scans", "/docs/scans/receipt.pdf"}
-    assert {entry.path for entry in rec_scan("docs")} == expected_output
+    assert {entry.path for entry in scan_tree("docs")} == expected_output
 
 
 def test_total_size(files):

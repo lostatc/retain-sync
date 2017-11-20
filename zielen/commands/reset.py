@@ -22,7 +22,7 @@ import shutil
 
 from zielen.exceptions import (
     RemoteError, AvailableSpaceError, FileTransferError)
-from zielen.io import rec_clone
+from zielen.io import transfer_tree
 from zielen.commandbase import Command, unlock
 
 
@@ -59,10 +59,10 @@ class ResetCommand(Command):
 
             # Retrieve remote files.
             try:
-                rec_clone(
+                transfer_tree(
                     self.remote_dir.safe_path, self.local_dir.path,
                     files=self.remote_dir.get_paths(),
-                    msg="Retrieving files...",
+                    message="Retrieving files...",
                     rm_source=not self.keep_remote)
             except FileNotFoundError:
                 if not os.path.isdir(self.remote_dir.util_dir):

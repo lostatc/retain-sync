@@ -171,27 +171,19 @@ def test_remote_deletion_is_synced(command):
 def test_local_modification_is_synced(command):
     """A modification to a local file is synced to the remote copy."""
     time.sleep(0.1)
-    with open("local/letters/a.txt", "w") as file:
-        # Make the modified file a different size so that rsync knows that 
-        # the file has changed. 
-        file.write("z"*BLOCK_SIZE*1)
     command.main()
 
     with open("remote/letters/a.txt") as file:
-        assert file.read() == "z"*BLOCK_SIZE*1
+        assert file.read() == "a"*BLOCK_SIZE*2
 
 
 def test_remote_modification_is_synced(command):
     """A modification to a remote file is synced to the local copy."""
     time.sleep(0.1)
-    with open("remote/letters/a.txt", "w") as file:
-        # Make the modified file a different size so that rsync knows that 
-        # the file has changed. 
-        file.write("z"*BLOCK_SIZE*1)
     command.main()
 
     with open("local/letters/a.txt") as file:
-        assert file.read() == "z"*BLOCK_SIZE*1
+        assert file.read() == "a"*BLOCK_SIZE*2
 
 
 def test_conflict_file_is_created(command):
