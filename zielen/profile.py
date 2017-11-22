@@ -818,10 +818,11 @@ class ProfileConfigFile(ConfigFile):
         "AccountForSize": "yes"
         }
     _prompt_messages = {
-        "LocalDir":     "The path of the local sync directory.",
-        "RemoteDir":    "The path of the remote sync directory.",
-        "StorageLimit": "The amount of data to keep in the local directory. "
-                        "This accepts KB, MB, GB, KiB, MiB and GiB as units. "
+        "LocalDir":     "Enter the path of the local sync directory.",
+        "RemoteDir":    "Enter the path of the remote sync directory.",
+        "StorageLimit": "Enter the amount of data to keep in the local "
+                        "directory. This accepts KB, MB, GB, KiB, MiB and "
+                        "GiB as units. "
         }
 
     _autocomplete_funcs = {
@@ -927,9 +928,6 @@ class ProfileConfigFile(ConfigFile):
         if not prompt_keys:
             return
 
-        print(textwrap.dedent("""\
-            Please enter values for the following settings.
-            """))
         for key in prompt_keys:
             self._autocomplete_funcs[key]()
             while True:
