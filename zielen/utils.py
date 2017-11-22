@@ -190,13 +190,16 @@ class ProgressBar:
             bar.
     """
     def __init__(
-            self, coverage: float, message="", r_align=True, fill_char="#",
-            empty_char="-") -> None:
+            self, coverage: float, message="", r_align=True,
+            fill_char="\u2588", empty_char="\u2591", left_char="",
+            right_char="") -> None:
         self.coverage = coverage
         self.message = message
         self.r_align = r_align
-        self.fill_char = fill_char[0]
-        self.empty_char = empty_char[0]
+        self.fill_char = fill_char
+        self.empty_char = empty_char
+        self.left_char = left_char
+        self.right_char = right_char
 
     def update(self, fill_amount: float) -> None:
         """Print an updated progress bar.
@@ -213,8 +216,10 @@ class ProgressBar:
         filled_length = int(round(bar_length * fill_amount))
         empty_length = bar_length - filled_length
         percent_str = str(round(fill_amount * 100)).rjust(3)
-        bar_str = "[{0}] {1}%".format(
+        bar_str = "{0}{1}{2} {3}%".format(
+            self.left_char,
             self.fill_char*filled_length + self.empty_char*empty_length,
+            self.right_char,
             percent_str)
 
         # Truncate input message so that it doesn't overlap with the bar.
