@@ -112,7 +112,7 @@ def command(monkeypatch):
 
 # Some of these tests use time.sleep() to ensure that there is a measurable
 # difference between the time of the sync and the mtimes of any files 
-# modified in the tests. 
+# modified or created in the tests.
 
 
 def test_new_local_files_are_synced(command):
@@ -125,15 +125,71 @@ def test_new_local_files_are_synced(command):
     assert remote_paths == TEST_PATHS | {"letters/upper/B.txt"}
 
 
+def test_new_local_symlinks_are_synced(command):
+    """New local symlinks are added to the remote directory."""
+    os.symlink("a.txt", "local/letters/first.txt")
+    command.main()
+
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
+    assert remote_paths == TEST_PATHS | {"letters/first.txt"}
+
+
+def test_absolute_local_symlinks_are_not_synced(command):
+    """Absolute local symlinks are not added to the remote directory."""
+    os.symlink(os.path.abspath("local/letters/a.txt"), "local/letters/first.txt")
+    command.main()
+
+    remote_paths = set(command.remote_dir.scan_paths(memoize=False).keys())
+    assert remote_paths == TEST_PATHS
+
+
+def test_local_symlinks_overwrite_remote_files(command):
+    """Local symlinks that replace local files are synced."""
+    time.sleep(0.1)
+    os.remove("local/letters/a.txt")
+    os.symlink("upper/A.txt", "local/letters/a.txt")
+    command.main()
+
+    remote_paths = set(command.remote_dir.scan_paths(
+        memoize=False, symlinks=False).keys())
+    remote_symlink_paths = set(command.remote_dir.scan_paths(
+        memoize=False, files=False, dirs=False).keys())
+    assert remote_paths == TEST_PATHS - {"letters/a.txt"}
+    assert remote_symlink_paths == {"letters/a.txt"}
+
+
 def test_new_remote_files_are_synced(command):
     """New remote files are added to the local directory."""
     with open("remote/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*2)
     command.main()
 
+    local_paths = set(command.local_dir.scan_paths(memoize=False).keys())
+    assert local_paths == TEST_PATHS | {"letters/upper/B.txt"}
+
+
+def test_new_remote_symlinks_are_synced(command):
+    """New remote symlinks are added to the local directory."""
+    os.symlink("a.txt", "remote/letters/first.txt")
+    command.main()
+
+    local_paths = set(command.local_dir.scan_paths(memoize=False).keys())
+    assert local_paths == TEST_PATHS | {"letters/first.txt"}
+
+
+def test_remote_symlinks_overwrite_local_files(command):
+    """Remote symlinks that replace remote files are synced."""
+    time.sleep(0.1)
+    os.remove("remote/letters/a.txt")
+    os.symlink("upper/A.txt", "remote/letters/a.txt")
+    command.main()
+
     local_paths = set(command.local_dir.scan_paths(
         memoize=False, symlinks=False).keys())
-    assert local_paths == TEST_PATHS | {"letters/upper/B.txt"}
+    local_symlink_paths = set(command.local_dir.scan_paths(
+        memoize=False, files=False, dirs=False).keys())
+    assert local_paths == TEST_PATHS - {"letters/a.txt"}
+    assert local_symlink_paths == {"letters/a.txt"}
 
 
 def test_new_remote_files_are_symlinked(command):

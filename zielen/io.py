@@ -27,6 +27,7 @@ import textwrap
 from typing import Iterable, Optional
 
 from zielen.utils import shell_cmd, ProgressBar
+from zielen.exceptions import FileTransferError
 
 PROGRESS_BAR_LENGTH = 0.35
 
@@ -53,6 +54,8 @@ def transfer_tree(
 
     Raises:
         FileNotFoundError: The source or destination files couldn't be found.
+        FileTransferError: There are insufficient permissions to transfer a
+            file.
     """
     if not os.path.exists(source):
         raise FileNotFoundError("source not found")
@@ -97,15 +100,20 @@ def transfer_tree(
         try:
             shutil.copy2(source_path, dest_path, follow_symlinks=False)
         except (shutil.SameFileError, FileExistsError):
-            # The destination file is a symlink.
             os.remove(dest_path)
             shutil.copy2(source_path, dest_path, follow_symlinks=False)
         except IsADirectoryError:
             os.makedirs(dest_path, exist_ok=True)
+        except PermissionError:
+            raise FileTransferError("permission denied: {0}".format(
+                os.path.relpath(source_path, source)))
 
         if use_bar:
             transferred_size += source_sizes[source_path]
-            transfer_bar.update(transferred_size / total_source_size)
+            try:
+                transfer_bar.update(transferred_size / total_source_size)
+            except ZeroDivisionError:
+                transfer_bar.update(1)
 
         if rm_source:
             try:
@@ -258,9 +266,7 @@ def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
     if not os.path.isabs(link_dest):
         abs_link_dest = os.path.normpath(
             os.path.join(os.path.dirname(link_path), link_dest))
-        if (abs_link_dest == parent_path
-                or abs_link_dest.startswith(
-                    parent_path.rstrip(os.sep) + os.sep)):
+        if os.path.commonpath([abs_link_dest, parent_path]) == parent_path:
             return False
     return True
 
