@@ -81,8 +81,17 @@ COMMANDS
         See EXCLUDING_.
 
     template
-        A blank template can usually be found at
+        The user will still be prompted for any mandatory information that is
+        missing from the template. A blank template can usually be found at
         /usr/share/zielen/config-template.
+
+    add-remote
+        Using this option, it is possible for two or more profiles to share a
+        remote directory.
+
+    keep-remote
+        This is useful when the remote directory is shared with other profiles
+        that may also want to retrieve the files.
 
     empty-trash : @rst
         See TRASH_.

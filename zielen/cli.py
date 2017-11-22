@@ -84,8 +84,7 @@ def main_help_item() -> Item:
     commands.add_text("\n")
     commands.add_def(
         "list", "",
-        "Print a table of all profiles names and the paths of their local "
-        "directories.")
+        "Print a table containing data about each profile.")
     commands.add_text("\n")
     commands.add_def(
         "empty-trash", "name|path",
@@ -116,16 +115,13 @@ def command_help_item() -> Item:
     init_item.add_def(
         "-t, --template", "file",
         "Get settings for the profile from the template file instead of "
-        "prompting the user interactively. The user will still be prompted "
-        "for any mandatory information that is missing from the template.",
-        item_id="template")
+        "prompting the user interactively.", item_id="template")
     init_item.add_text("\n")
     init_item.add_def(
         "-a, --add-remote", "",
         "Instead of moving local files to an empty remote directory, "
         "start with an existing remote directory and an empty local "
-        "directory. Using this option, it is possible for two or more "
-        "profiles to share a remote directory.", item_id="add-remote")
+        "directory.", item_id="add-remote")
     root_item.add_text("\n")
 
     sync_item = root_item.add_def(
@@ -146,9 +142,7 @@ def command_help_item() -> Item:
     reset_item.add_def(
         "-k, --keep-remote", "",
         "Copy files from the remote directory to the local one instead of "
-        "moving them. This is useful when remote directory is shared with "
-        "other profiles that may also want to retrieve the files.",
-        item_id="keep-remote")
+        "moving them.", item_id="keep-remote")
     reset_item.add_text("\n")
     reset_item.add_def(
         "-n, --no-retrieve", "",
@@ -159,8 +153,7 @@ def command_help_item() -> Item:
 
     list_item = root_item.add_def(
         "list", "",
-        "Print a table of all profiles names and the paths of their local "
-        "directories.", item_id="list")
+        "Print a table containing data about each profile.", item_id="list")
     root_item.add_text("\n")
 
     empty_trash_item = root_item.add_def(
