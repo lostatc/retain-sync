@@ -17,7 +17,7 @@ directory vs the remote one. Since different machines can share a remote
 directory, **zielen** allows you to store your files centrally and sync them
 across multiple clients as storage space permits.
 
-`Documentation <https://zielen.readthedocs.io/en/latest/index.html`_
+`Documentation <https://zielen.readthedocs.io/en/latest/index.html>`_
 
 Features
 ========
