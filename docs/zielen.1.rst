@@ -21,10 +21,6 @@ specify how much data they want to remain in the local directory at any given
 point in time. Since local directories on different machines can pair with the
 same remote directory, **zielen** can be used to sync files between machines.
 
-**zielen** does not require root access, and is meant to run as an unprivileged
-user. If the remote directory is located on a separate machine, **zielen** does
-not need to be installed on that machine to function.
-
 Terminology
 -----------
 Local Directory
@@ -104,18 +100,14 @@ the file that was modified the least recently. The new file name contains the
 word "conflict" and the date and time of the sync.
 
 When calculating which files to store locally, **zielen** considers whole
-directory trees. If a directory is retained locally, than all of its
-subdirectories are retained as well.
+directory trees. If a directory is kept in the local directory, than all of its
+subdirectories are kept as well.
 
 During a sync, local files that are new since the last sync have their priority
-artificially inflated in order to keep them in the local directory longer. This
-is to prevent files from being removed from the local directory as soon as
-they're created, when they're likely still being used. This behavior can be
-changed in the profile config file.
-
-**zielen** automatically excludes absolute symbolic links and relative symbolic
-links that point to files outside the local directory, but other symbolic links
-are still synced.
+increased in order to keep them in the local directory longer. This is to
+prevent files from being removed from the local directory as soon as they're
+created, when they're likely still being used. This behavior can be changed in
+the profile config file.
 
 EXCLUDING
 =========
@@ -124,11 +116,13 @@ file (see FILES_). Each line in the file specifies a shell globbing pattern
 that represents files to exclude. Excluded files stay in the local directory
 and don't count toward the storage limit. If an excluded file is not already in
 the local directory, it is copied from the remote directory during the next
-sync. When only one client is using a remote directory, files are removed from
-the remote directory once they are excluded. When multiple clients are sharing
-a remote directory, a file is removed from the remote directory only when it
-has been excluded by each client that shares that remote directory. Until then,
-a copy remains in the remote directory and all copies of the file stay in sync.
+sync.
+
+When only one client is using a remote directory, files are removed from the
+remote directory once they are excluded. When multiple clients are sharing a
+remote directory, a file is removed from the remote directory only when it has
+been excluded by each client that shares that remote directory. Until then, a
+copy remains in the remote directory and all copies of the file stay in sync.
 
 Patterns have the following format:
 
@@ -136,9 +130,10 @@ Patterns have the following format:
 * An asterisk '*' matches anything, but stops at slashes.
 * A double asterisk '**' matches anything, including slashes.
 * A question mark '?' matches any single character.
-* A set of brackets '[]' matches any single character contained within the
+* A set of brackets '[]' matches any one of the characters contained within the
   brackets.
-* To match any of the above meta-characters literally, wrap them in brackets.
+* Any of the above meta-characters can be matched literally by wrapping them in
+  brackets.
 * File names starting with a dot '.' (hidden files) are not matched unless the
   pattern explicitly includes a dot.
 * Patterns ending with a slash only match directory paths.
