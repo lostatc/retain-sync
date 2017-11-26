@@ -40,14 +40,17 @@ class Daemon(Command):
     the 'sync' command at a regular user-defined interval.
 
     Attributes:
-        ADJUST_INTERVAL: This is the interval of time (in seconds) to wait
-            between making priority adjustments. Two files accessed within this
-            interval of time will be weighted the same.
+        ADJUST_INTERVAL: The number of seconds to wait between making priority
+            adjustments. Two files accessed within this interval of time will
+            be weighted the same.
         INCREMENT_AMOUNT: A constant value to add to the priority value every
             time a file is accessed.
         COOLDOWN_PERIOD: The number of seconds that must pass after a file has
             had its priority incremented before its priority can be incremented
             again.
+        SYNC_SLEEP_TIME: The number of seconds to wait between sync attempts.
+        TRANSACTION_SLEEP_TIME: The number of seconds to wait between making
+            database transactions.
         profile: The currently selected profile.
         _files_queue: A queue of filesystem events that are waiting to be
             processed.
@@ -57,6 +60,8 @@ class Daemon(Command):
     ADJUST_INTERVAL = 10*60
     INCREMENT_AMOUNT = 1
     COOLDOWN_PERIOD = 1
+    SYNC_SLEEP_TIME = 3
+    TRANSACTION_SLEEP_TIME = 3
 
     def __init__(self, profile_input: str) -> None:
         super().__init__()
@@ -92,6 +97,7 @@ class Daemon(Command):
         # the database isn't a bottleneck.
         deduplicated_paths = []
         while True:
+            # Get the paths of files that have been accessed.
             accessed_paths = []
             while not self._files_queue.empty():
                 event, timestamp = self._files_queue.get()
@@ -144,7 +150,7 @@ class Daemon(Command):
             else:
                 deduplicated_paths = []
             finally:
-                time.sleep(3)
+                time.sleep(self.TRANSACTION_SLEEP_TIME)
 
     def _adjust(self) -> None:
         """Adjust the priority values in the database at regular intervals."""
@@ -187,4 +193,4 @@ class Daemon(Command):
 
                 # If a sync fails, wait the full interval before trying again.
                 last_attempt = time.time()
-            time.sleep(3)
+            time.sleep(self.SYNC_SLEEP_TIME)
