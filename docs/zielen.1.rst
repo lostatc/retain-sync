@@ -145,18 +145,18 @@ Patterns have the following format:
 
 TRASH
 =====
-Before **zielen** deletes a file in the remote directory, it first searches for
-the file in the user's local trash directory. If it finds a copy of the file in
-the user's local trash, it permanently deletes the file in the remote
-directory. Otherwise, it moves the file to a remote trash directory. This
-directory is '.zielen/Trash' in the remote directory.
+Files that are not kept in the local directory are replaced with symbolic links
+that point to files in the remote directory. If a normal file is removed from
+the local directory, then it is removed from the remote directory as well. If
+one of these symbolic links is removed from the local directory, then the file
+in the remote directory is moved to the remote trash directory. This directory
+is '.zielen/Trash' in the remote directory. This feature exists to prevent
+deleted files from becoming unrecoverable.
 
 This feature can be disabled in the profile config file. Files in the remote
 trash directory are automatically deleted after 30 days, but this can be
 customized in the profile config file. The command **empty-trash** can be used
-to permanently delete all files in the remote trash directory. The list of
-local directories that are searched for deleted files can be altered in the
-profile config file.
+to permanently delete all files in the remote trash directory.
 
 FILES
 =====

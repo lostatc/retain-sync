@@ -83,11 +83,10 @@ class SyncCommand(Command):
         new_local_dirs = (new_paths.local - file_paths)
         new_file_paths = (new_paths.all - dir_paths)
         new_dir_paths = (new_paths.all - file_paths)
+        if self.profile.inflate_priority:
+            self.profile.add_inflated(new_local_files, new_local_dirs)
         self.remote_dir.add_paths(new_file_paths, new_dir_paths)
         self.profile.add_paths(new_file_paths, new_dir_paths)
-        if self.profile.inflate_priority:
-            self.profile.add_inflated(
-                new_local_files, new_local_dirs, replace=True)
 
         # Sync deletions between the local and remote directories.
         fm.rm_local_files(del_paths.local)
@@ -101,11 +100,10 @@ class SyncCommand(Command):
 
         # Add any new files that have been created in the process of
         # handling conflicts to both databases.
+        if self.profile.inflate_priority:
+            self.profile.add_inflated(updated_paths.local, [])
         self.remote_dir.add_paths(updated_paths.all, [])
         self.profile.add_paths(updated_paths.all, [])
-        if self.profile.inflate_priority:
-            self.profile.add_inflated(
-                updated_paths.local, [], replace=True)
 
         # Update the remote directory with modified local files.
         fm.update_remote(updated_paths.local)

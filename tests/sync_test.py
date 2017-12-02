@@ -79,9 +79,8 @@ def init_profile(
             LocalDir={0}
             RemoteDir={1}
             StorageLimit={2}KiB
-            TrashDirs={3}
             """.format(
-            local_path, remote_path, BLOCK_SIZE*10 // 1024, trash_path)))
+            local_path, remote_path, BLOCK_SIZE*10 // 1024)))
 
     init_command = InitCommand(
         profile_name, template="template", add_remote=add_remote)
@@ -297,18 +296,21 @@ def test_files_are_prioritized(command):
 
 
 def test_remote_files_moved_to_trash(command):
-    """Remote files are moved to the trash if not found in local trash."""
-    os.remove("local/letters/a.txt")
+    """Remote files are moved to the trash if the local file was a symlink."""
+    with open("remote/letters/upper/B.txt", "w") as file:
+        file.write("B"*BLOCK_SIZE*5)
+    command.main()
+    os.remove("local/letters/upper/B.txt")
     command.main()
 
     remote_trash_names = [
         entry.name for entry in os.scandir(command.remote_dir.trash_dir)]
-    assert "a.txt" in remote_trash_names
+    assert "B.txt" in remote_trash_names
 
 
 def test_remote_files_not_moved_to_trash(command):
-    """Remote files are not moved to the trash if found in local trash."""
-    shutil.move("local/letters/a.txt", "trash/deleted.txt")
+    """Remote files are not moved to the trash if the local file was normal."""
+    os.remove("local/letters/a.txt")
     command.main()
 
     assert not list(os.scandir(command.remote_dir.trash_dir))

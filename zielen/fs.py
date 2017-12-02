@@ -25,7 +25,7 @@ from typing import Iterable, Tuple, Set, NamedTuple
 
 from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
-from zielen.userdata import LocalSyncDir, RemoteSyncDir, TrashDir
+from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.utils import timestamp_path
 from zielen.io import is_unsafe_symlink, symlink_tree, transfer_tree
 
@@ -360,10 +360,11 @@ class FilesManager:
                 remote directory to the local one. All other files in the local
                 directory are replaced with symlinks.
         """
-        stale_paths = list(self.compute_stale(update_paths))
+        update_paths = set(update_paths)
 
         # Sort the file paths so that a directory's contents always come
         # before the directory itself.
+        stale_paths = list(self.compute_stale(update_paths))
         stale_paths.sort(key=lambda x: x.count(os.sep), reverse=True)
 
         # Remove old, unneeded files to make room for new ones.
@@ -382,6 +383,11 @@ class FilesManager:
                     # happen if there were symbolic links in the directory
                     # that weren't deleted.
                     pass
+
+        # Update the database with information about which paths are being
+        # kept in the local directory.
+        self.profile.update_paths(update_paths, local=True)
+        self.profile.update_paths(stale_paths, local=False)
 
         try:
             symlink_tree(
@@ -408,13 +414,6 @@ class FilesManager:
         Raises:
             RemoteError: The remote directory is unmounted.
         """
-        update_paths = set(update_paths)
-        update_files = set(
-            update_paths - self.local_dir.scan_paths(
-                files=False, symlinks=False).keys())
-        update_dirs = set(
-            update_paths - self.local_dir.scan_paths(dirs=False).keys())
-
         # Copy modified local files to the remote directory.
         try:
             transfer_tree(
@@ -427,7 +426,7 @@ class FilesManager:
                 raise
 
         # Update the time of the last sync for files that have been modified.
-        self.remote_dir.add_paths(update_files, update_dirs, replace=True)
+        self.remote_dir.update_paths(update_paths, lastsync=time.time())
 
     def _setup_dir(self, unsafe_symlinks: Set[str]) -> None:
         """Add file paths to both databases and overwrite with symlinks.
@@ -440,7 +439,7 @@ class FilesManager:
         remote_dirs = self.remote_dir.scan_paths(
             files=False, symlinks=False).keys()
 
-        self.profile.add_paths(remote_files, remote_dirs)
+        self.profile.add_paths(remote_files, remote_dirs, local=False)
         self.remote_dir.add_paths(remote_files, remote_dirs)
 
         # Overwrite local files with symlinks to the corresponding files in the
@@ -677,21 +676,12 @@ class FilesManager:
             remote_del_paths -= sub_paths
 
         # Compute files to be moved to the trash.
-        trash_paths = set()
         if self.profile.use_trash:
-            local_trash_dir = TrashDir(self.profile.trash_dirs)
-            for path in remote_del_paths:
-                remote_path = os.path.join(self.remote_dir.safe_path, path)
-                try:
-                    if not local_trash_dir.check_file(remote_path):
-                        trash_paths.add(path)
-                except FileNotFoundError:
-                    # This is needed in case the previous sync was
-                    # interrupted and there are files in the remote
-                    # directory that have been moved to the trash but not
-                    # yet removed from the database.
-                    trash_paths.add(path)
-            remote_del_paths -= trash_paths
+            trash_paths = (
+                remote_del_paths & self.profile.get_paths(local=False).keys())
+        else:
+            trash_paths = set()
+        remote_del_paths -= trash_paths
 
         return DeletedPaths(local_del_paths, remote_del_paths, trash_paths)
 
@@ -842,10 +832,8 @@ class FilesManager:
             name, extension = os.path.splitext(new_filename)
             while new_filename in trash_filenames:
                 filename_counter += 1
-                new_filename = (
-                    name
-                    + "({})".format(filename_counter)
-                    + extension)
+                new_filename = "{0}({1}){2}".format(
+                    name, filename_counter, extension)
             new_filenames.append(new_filename)
 
         for old_path, new_filename in zip(old_paths, new_filenames):

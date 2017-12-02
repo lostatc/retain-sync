@@ -231,13 +231,13 @@ def test_files_added_to_local_database(temp_dir):
     command.main()
 
     expected = {
-        "empty": LocalPathData(True, 0.0),
-        "letters": LocalPathData(True, 0.0),
-        "letters/a.txt": LocalPathData(False, 0.0),
-        "letters/upper": LocalPathData(True, 0.0),
-        "letters/upper/A.txt": LocalPathData(False, 0.0),
-        "numbers": LocalPathData(True, 0.0),
-        "numbers/1.txt": LocalPathData(False, 0.0)}
+        "empty": LocalPathData(True, 0.0, False),
+        "letters": LocalPathData(True, 0.0, False),
+        "letters/a.txt": LocalPathData(False, 0.0, False),
+        "letters/upper": LocalPathData(True, 0.0, False),
+        "letters/upper/A.txt": LocalPathData(False, 0.0, False),
+        "numbers": LocalPathData(True, 0.0, False),
+        "numbers/1.txt": LocalPathData(False, 0.0, False)}
     assert command.profile.get_paths() == expected
 
 

@@ -21,23 +21,7 @@ import os
 
 import pytest
 
-from zielen.userdata import TrashDir, RemoteDBFile, PathData, SyncDir
-
-
-class TestTrashDir:
-    @pytest.fixture
-    def trash(self, fs):
-        os.mkdir("/trash")
-        fs.CreateFile("/trash/file_a", contents="apple")
-        fs.CreateFile("/trash/file_b", contents="banana")
-
-        return TrashDir("/trash")
-
-    def test_check_different_size_file(self, trash, fs, monkeypatch):
-        """Checking a file of a different size doesn't require a checksum."""
-        monkeypatch.delattr("zielen.userdata.checksum")
-        fs.CreateFile("/file_c", contents="kiwi")
-        assert trash.check_file("/file_c") is False
+from zielen.userdata import RemoteDBFile, PathData, SyncDir
 
 
 class TestSyncDir:
@@ -140,7 +124,7 @@ class TestSyncDir:
         assert initial_mtime == subsequent_mtime
 
 
-class TestProfileDBFile:
+class TestRemoteDBFile:
     @pytest.fixture
     def db(self, monkeypatch):
         test_dirs = [
@@ -204,19 +188,6 @@ class TestProfileDBFile:
     def test_get_nonexistent_path_info(self, db):
         """Querying for a nonexistent path returns None."""
         assert db.get_path_info("foobar") is None
-
-    def test_replace_paths(self, db, monkeypatch):
-        """Existing paths in the database can be replaced."""
-        monkeypatch.setattr("time.time", lambda: 1495317002)
-        db.add_paths(
-            ["documents/scans/receipt.png"], [], replace=True)
-        expected_output = {
-            "empty": PathData(True, 1495316810),
-            "documents": PathData(True, 1495316810),
-            "documents/scans": PathData(True, 1495316810),
-            "documents/report.odt": PathData(False, 1495316810),
-            "documents/scans/receipt.png": PathData(False, 1495317002)}
-        assert db.get_paths() == expected_output
 
     def test_rm_paths(self, db):
         """Paths can be removed from the database."""

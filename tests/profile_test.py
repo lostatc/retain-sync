@@ -49,35 +49,35 @@ class TestProfileDBFile:
     def test_get_paths(self, db):
         """File paths and data can be retrieved."""
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 10.0),
-            "documents/scans": PathData(True, 0.0),
-            "documents/report.odt": PathData(False, 10.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 10.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/report.odt": PathData(False, 10.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
         assert db.get_paths() == expected_output
 
     def test_get_file_paths(self, db):
         """Regular file paths and data can be retrieved."""
         expected_output = {
-            "documents/report.odt": PathData(False, 10.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "documents/report.odt": PathData(False, 10.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
         assert db.get_paths(directory=False) == expected_output
 
     def test_get_directory_paths(self, db):
         """Results can be limited to directories."""
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 10.0),
-            "documents/scans": PathData(True, 0.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 10.0, True),
+            "documents/scans": PathData(True, 0.0, True)}
         assert db.get_paths(directory=True) == expected_output
 
     def test_get_paths_from_root(self, db):
         """Results can be limited to paths under a root directory."""
         expected_output = {
-            "documents": PathData(True, 10.0),
-            "documents/scans": PathData(True, 0.0),
-            "documents/report.odt": PathData(False, 10.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "documents": PathData(True, 10.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/report.odt": PathData(False, 10.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
         assert db.get_paths(root="documents") == expected_output
 
     def test_get_paths_from_nonexistent_root(self, db):
@@ -87,65 +87,66 @@ class TestProfileDBFile:
     def test_get_path_info(self, db):
         """Data about a specific path can be retrieved."""
         assert db.get_path_info(
-            "documents/report.odt") == PathData(False, 10.0)
+            "documents/report.odt") == PathData(False, 10.0, True)
 
     def test_get_nonexistent_path_info(self, db):
         """Querying for a nonexistent path returns None."""
         assert db.get_path_info("foobar") is None
 
-    def test_replace_paths(self, db):
-        """Existing paths in the database can be replaced."""
-        db.add_paths(
-            ["documents/scans/receipt.png"], [], priority=5.0, replace=True)
-        expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 15.0),
-            "documents/scans": PathData(True, 5.0),
-            "documents/report.odt": PathData(False, 10.0),
-            "documents/scans/receipt.png": PathData(False, 5.0)}
-        assert db.get_paths() == expected_output
-
     def test_add_inflated_paths(self, db):
         """Paths can be added to the database with an inflated priority."""
         db.add_inflated(["documents/essay.odt"], [])
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 20.0),
-            "documents/scans": PathData(True, 0.0),
-            "documents/essay.odt": PathData(False, 10.0),
-            "documents/report.odt": PathData(False, 10.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 20.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/essay.odt": PathData(False, 10.0, True),
+            "documents/report.odt": PathData(False, 10.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
+        assert db.get_paths() == expected_output
+
+    def test_update_paths(self, db):
+        """Information associated with paths can be updated."""
+        db.update_paths(["documents/report.odt"], priority=5.0)
+        db.update_paths(["documents/scans/receipt.png"], local=False)
+
+        expected_output = {
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 5.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/report.odt": PathData(False, 5.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, False)}
         assert db.get_paths() == expected_output
 
     def test_rm_paths(self, db):
         """Paths can be removed from the database."""
         db.rm_paths(["documents/scans"])
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 10.0),
-            "documents/report.odt": PathData(False, 10.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 10.0, True),
+            "documents/report.odt": PathData(False, 10.0, True)}
         assert db.get_paths() == expected_output
 
     def test_increment(self, db):
         """Path priorities can be incremented."""
         db.increment(["documents/report.odt"], 1)
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 11.0),
-            "documents/scans": PathData(True, 0.0),
-            "documents/report.odt": PathData(False, 11.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 11.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/report.odt": PathData(False, 11.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
         assert db.get_paths() == expected_output
 
     def test_adjust_all(self, db):
         """The priorities of all paths can be adjusted."""
         db.adjust_all(0.5)
         expected_output = {
-            "empty": PathData(True, 0.0),
-            "documents": PathData(True, 5.0),
-            "documents/scans": PathData(True, 0.0),
-            "documents/report.odt": PathData(False, 5.0),
-            "documents/scans/receipt.png": PathData(False, 0.0)}
+            "empty": PathData(True, 0.0, True),
+            "documents": PathData(True, 5.0, True),
+            "documents/scans": PathData(True, 0.0, True),
+            "documents/report.odt": PathData(False, 5.0, True),
+            "documents/scans/receipt.png": PathData(False, 0.0, True)}
         assert db.get_paths() == expected_output
 
 
@@ -168,7 +169,6 @@ class TestProfileConfigFile:
             ("RemoteDir", ["", "rel/path"]),
             ("StorageLimit", ["", "abc", "123", "3.14", "123QiB"]),
             ("SyncInterval", ["", "abc", "3.14"]),
-            ("TrashDirs", ["rel/path", "/abs/path:rel/path"]),
             ("PriorityHalfLife", ["", "abc"])
             ])
     def test_incorrect_syntax(self, cfg_file, key, values):
@@ -182,7 +182,6 @@ class TestProfileConfigFile:
             ("RemoteDir", ["/empty"]),
             ("StorageLimit", ["50MiB", "20 GB"]),
             ("SyncInterval", ["20"]),
-            ("TrashDirs", ["/abs/path:~/path"]),
             ("PriorityHalfLife", ["120"])
             ])
     def test_correct_syntax(self, cfg_file, key, values):

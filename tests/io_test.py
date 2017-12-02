@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from zielen.io import total_size, is_unsafe_symlink, scan_tree, symlink_tree
+from zielen.io import is_unsafe_symlink, scan_tree, symlink_tree
 
 
 @pytest.fixture
@@ -66,11 +66,6 @@ def test_rec_scan(files):
     expected_output = {
         "/docs/report.odt", "/docs/scans", "/docs/scans/receipt.pdf"}
     assert {entry.path for entry in scan_tree("docs")} == expected_output
-
-
-def test_total_size(files):
-    """The total size of a directory can be calculated."""
-    assert total_size("/docs") == 11
 
 
 def test_is_unsafe_symlink(fs):

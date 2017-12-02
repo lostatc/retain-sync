@@ -194,56 +194,6 @@ def scan_tree(path: str):
             yield from scan_tree(entry.path)
 
 
-def total_size(path: str) -> int:
-    """Find the size of a file or a directory and all its contents.
-
-    Args:
-        path: The path of the file to find the size of.
-
-    Returns:
-        The size of the file in bytes.
-    """
-    if os.path.isdir(path):
-        dir_size = os.stat(path).st_size
-        for entry in scan_tree(path):
-            dir_size += entry.stat().st_size
-        return dir_size
-    else:
-        return os.stat(path).st_size
-
-
-def checksum(path: str, hash_func="sha256") -> str:
-    """Get the checksum of a file, reading one block at a time.
-
-    Args:
-        path: The path of the file to find the checksum of. If this value is
-            the path of a directory, a checksum will be computed based on all
-            the files in the directory.
-        hash_func: The name of the hash function to use.
-
-    Returns:
-        The hexadecimal checksum of the file.
-    """
-    file_hash = hashlib.new(hash_func)
-    checksum_paths = []
-    try:
-        for entry in scan_tree(path):
-            if entry.is_file(follow_symlinks=False):
-                checksum_paths.append(entry.path)
-    except NotADirectoryError:
-        checksum_paths.append(path)
-
-    # This is necessary to ensure that the same checksum is returned each time.
-    checksum_paths.sort()
-
-    for checksum_path in checksum_paths:
-        block_size = os.stat(checksum_path).st_blksize
-        with open(checksum_path, "rb") as file:
-            for block in iter(lambda: file.read(block_size), b""):
-                file_hash.update(block)
-    return file_hash.hexdigest()
-
-
 def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
     """Check if file is a symlink that can't be safely transferred.
 

@@ -27,82 +27,11 @@ from typing import (
 
 from zielen.exceptions import RemoteError
 from zielen.containerbase import SyncDBFile
-from zielen.io import scan_tree, checksum, total_size
+from zielen.io import scan_tree
 from zielen.profile import ProfileExcludeFile
 from zielen.utils import FactoryDict, secure_string
 
 PathData = NamedTuple("PathData", [("directory", bool), ("lastsync", float)])
-
-
-class TrashDir:
-    """Get information about the user's local trash directory.
-
-    Attributes:
-        paths: The path or paths of the trash directories.
-        _stored_sizes: A list of tuples containing the paths and sizes of every file
-            in the trash.
-    """
-    def __init__(self, paths: Union[Iterable[str], str]) -> None:
-        if isinstance(paths, str):
-            self.paths = [paths]
-        else:
-            self.paths = paths
-        self._stored_sizes = []
-
-    @property
-    def _sizes(self) -> List[Tuple[str, int]]:
-        """Get the sizes of every top-level file in the trash directory.
-
-        Top-level directories are collectively treated as a single file.
-
-        Returns:
-            A list of file paths and sizes in bytes.
-        """
-        if not self._stored_sizes:
-            output = []
-            for path in self.paths:
-                if os.path.isdir(path):
-                    for entry in os.scandir(path):
-                        if not entry.is_dir():
-                            output.append((
-                                entry.path,
-                                entry.stat(follow_symlinks=False).st_size))
-                        else:
-                            output.append((entry.path, total_size(entry.path)))
-
-            self._stored_sizes = output
-        return self._stored_sizes
-
-    def check_file(self, path: str) -> bool:
-        """Check if a file is in the trash by comparing sizes and checksums.
-
-        The checksum is only computed for files which are the same size as
-        the file being checked against.
-
-        Args:
-            path: The path of the file to check the trash directory for.
-
-        Returns:
-            True if the file is in the trash directory and False otherwise.
-        """
-        # The blake2b hash function is faster than sha256, but only available
-        # as of Python 3.6.
-        if "blake2b" in hashlib.algorithms_available:
-            hash_func = "blake2b"
-        else:
-            hash_func = "sha256"
-
-        file_size = total_size(path)
-        overlap_files = {
-            filepath for filepath, size in self._sizes if file_size == size}
-
-        if overlap_files:
-            overlap_sums = {
-                checksum(filepath, hash_func=hash_func)
-                for filepath in overlap_files if os.path.lexists(filepath)}
-            if checksum(path, hash_func=hash_func) in overlap_sums:
-                return True
-        return False
 
 
 class SyncDir:
@@ -232,6 +161,7 @@ class RemoteSyncDir(SyncDir):
 
         # Import methods from content classes.
         self.add_paths = self._db_file.add_paths
+        self.update_paths = self._db_file.update_paths
         self.rm_paths = self._db_file.rm_paths
         self.get_path_info = self._db_file.get_path_info
         self.get_paths = self._db_file.get_paths
@@ -379,8 +309,7 @@ class RemoteDBFile(SyncDBFile):
                 );
                 """)
 
-    def add_paths(self, files: Iterable[str], dirs: Iterable[str],
-                  replace=False) -> None:
+    def add_paths(self, files: Iterable[str], dirs: Iterable[str]) -> None:
         """Add new file paths to the database if not already there.
 
         A file path is automatically marked as a directory when sub-paths are
@@ -392,7 +321,6 @@ class RemoteDBFile(SyncDBFile):
         Args:
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
-            replace: Replace existing rows instead of ignoring them.
         """
         # Sort paths by depth. A file can't be added to the database until its
         # parent directory has been added.
@@ -440,13 +368,6 @@ class RemoteDBFile(SyncDBFile):
             if self._cur.rowcount <= 0:
                 break
 
-        if replace:
-            # Remove paths from the database if they already exist.
-            self._cur.executemany("""\
-                DELETE FROM nodes
-                WHERE id = :path_id
-                """, rm_vals)
-
         # Insert new values into both tables.
         self._cur.executemany("""\
             INSERT INTO nodes (id, path, directory, lastsync)
@@ -460,6 +381,40 @@ class RemoteDBFile(SyncDBFile):
             UNION ALL SELECT :path_id, :path_id, 0;
             """, insert_closure_vals)
         self._mark_directory(parents)
+
+    def update_paths(
+            self, paths: Iterable[str], directory=None, lastsync=None) -> None:
+        """Update information associated with file paths in the database.
+
+        Args:
+            paths: The paths to update.
+            directory: The paths are the paths of directories. Use None to
+                leave the value unchanged.
+            lastsync: The time that the paths were last updated by a sync. Use
+                None to leave the value unchanged.
+        """
+        update_vals = []
+        for path in paths:
+            path_id = self._get_path_id(path)
+
+            update_vals.append({
+                "path_id": path_id,
+                "directory": directory,
+                "lastsync": lastsync})
+
+        if directory is not None:
+            self._cur.executemany("""\
+                UPDATE nodes
+                SET directory = :directory
+                WHERE id = :path_id;
+                """, update_vals)
+
+        if lastsync is not None:
+            self._cur.executemany("""\
+                UPDATE nodes
+                SET lastsync = :lastsync
+                WHERE id = :path_id;
+                """, update_vals)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.

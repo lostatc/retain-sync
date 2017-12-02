@@ -41,7 +41,7 @@ from zielen.utils import (
 from zielen.exceptions import FileParseError
 
 PathData = NamedTuple(
-    "PathData", [("directory", bool), ("priority", float)])
+    "PathData", [("directory", bool), ("priority", float), ("local", bool)])
 
 
 class Profile:
@@ -74,6 +74,7 @@ class Profile:
         self.all_exclude_matches = self._exclude_file.all_matches
         self.add_paths = self._db_file.add_paths
         self.add_inflated = self._db_file.add_inflated
+        self.update_paths = self._db_file.update_paths
         self.rm_paths = self._db_file.rm_paths
         self.get_path_info = self._db_file.get_path_info
         self.get_paths = self._db_file.get_paths
@@ -240,15 +241,6 @@ class Profile:
     def sync_interval(self) -> int:
         """The number of seconds the daemon will wait between syncs."""
         return int(self._cfg_file.vals["SyncInterval"]) * 60
-
-    @property
-    def trash_dirs(self) -> List[str]:
-        """The directories in which to search for deleted files."""
-        dirs = self._cfg_file.vals["TrashDirs"].split(":")
-        for index, element in enumerate(dirs.copy()):
-            dirs[index] = os.path.expanduser(
-                os.path.normpath(element))
-        return dirs
 
     @property
     def cleanup_period(self) -> Optional[int]:
@@ -481,6 +473,7 @@ class ProfileDBFile(SyncDBFile):
                     path        TEXT    NOT NULL,
                     directory   BOOL    NOT NULL,
                     priority    REAL    NOT NULL,
+                    local       BOOL    NOT NULL,
                     PRIMARY KEY (id) ON CONFLICT IGNORE
                 );
 
@@ -545,7 +538,7 @@ class ProfileDBFile(SyncDBFile):
             """, nodes_values)
 
     def add_paths(self, files: Iterable[str], dirs: Iterable[str],
-                  priority=0, replace=False) -> None:
+                  priority=0, local=True) -> None:
         """Add new file paths to the database if not already there.
 
         A file path is automatically marked as a directory when sub-paths are
@@ -556,7 +549,8 @@ class ProfileDBFile(SyncDBFile):
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
             priority: The starting priority of the file paths.
-            replace: Replace existing rows instead of ignoring them.
+            local: The paths are the paths of files that have been kept in the
+                local directory.
         """
         # Sort paths by depth. A file can't be added to the database until its
         # parent directory has been added.
@@ -585,7 +579,8 @@ class ProfileDBFile(SyncDBFile):
                     "path": path,
                     "path_id": path_id,
                     "directory": bool(path in dirs),
-                    "priority": priority})
+                    "priority": priority,
+                    "local": local})
                 insert_closure_vals.append({
                     "path_id": path_id,
                     "parent_id": parent_id})
@@ -603,17 +598,10 @@ class ProfileDBFile(SyncDBFile):
             if self._cur.rowcount <= 0:
                 break
 
-        if replace:
-            # Remove paths from the database if they already exist.
-            self._cur.executemany("""\
-                DELETE FROM nodes
-                WHERE id = :path_id
-                """, rm_vals)
-
         # Insert new values into both tables.
         self._cur.executemany("""\
-            INSERT INTO nodes (id, path, directory, priority)
-            VALUES (:path_id, :path, :directory, :priority);
+            INSERT INTO nodes (id, path, directory, priority, local)
+            VALUES (:path_id, :path, :directory, :priority, :local);
             """, insert_nodes_vals)
         self._cur.executemany("""\
             INSERT INTO closure (ancestor, descendant, depth)
@@ -625,21 +613,68 @@ class ProfileDBFile(SyncDBFile):
         self._mark_directory(parents)
         self._update_priority(parents)
 
-    def add_inflated(self, files: Iterable[str], dirs: Iterable[str],
-                     replace=False) -> None:
+    def add_inflated(self, files: Iterable[str], dirs: Iterable[str]) -> None:
         """Add new file paths to the database with an inflated priority.
 
         Args:
             files: The paths of regular files to add to the database.
             dirs: The paths of directories to add to the database.
-            replace: Replace existing rows instead of ignoring them.
         """
         self._cur.execute("""\
             SELECT MAX(priority) FROM nodes
             WHERE directory = 0;
             """)
         max_priority = self._cur.fetchone()[0]
-        self.add_paths(files, dirs, priority=max_priority, replace=replace)
+        self.add_paths(files, dirs, priority=max_priority)
+
+    def update_paths(
+            self, paths: Iterable[str], directory=None, priority=None,
+            local=None) -> None:
+        """Update information associated with file paths in the database.
+
+        Args:
+            paths: The paths to update.
+            directory: The paths are the paths of directories. Use None to
+                leave the value unchanged.
+            priority: The starting priority of the file paths. Use None to
+                leave the value unchanged.
+            local: The paths are the paths of files that have been kept in the
+                local directory. Use None to leave the value unchanged.
+        """
+        update_vals = []
+        for path in paths:
+            path_id = self._get_path_id(path)
+
+            update_vals.append({
+                "path_id": path_id,
+                "directory": directory,
+                "priority": priority,
+                "local": local})
+
+        if directory is not None:
+            self._cur.executemany("""\
+                UPDATE nodes
+                SET directory = :directory
+                WHERE id = :path_id;
+                """, update_vals)
+
+        if priority is not None:
+            self._cur.executemany("""\
+                UPDATE nodes
+                SET priority = :priority
+                WHERE id = :path_id;
+                """, update_vals)
+
+        if local is not None:
+            self._cur.executemany("""\
+                UPDATE nodes
+                SET local = :local
+                WHERE id = :path_id;
+                """, update_vals)
+
+        parents = {
+            os.path.dirname(path) for path in paths if os.path.dirname(path)}
+        self._update_priority(parents)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -682,15 +717,16 @@ class ProfileDBFile(SyncDBFile):
             path: The file path to search the database for.
 
         Returns:
-            A named tuple containing a bool representing whether the file is a
-            directory and the file priority.
+            A named tuple containing a bool representing whether the file is
+            a directory, the file priority and a bool representing whether
+            the file has been kept in the local directory.
         """
         # Clear the query result set.
         self._cur.fetchall()
 
         path_id = self._get_path_id(path)
         self._cur.execute("""\
-            SELECT directory, priority
+            SELECT directory, priority, local
             FROM nodes
             WHERE id = :path_id;
             """, {"path_id": path_id})
@@ -699,36 +735,45 @@ class ProfileDBFile(SyncDBFile):
         if result:
             return PathData(*result)
 
-    def get_paths(self, root=None, directory=None) -> Dict[str, PathData]:
+    def get_paths(
+            self, root=None, directory=None, local=None
+            ) -> Dict[str, PathData]:
         """Get the paths of files in the database.
 
         Args:
             root: A relative directory path. Results are restricted to just
                 paths under this directory path.
             directory: Restrict results to just directory paths (True) or just
-                file paths (False).
+                file paths (False). None means no restrictions.
+            local: Restrict results to just the paths that have been kept in
+                the local directory (True) or just paths that have not been
+                kept in the local directory (False). None means no
+                restrictions.
 
         Returns:
             A dict containing file paths as keys and named tuples as values.
             These named tuples contain a bool representing whether the file
-            is a directory and the file priority.
+            is a directory, the file priority and a bool representing whether
+            the file has been kept in the local directory.
         """
         start_id = self._get_path_id(root) if root else None
         self._cur.execute("""\
-            SELECT n.path, n.directory, n.priority
+            SELECT n.path, n.directory, n.priority, n.local
             FROM nodes AS n
             JOIN closure AS c
             ON (n.id = c.descendant)
             WHERE (:start_id IS NULL OR c.ancestor = :start_id)
-            AND (:directory IS NULL OR n.directory = :directory);
-            """, {"start_id": start_id, "directory": directory})
+            AND (:directory IS NULL OR n.directory = :directory)
+            AND (:local IS NULL OR n.local = :local);
+            """, {
+                "start_id": start_id, "directory": directory, "local": local})
 
         # As long as self._cur.arraysize is greater than 1, fetchmany() should
         # be more efficient than fetchall().
         return {
-            path: PathData(directory, priority)
+            path: PathData(directory, priority, local)
             for array in iter(self._cur.fetchmany, [])
-            for path, directory, priority in array}
+            for path, directory, priority, local in array}
 
     def increment(self, paths: Iterable[str],
                   increment: Union[int, float]) -> None:
@@ -801,8 +846,8 @@ class ProfileConfigFile(ConfigFile):
         "LocalDir", "RemoteDir", "StorageLimit"
         ]
     _optional_keys = [
-        "SyncInterval", "PriorityHalfLife", "UseTrash", "TrashDirs",
-        "TrashCleanupPeriod", "InflatePriority", "AccountForSize"
+        "SyncInterval", "PriorityHalfLife", "UseTrash", "TrashCleanupPeriod",
+        "InflatePriority", "AccountForSize"
         ]
     _all_keys = _required_keys + _optional_keys
     _bool_keys = [
@@ -812,7 +857,6 @@ class ProfileConfigFile(ConfigFile):
         "SyncInterval": "20",
         "PriorityHalfLife": "120",
         "UseTrash": "yes",
-        "TrashDirs": os.path.join(get_xdg_data_home(), "Trash/files"),
         "TrashCleanupPeriod": "30",
         "InflatePriority": "yes",
         "AccountForSize": "yes"
@@ -865,10 +909,6 @@ class ProfileConfigFile(ConfigFile):
         elif key == "PriorityHalfLife":
             if not re.search("^[0-9]+$", value):
                 return "must be an integer"
-        elif key == "TrashDirs":
-            if value:
-                if re.search("(^|:)(?!~?/)", value):
-                    return "only accepts absolute paths"
         elif key == "TrashCleanupPeriod":
             if not re.search(r"^-?[0-9]+$", value):
                 return "must be an integer"
