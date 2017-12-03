@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from zielen.io import is_unsafe_symlink, scan_tree, symlink_tree
+from zielen.fstools import is_unsafe_symlink, scan_tree, symlink_tree
 
 
 @pytest.fixture

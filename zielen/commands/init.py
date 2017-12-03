@@ -27,8 +27,8 @@ from typing import Optional
 
 from zielen.paths import get_program_dir
 from zielen.exceptions import InputError
-from zielen.io import check_dir
-from zielen.fs import FilesManager
+from zielen.fstools import check_dir
+from zielen.filelogic import FilesManager
 from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.profile import Profile
 from zielen.commandbase import Command, unlock

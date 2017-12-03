@@ -27,7 +27,7 @@ from typing import (
 
 from zielen.exceptions import RemoteError
 from zielen.containerbase import SyncDBFile
-from zielen.io import scan_tree
+from zielen.fstools import scan_tree
 from zielen.profile import ProfileExcludeFile
 from zielen.utils import FactoryDict, secure_string
 

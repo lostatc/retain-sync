@@ -35,7 +35,7 @@ import pkg_resources
 
 from zielen.paths import get_xdg_data_home, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
-from zielen.io import scan_tree
+from zielen.fstools import scan_tree
 from zielen.utils import (
     DictProperty, secure_string, set_no_autocomplete, set_path_autocomplete)
 from zielen.exceptions import FileParseError

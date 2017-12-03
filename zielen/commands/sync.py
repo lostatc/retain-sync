@@ -23,7 +23,7 @@ import time
 from typing import Iterable, Set, NamedTuple, Tuple, List
 
 from zielen.commandbase import Command, unlock
-from zielen.fs import FilesManager
+from zielen.filelogic import FilesManager
 
 DeletedPaths = NamedTuple(
     "DeletedPaths",

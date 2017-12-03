@@ -1,4 +1,4 @@
-"""High-level filesystem operations.
+"""High-level file transfer operations and logic.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -27,7 +27,7 @@ from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
 from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.utils import timestamp_path
-from zielen.io import (
+from zielen.fstools import (
     is_unsafe_symlink, symlink_tree, transfer_tree, update_mtime)
 
 DeletedPaths = NamedTuple(

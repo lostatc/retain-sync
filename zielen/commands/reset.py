@@ -22,7 +22,7 @@ import shutil
 
 from zielen.exceptions import (
     RemoteError, AvailableSpaceError, FileTransferError)
-from zielen.io import transfer_tree
+from zielen.fstools import transfer_tree
 from zielen.commandbase import Command, unlock
 
 

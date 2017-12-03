@@ -19,7 +19,7 @@ along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
 import pytest
 
-from zielen.fs import PathsDiff
+from zielen.filelogic import PathsDiff
 
 
 class TestPathsDiff:
