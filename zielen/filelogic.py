@@ -405,7 +405,7 @@ class FilesManager:
         # kept in the local directory.
         for update_path in update_paths:
             self.profile.update_paths(
-                self.profile.get_paths(update_path).keys(), local=True)
+                self.profile.get_paths(root=update_path).keys(), local=True)
         self.profile.update_paths(nonlocal_paths, local=False)
 
     def update_remote(self, update_paths: Iterable[str]) -> None:
