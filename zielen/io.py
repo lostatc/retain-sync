@@ -1,4 +1,4 @@
-"""Access or modify the filesystem.
+"""File management utilities.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -17,14 +17,13 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import contextlib
-import hashlib
-import shutil
 import os
 import sys
+import time
+import shutil
+import hashlib
 import tempfile
-import textwrap
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Set
 
 from zielen.utils import shell_cmd, ProgressBar
 from zielen.exceptions import FileTransferError
@@ -125,9 +124,9 @@ def transfer_tree(
         print()
 
 
-def symlink_tree(src_dir: str, dest_dir: str,
-                 src_files: Iterable[str], src_dirs: Iterable[str],
-                 exclude=None, overwrite=False) -> None:
+def symlink_tree(
+        src_dir: str, dest_dir: str, src_files: Iterable[str],
+        src_dirs: Iterable[str], overwrite=False) -> Set[str]:
     """Recursively copy a directory as a tree of symlinks.
 
     This function does not look in the source directory. Instead, the caller
@@ -143,11 +142,13 @@ def symlink_tree(src_dir: str, dest_dir: str,
             destination.
         src_files: The relative paths of the files to symlink in the
             destination.
-        exclude: The relative paths of files/directories to not symlink.
         overwrite: Overwrite existing files in the destination directory
             with symlinks.
+
+    Returns:
+        A set of relative paths of files and directories that have been created
+        in the destination.
     """
-    exclude = set() if exclude is None else set(exclude)
     src_dirs = set(src_dirs)
     src_files = set(src_files)
     src_paths = list(src_dirs | src_files)
@@ -155,28 +156,30 @@ def symlink_tree(src_dir: str, dest_dir: str,
     # Sort paths by depth from trunk to leaf.
     src_paths.sort(key=lambda x: x.count(os.sep))
 
+    new_paths = set()
     os.makedirs(dest_dir, exist_ok=True)
     for src_path in src_paths:
         full_src_path = os.path.join(src_dir, src_path)
         full_dest_path = os.path.join(dest_dir, src_path)
-        for exclude_path in exclude:
-            if (src_path == exclude_path
-                    or src_path.startswith(
-                        exclude_path.rstrip(os.sep) + os.sep)):
-                break
-        else:
-            if src_path in src_dirs:
-                try:
-                    os.mkdir(full_dest_path)
-                except FileExistsError:
-                    pass
-            elif src_path in src_files:
-                try:
+        if src_path in src_dirs:
+            try:
+                os.mkdir(full_dest_path)
+            except FileExistsError:
+                pass
+            else:
+                new_paths.add(src_path)
+        elif src_path in src_files:
+            try:
+                os.symlink(full_src_path, full_dest_path)
+            except FileExistsError:
+                if overwrite:
+                    os.remove(full_dest_path)
                     os.symlink(full_src_path, full_dest_path)
-                except FileExistsError:
-                    if overwrite:
-                        os.remove(full_dest_path)
-                        os.symlink(full_src_path, full_dest_path)
+                    new_paths.add(src_path)
+            else:
+                new_paths.add(src_path)
+
+    return new_paths
 
 
 def scan_tree(path: str):
@@ -219,6 +222,21 @@ def is_unsafe_symlink(link_path: str, parent_path: str) -> bool:
         if os.path.commonpath([abs_link_dest, parent_path]) == parent_path:
             return False
     return True
+
+
+def update_mtime(path) -> None:
+    """Update the mtime of a file or directory.
+
+    Symbolic links are not followed.
+
+    Args:
+        path: The path of the file or directory.
+    """
+    if os.path.isdir(path):
+        tempfile.NamedTemporaryFile(dir=path).close()
+    elif os.path.exists(path):
+        current = time.time()
+        os.utime(path, times=(current, current), follow_symlinks=False)
 
 
 def check_dir(path: str, expect_empty: bool) -> Optional[str]:

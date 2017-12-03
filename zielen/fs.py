@@ -1,4 +1,4 @@
-"""Manage filesystem paths.
+"""High-level filesystem operations.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
@@ -27,7 +27,8 @@ from zielen.exceptions import RemoteError, AvailableSpaceError
 from zielen.profile import Profile, ProfileExcludeFile
 from zielen.userdata import LocalSyncDir, RemoteSyncDir
 from zielen.utils import timestamp_path
-from zielen.io import is_unsafe_symlink, symlink_tree, transfer_tree
+from zielen.io import (
+    is_unsafe_symlink, symlink_tree, transfer_tree, update_mtime)
 
 DeletedPaths = NamedTuple(
     "DeletedPaths",
@@ -384,13 +385,8 @@ class FilesManager:
                     # that weren't deleted.
                     pass
 
-        # Update the database with information about which paths are being
-        # kept in the local directory.
-        self.profile.update_paths(update_paths, local=True)
-        self.profile.update_paths(stale_paths, local=False)
-
         try:
-            symlink_tree(
+            nonlocal_paths = symlink_tree(
                 self.remote_dir.safe_path, self.local_dir.path,
                 self.remote_dir.get_paths(directory=False),
                 self.remote_dir.get_paths(directory=True))
@@ -404,6 +400,13 @@ class FilesManager:
                 raise RemoteError("the remote directory could not be found")
             else:
                 raise
+
+        # Update the database with information about which paths are being
+        # kept in the local directory.
+        for update_path in update_paths:
+            self.profile.update_paths(
+                self.profile.get_paths(update_path).keys(), local=True)
+        self.profile.update_paths(nonlocal_paths, local=False)
 
     def update_remote(self, update_paths: Iterable[str]) -> None:
         """Update the remote directory with local files.
@@ -837,10 +840,12 @@ class FilesManager:
             new_filenames.append(new_filename)
 
         for old_path, new_filename in zip(old_paths, new_filenames):
+            abs_old_path = os.path.join(self.remote_dir.safe_path, old_path)
+            abs_new_path = os.path.join(
+                self.remote_dir.trash_dir, new_filename)
             try:
-                os.rename(
-                    os.path.join(self.remote_dir.safe_path, old_path),
-                    os.path.join(self.remote_dir.trash_dir, new_filename))
+                os.rename(abs_old_path, abs_new_path)
+                update_mtime(abs_new_path)
             except FileNotFoundError:
                 # This could happen if a previous sync was interrupted.
                 pass

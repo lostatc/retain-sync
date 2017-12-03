@@ -40,16 +40,6 @@ def test_symlink_tree(files, fs):
     assert os.path.islink("/dest/scans/receipt.pdf")
 
 
-def test_symlink_tree_with_exclude(files, fs):
-    """Files can be excluded when creating a tree of symlinks."""
-    fs.CreateFile("/dest/report.odt")
-    symlink_tree(
-        "/docs", "/dest", {"report.odt", "scans/receipt.pdf"}, {"scans"},
-        exclude={"scans/receipt.pdf"})
-    assert os.path.isdir("/dest/scans")
-    assert os.path.isfile("/dest/report.odt")
-
-
 def test_symlink_tree_with_overwrite(files, fs):
     """Files can be overwritten when creating a tree of symlinks."""
     fs.CreateFile("/dest/report.odt")
