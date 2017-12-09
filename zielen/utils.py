@@ -28,7 +28,7 @@ import datetime
 import random
 import string
 import readline
-from typing import List, Tuple
+from typing import List, Tuple, Iterable
 
 from zielen.paths import get_home_dir
 
@@ -64,12 +64,34 @@ def timestamp_path(path: str, keyword="") -> str:
     """
     keyword += "-" if keyword else keyword
     name, extension = os.path.splitext(path)
-    return (
-        name
-        + "_"
-        + keyword
-        + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        + extension)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return "{0}_{1}{2}{3}".format(name, keyword, timestamp, extension)
+
+
+def get_path_ancestry(paths: Iterable[str]) -> List[str]:
+    """For each path given, get all parent directories up to the root.
+
+    Args:
+        paths: The paths to get the ancestors of.
+
+    Returns:
+        A deduplicated list of paths sorted by depth from leaf to trunk.
+    """
+    # A deque is used here because a list cannot be appended to while it is
+    # being iterated over.
+    path_queue = collections.deque(paths)
+    output_paths = set()
+    while len(path_queue) > 0:
+        path = path_queue.pop()
+        output_paths.add(path)
+        parent = os.path.dirname(path)
+        if parent:
+            path_queue.appendleft(parent)
+
+    # Sort paths by depth.
+    sorted_paths = list(sorted(
+        output_paths, key=lambda x: x.count(os.sep), reverse=True))
+    return sorted_paths
 
 
 def secure_string(length: int) -> str:

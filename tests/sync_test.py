@@ -309,9 +309,30 @@ def test_remote_files_moved_to_trash(command):
 
 
 def test_remote_directories_moved_to_trash(command):
-    """Remote directories are moved to the trash."""
+    """Remote directories are moved to the trash.
+
+    Remote directories are moved to the trash if the local directory
+    contained only symlinks.
+    """
     with open("remote/letters/upper/A.txt", "w") as file:
         file.write("A"*BLOCK_SIZE*5)
+    with open("remote/letters/upper/B.txt", "w") as file:
+        file.write("B"*BLOCK_SIZE*5)
+    command.main()
+    shutil.rmtree("local/letters/upper")
+    command.main()
+
+    remote_trash_names = [
+        entry.name for entry in os.scandir(command.remote_dir.trash_dir)]
+    assert "upper" in remote_trash_names
+
+
+def test_mixed_remote_directories_moved_to_trash(command):
+    """Mixed remote directories are moved to the trash.
+
+    Remote directories are moved to the trash if the local directory
+    contained both regular files and symlinks.
+    """
     with open("remote/letters/upper/B.txt", "w") as file:
         file.write("B"*BLOCK_SIZE*5)
     command.main()

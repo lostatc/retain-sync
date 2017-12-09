@@ -37,7 +37,8 @@ from zielen.paths import get_xdg_data_home, get_profiles_dir
 from zielen.containerbase import JSONFile, ConfigFile, SyncDBFile
 from zielen.fstools import scan_tree
 from zielen.utils import (
-    DictProperty, secure_string, set_no_autocomplete, set_path_autocomplete)
+    DictProperty, secure_string, set_no_autocomplete, set_path_autocomplete,
+    get_path_ancestry)
 from zielen.exceptions import FileParseError
 
 PathData = NamedTuple(
@@ -507,21 +508,8 @@ class ProfileDBFile(SyncDBFile):
             paths: The relative paths of the directories to update the priority
                 values of.
         """
-        # A deque is used here because a list cannot be appended to while it is
-        # being iterated over.
-        path_queue = collections.deque(paths)
-        check_paths = set()
-        while len(path_queue) > 0:
-            path = path_queue.pop()
-            check_paths.add(path)
-            parent = os.path.dirname(path)
-            if parent:
-                path_queue.appendleft(parent)
-
-        # Sort paths by depth.
         nodes_values = []
-        for path in sorted(
-                check_paths, key=lambda x: x.count(os.sep), reverse=True):
+        for path in get_path_ancestry(paths):
             path_id = self._get_path_id(path)
             nodes_values.append({"path_id": path_id})
 
@@ -529,6 +517,34 @@ class ProfileDBFile(SyncDBFile):
             UPDATE nodes
             SET priority = (
                 SELECT COALESCE(SUM(n.priority), 0)
+                FROM nodes AS n
+                JOIN closure AS c
+                ON (n.id = c.descendant)
+                WHERE c.ancestor = :path_id
+                AND c.depth = 1)
+            WHERE id = :path_id;
+            """, nodes_values)
+
+    def _update_local(self, paths: Iterable[str]) -> None:
+        """Update whether directories have been kept in the local directory.
+
+        Directories are checked in leaf-to-trunk order. A directory is
+        considered to be not in the local directory if any of its immediate
+        children are not in the local directory. For every directory that's
+        checked, all of its ancestors up the tree are also checked.
+
+        Args:
+            paths: The relative paths of the directories to update.
+        """
+        nodes_values = []
+        for path in get_path_ancestry(paths):
+            path_id = self._get_path_id(path)
+            nodes_values.append({"path_id": path_id})
+
+        self._cur.executemany("""\
+            UPDATE nodes
+            SET local = (
+                SELECT COALESCE(MIN(n.local), 0)
                 FROM nodes AS n
                 JOIN closure AS c
                 ON (n.id = c.descendant)
@@ -612,6 +628,7 @@ class ProfileDBFile(SyncDBFile):
             """, insert_closure_vals)
         self._mark_directory(parents)
         self._update_priority(parents)
+        self._update_local(parents)
 
     def add_inflated(self, files: Iterable[str], dirs: Iterable[str]) -> None:
         """Add new file paths to the database with an inflated priority.
@@ -675,6 +692,7 @@ class ProfileDBFile(SyncDBFile):
         parents = {
             os.path.dirname(path) for path in paths if os.path.dirname(path)}
         self._update_priority(parents)
+        self._update_local(parents)
 
     def rm_paths(self, paths: Iterable[str]) -> None:
         """Remove file paths from the database.
@@ -709,6 +727,7 @@ class ProfileDBFile(SyncDBFile):
                 FROM nodes);
             """)
         self._update_priority(parents)
+        self._update_local(parents)
 
     def get_path_info(self, path: str) -> PathData:
         """Get data associated with a file path.
@@ -834,6 +853,8 @@ class ProfileConfigFile(ConfigFile):
             keys.
         _prompt_messages: The messages to use when prompting the user for config
             values.
+        _autocomplete_funcs: The functions used to enable autocompletion at the
+            interactive prompt for each config key.
         path: The path of the configuration file.
         profile: The Profile object that the config file belongs to.
         add_remote: Switch the requirements of 'LocalDir' and 'RemoteDir'.
