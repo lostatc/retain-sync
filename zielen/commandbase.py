@@ -17,12 +17,13 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with zielen.  If not, see <http://www.gnu.org/licenses/>.
 """
-import abc
-import atexit
 import os
-import socket
+import abc
 import sys
+import atexit
+import socket
 import textwrap
+import functools
 
 from zielen.paths import get_profiles_dir
 from zielen.userdata import LocalSyncDir, RemoteSyncDir
@@ -32,6 +33,7 @@ from zielen.exceptions import InputError, StatusError
 
 def unlock(func):
     """Unlock the profile when the function exits."""
+    @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         try:
             return func(self, *args, **kwargs)
