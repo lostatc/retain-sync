@@ -180,7 +180,7 @@ class Profile:
         return self._info_file.vals["Version"]
 
     @version.setter
-    def version(self, value: str) -> str:
+    def version(self, value: str) -> None:
         self._info_file.vals["Version"] = value
 
     @property
@@ -193,7 +193,7 @@ class Profile:
         return self._info_file.vals["ID"]
 
     @id.setter
-    def id(self, value: str) -> str:
+    def id(self, value: str) -> None:
         self._info_file.vals["ID"] = value
 
     @property
