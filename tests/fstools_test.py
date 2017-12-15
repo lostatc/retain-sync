@@ -1,4 +1,4 @@
-"""Test io.py.
+"""Test fstools.py.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 

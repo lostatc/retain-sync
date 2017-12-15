@@ -1,4 +1,4 @@
-"""Test fs.py.
+"""Test filelogic.py.
 
 Copyright © 2016-2017 Garrett Powell <garrett@gpowell.net>
 
