@@ -221,8 +221,8 @@ class Profile:
     def storage_limit(self) -> int:
         """The number of bytes of data to keep in the local directory."""
         num, prefix, unit = re.findall(
-            r"^([0-9]+)\s*([kKMG])(B|iB)?$",
-            self._cfg_file.vals["StorageLimit"])[0]
+            r"^([0-9]+)\s*([KMG])(B|iB)?$",
+            self._cfg_file.vals["StorageLimit"], re.IGNORECASE)[0]
 
         if unit == "iB" or not unit:
             base = 1024
@@ -922,7 +922,7 @@ class ProfileConfigFile(ConfigFile):
             if not re.search("^~?/", value):
                 return "must be an absolute path"
         elif key == "StorageLimit":
-            if not re.search(r"^[0-9]+\s*[kKMG](B|iB)?$", value):
+            if not re.search(r"^[0-9]+\s*[KMG](B|iB)?$", value, re.IGNORECASE):
                 return "must be an integer followed by a unit (e.g. 10GB)"
         elif key == "SyncInterval":
             if not re.search("^[0-9]+$", value):

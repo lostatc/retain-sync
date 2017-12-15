@@ -175,7 +175,7 @@ class TestProfileConfigFile:
         "key,values", [
             ("LocalDir", ["/empty"]),
             ("RemoteDir", ["/empty"]),
-            ("StorageLimit", ["50MiB", "20 GB"]),
+            ("StorageLimit", ["50MiB", "20 GB", "10kib"]),
             ("SyncInterval", ["20"]),
             ("PriorityHalfLife", ["120"])
             ])
