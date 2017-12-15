@@ -58,8 +58,6 @@ def transfer_tree(
     """
     if not os.path.exists(source):
         raise FileNotFoundError("source not found")
-    elif not os.path.exists(os.path.dirname(dest)):
-        raise FileNotFoundError("dest not found")
 
     use_bar = message is not None and sys.stdout.isatty()
 
