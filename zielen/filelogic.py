@@ -202,9 +202,10 @@ class FilesManager:
 
         # File stats must be fetched again because files in the remote 
         # directory may have been updated by changes in the local directory,
-        # changin their size. 
+        # changing their size.
         local_files = self.profile.get_paths(directory=False)
-        file_stats = self.remote_dir.scan_paths(dirs=False, memoize=False)
+        remote_stats = self.remote_dir.scan_paths(dirs=False, memoize=False)
+        local_stats = self.local_dir.scan_paths()
         adjusted_priorities = []
 
         # Adjust directory priorities for size.
@@ -216,7 +217,7 @@ class FilesManager:
                     break
             else:
                 # The file is not included in the list of excluded paths.
-                file_size = file_stats[file_path].st_blocks * 512
+                file_size = remote_stats[file_path].st_blocks * 512
                 file_priority = file_data.priority
                 if self.profile.account_for_size:
                     try:
@@ -237,11 +238,12 @@ class FilesManager:
         prioritized_files = [
             (path, size) for path, priority, size in adjusted_priorities]
 
-        # Calculate which directories will stay in the local directory.
-        selected_files = set()
         # This assumes that all symlinks have a disk usage of one block.
         symlink_size = os.stat(self.local_dir.path).st_blksize
         remaining_space = space_limit
+
+        # Calculate which directories will stay in the local directory.
+        selected_files = set()
         for file_path, file_size in prioritized_files:
             new_remaining_space = remaining_space - file_size + symlink_size
             if new_remaining_space > 0:
@@ -266,7 +268,8 @@ class FilesManager:
         # changin their size. 
         local_files = self.profile.get_paths(directory=False)
         local_dirs = self.profile.get_paths(directory=True)
-        dir_stats = self.remote_dir.scan_paths(memoize=False)
+        remote_stats = self.remote_dir.scan_paths(memoize=False)
+        local_stats = self.local_dir.scan_paths()
         adjusted_priorities = []
 
         # Calculate the disk usage of each directory and adjust directory
@@ -277,7 +280,7 @@ class FilesManager:
             for sub_path in self.remote_dir.get_paths(root=dir_path):
                 # Get the size of the files in the remote directory, as
                 # symlinks in the local directory are not followed.
-                dir_size += dir_stats[sub_path].st_blocks * 512
+                dir_size += remote_stats[sub_path].st_blocks * 512
 
             if self.profile.account_for_size:
                 try:
@@ -299,10 +302,6 @@ class FilesManager:
         dir_sizes = {
             path: size for path, priority, size in adjusted_priorities}
 
-        # Select which directories will stay in the local directory.
-        selected_dirs = set()
-        selected_subdirs = set()
-        selected_files = set()
         # Set the initial remaining space assuming that no files will stay
         # in the local directory an that they'll all be symlinks,
         # which should each have a disk usage of one block. For evey file
@@ -310,6 +309,11 @@ class FilesManager:
         # space.
         symlink_size = os.stat(self.local_dir.path).st_blksize
         remaining_space = space_limit - len(local_files) * symlink_size
+
+        # Select which directories will stay in the local directory.
+        selected_dirs = set()
+        selected_subdirs = set()
+        selected_files = set()
         for dir_path in prioritized_dirs:
             dir_size = dir_sizes[dir_path]
 
@@ -862,3 +866,14 @@ class FilesManager:
                     shutil.rmtree(entry.path)
                 except NotADirectoryError:
                     os.remove(entry.path)
+
+    def get_excluded_size(self) -> int:
+        """Get the disk usage of all excluded local files.
+
+        Returns:
+            The disk usage as a number of bytes.
+        """
+        total_excluded_size = sum(
+            self.local_dir.scan_paths()[path].st_blocks * 512
+            for path in self.profile.all_exclude_matches(self.local_dir.path))
+        return total_excluded_size

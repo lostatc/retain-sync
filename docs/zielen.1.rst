@@ -114,7 +114,7 @@ EXCLUDING
 Files and directories can be excluded from syncing using the exclude pattern
 file (see FILES_). Each line in the file specifies a shell globbing pattern
 that represents files to exclude. Excluded files stay in the local directory
-and don't count toward the storage limit. If an excluded file is not already in
+and still count toward the storage limit. If an excluded file is not already in
 the local directory, it is copied from the remote directory during the next
 sync.
 

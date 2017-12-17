@@ -203,7 +203,7 @@ class RemoteSyncDir(SyncDir):
         """Remove a profile exclude file from the remote.
 
         Args:
-            paaaaaaaaaaaaaaaarofile_id: The unique ID used when adding the exclude file.
+            profile_id: The unique ID used when adding the exclude file.
         """
         try:
             os.remove(os.path.join(self._exclude_dir, profile_id))

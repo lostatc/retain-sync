@@ -117,8 +117,8 @@ class SyncCommand(Command):
             & self.remote_dir.scan_paths().keys())
 
         # Decide which files and directories to keep in the local directory.
-        remaining_space, selected_dirs = fm.prioritize_dirs(
-            self.profile.storage_limit)
+        remaining_space = self.profile.storage_limit - fm.get_excluded_size()
+        remaining_space, selected_dirs = fm.prioritize_dirs(remaining_space)
         remaining_space, selected_files = fm.prioritize_files(
             remaining_space, exclude=selected_dirs)
 
