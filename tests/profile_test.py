@@ -1,6 +1,6 @@
 """Test profile.py.
 
-Copyright © 2017 Garrett Powell <garrett@gpowell.net>
+Copyright © 2016-2018 Garrett Powell <garrett@gpowell.net>
 
 This file is part of zielen.
 
