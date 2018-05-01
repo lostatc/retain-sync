@@ -21,7 +21,6 @@ import os
 import shutil
 import sqlite3
 import time
-import hashlib
 from typing import (
     Tuple, Iterable, List, Dict, NamedTuple, Generator, Union, Set)
 

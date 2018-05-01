@@ -21,7 +21,6 @@ import os
 import sys
 import time
 import shutil
-import hashlib
 import tempfile
 from typing import Iterable, Optional, Set
 
